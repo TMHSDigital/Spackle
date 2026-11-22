@@ -169,7 +169,19 @@ func TestCacheIsKeyedByCleanCommit(t *testing.T) {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
+	// This test is about the cache key, not line endings. pyApp writes a
+	// CRLF file, and a machine-wide core.autocrlf can make git report such
+	// a file as modified right after committing it. Use LF here.
+	appPath := filepath.Join(root, "app.py")
+	raw, err := os.ReadFile(appPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(appPath, []byte(strings.ReplaceAll(string(raw), "\r\n", "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	git("init", "-q", "-b", "main")
+	git("config", "core.autocrlf", "false")
 	git("add", "-A")
 	git("commit", "-q", "-m", "init")
 
