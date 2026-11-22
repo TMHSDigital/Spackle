@@ -1,0 +1,25 @@
+name: triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions: write-all
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Classify issue
+        uses: example-org/issue-classifier@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Record issue
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          echo "New issue #$ISSUE_NUMBER: ${{ github.event.issue.title }}"

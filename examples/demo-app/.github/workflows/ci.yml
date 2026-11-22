@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Announce
+        run: echo "Tested ${{ github.event.pull_request.title }}"

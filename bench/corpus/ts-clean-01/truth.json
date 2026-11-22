@@ -1,0 +1,8 @@
+{
+  "fixture": "ts-clean-01",
+  "language": "typescript",
+  "difficulty": "easy",
+  "clean": true,
+  "description": "Clean decoy: a server that reflects a query parameter into HTML, redirects to a request-supplied target and sets credentialed CORS headers, all done safely.",
+  "vulnerabilities": []
+}

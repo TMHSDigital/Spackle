@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Spackle report</title>
+<style>
+:root {
+  --bg: #1B1714;
+  --raised: #26201B;
+  --border: #3A3029;
+  --fg: #F3EDE4;
+  --muted: #B5A999;
+  --dim: #7F7466;
+  --accent: #FF8A4C;
+  --secondary: #C4A1FF;
+  --critical: #FF5D5D;
+  --high: #FF8A4C;
+  --medium: #F2C14E;
+  --low: #8FB8DE;
+  --ok: #7BD389;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #F6F1EA;
+    --raised: #FFFBF5;
+    --border: #DDD2C4;
+    --fg: #241C15;
+    --muted: #5C5046;
+    --dim: #7A6D5F;
+    --accent: #B8480F;
+    --secondary: #6B3FD4;
+    --critical: #C62828;
+    --high: #B8480F;
+    --medium: #8A6100;
+    --low: #2F6492;
+    --ok: #237A3B;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.55; }
+body { margin: 0 auto; padding: 2.5rem 1.25rem 4rem; max-width: 60rem; }
+h1 { font-size: 1.9rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.3rem; margin: 2.75rem 0 0.9rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.15rem; margin: 0.5rem 0 0.25rem; overflow-wrap: anywhere; }
+h4 { font-size: 0.8rem; margin: 1.6rem 0 0.5rem; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.08em; }
+p { margin: 0.4rem 0; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+code, pre { font-family: var(--mono); font-size: 0.875rem; }
+code { overflow-wrap: anywhere; }
+pre { margin: 0.4rem 0 0.9rem; padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; white-space: pre; tab-size: 4; }
+pre.diff { border-left: 3px solid var(--ok); }
+ul, ol { margin: 0.3rem 0 0.8rem; padding-left: 1.4rem; }
+li { margin: 0.15rem 0; overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.925rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.meta { color: var(--muted); }
+.wide { overflow-x: auto; }
+.panel { background: var(--raised); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; }
+.grid { display: grid; grid-template-columns: minmax(9rem, max-content) 1fr; gap: 0.3rem 1.25rem; margin: 0; }
+.grid dt { color: var(--muted); }
+.grid dd { margin: 0; overflow-wrap: anywhere; }
+.k { color: var(--muted); font-weight: 600; margin-top: 0.7rem; }
+.kv .k { margin-right: 0.4rem; }
+.prose { white-space: pre-wrap; }
+.notice { border-left: 3px solid var(--medium); padding: 0.75rem 1rem; background: var(--raised); border-radius: 0 6px 6px 0; }
+.finding { margin: 1.5rem 0; border-left-width: 4px; }
+.finding.sev-critical { border-left-color: var(--critical); }
+.finding.sev-high { border-left-color: var(--high); }
+.finding.sev-medium { border-left-color: var(--medium); }
+.finding.sev-low { border-left-color: var(--low); }
+.finding.sev-none { border-left-color: var(--dim); }
+.badge { display: inline-block; padding: 0.05rem 0.5rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.badge.sev-critical { color: var(--critical); }
+.badge.sev-high { color: var(--high); }
+.badge.sev-medium { color: var(--medium); }
+.badge.sev-low { color: var(--low); }
+.badge.sev-none { color: var(--dim); }
+.status-available { color: var(--ok); }
+.status-missing { color: var(--medium); }
+footer { margin-top: 3rem; color: var(--dim); font-size: 0.85rem; }
+@media print { html { background: #fff; color: #000; } .panel { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<header>
+<h1>Spackle report</h1>
+<p class="meta">Run <code>20261122T120000Z-demo</code> &middot; outcome budget-exhausted</p>
+</header>
+
+<h2 id="run-summary">Run summary</h2>
+<div class="panel">
+<dl class="grid">
+<dt>Run id</dt><dd><code>20261122T120000Z-demo</code></dd>
+<dt>Command</dt><dd>scan</dd>
+<dt>Target</dt><dd><code>examples/demo-app</code></dd>
+<dt>Target kind</dt><dd>path</dd>
+<dt>Commit</dt><dd><code>3850163c0ffee</code></dd>
+<dt>Mode</dt><dd>agentic</dd>
+<dt>Provider</dt><dd>openai-compatible</dd>
+<dt>Model</dt><dd>local-coder-14b</dd>
+<dt>Offline</dt><dd>yes</dd>
+<dt>Authorized scope</dt><dd><code>http://127.0.0.1:8080</code></dd>
+<dt>Scope given by</dt><dd>scope-file</dd>
+<dt>Sandbox isolation</dt><dd>container, no network egress, read-only root</dd>
+<dt>Started</dt><dd>2026-11-22T12:00:00Z</dd>
+<dt>Ended</dt><dd>2026-11-22T12:07:31Z</dd>
+<dt>Outcome</dt><dd>budget-exhausted</dd>
+<dt>Spackle version</dt><dd>0.1.0</dd>
+</dl>
+</div>
+<p><span class="k">Counts:</span> 3 open, 1 fixed, 1 dismissed. By severity, open and fixed: 1 critical, 1 high, 1 medium, 1 low, 0 none. Demonstrated by a proof of concept: 1.</p>
+
+<h2 id="findings-summary">Findings summary</h2>
+<div class="wide">
+<table>
+<thead><tr><th>Id</th><th>Severity</th><th>Score</th><th>Confidence</th><th>Status</th><th>Title</th><th>Location</th></tr></thead>
+<tbody>
+<tr><td><a href="#SPK-D1927AC6"><code>SPK-D1927AC6</code></a></td><td><span class="badge sev-critical">critical</span></td><td>9.3</td><td>demonstrated</td><td>open</td><td>SQL injection in the order lookup lets any visitor read the whole database</td><td><code>app/routes/orders.py:42-44</code></td></tr>
+<tr><td><a href="#SPK-EDF9331B"><code>SPK-EDF9331B</code></a></td><td><span class="badge sev-high">high</span></td><td>7.1</td><td>high</td><td>open</td><td>Reflected cross-site scripting in the search page</td><td><code>GET /search (parameter q)</code></td></tr>
+<tr><td><a href="#SPK-F1B384CB"><code>SPK-F1B384CB</code></a></td><td><span class="badge sev-medium">medium</span></td><td>unscored (estimate)</td><td>plausible</td><td>open</td><td>The application container runs as root</td><td><code>deploy/Dockerfile:1</code></td></tr>
+<tr><td><a href="#SPK-13D0D5BE"><code>SPK-13D0D5BE</code></a></td><td><span class="badge sev-low">low</span></td><td>1.0</td><td>high</td><td>fixed</td><td>Password reset tokens are derived with MD5</td><td><code>app/auth/tokens.py:17-19</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="findings">Findings</h2>
+<section id="SPK-D1927AC6" class="panel finding sev-critical">
+<p class="meta"><span class="badge sev-critical">CRITICAL 9.3</span> <code>SPK-D1927AC6</code> &middot; confidence demonstrated &middot; status open</p>
+<h3>SQL injection in the order lookup lets any visitor read the whole database</h3>
+<h4>Identity</h4>
+<p class="kv"><span class="k">Id:</span> <code>SPK-D1927AC6</code></p>
+<p class="kv"><span class="k">Title:</span> SQL injection in the order lookup lets any visitor read the whole database</p>
+<p class="kv"><span class="k">Location:</span> <code>app/routes/orders.py:42-44</code></p>
+<p class="kv"><span class="k">Symbol:</span> <code>get_order</code></p>
+<p class="kv"><span class="k">Class:</span> sql-injection</p>
+<p class="kv"><span class="k">Surface:</span> code</p>
+<p class="kv"><span class="k">CWE:</span> CWE-89</p>
+<p class="kv"><span class="k">OWASP:</span> A03:2021 Injection</p>
+<p class="kv"><span class="k">Status:</span> open</p>
+<h4>Severity</h4>
+<p class="kv"><span class="k">Label:</span> critical</p>
+<p class="kv"><span class="k">Score:</span> 9.3 (CVSS 4.0)</p>
+<p class="kv"><span class="k">Vector:</span> <code>CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N</code></p>
+<p class="k">Reasoning</p>
+<p class="prose">Reachable over the network with no login, and it exposes and can alter every table the application account can reach.</p>
+<h4>The flaw</h4>
+<p class="prose">The order id from the URL is formatted straight into a SQL string. Nothing between the route and the query parses or binds it, so the caller controls the statement.</p>
+<p class="kv"><span class="k">Flow step 1, source:</span> <code>app/routes/orders.py:40</code></p>
+<p class="kv"><span class="k">Note:</span> Attacker-controlled query parameter.</p>
+<pre><code>order_id = request.args.get(&#34;id&#34;)</code></pre>
+<p class="kv"><span class="k">Flow step 2, propagation:</span> <code>app/routes/orders.py:42</code></p>
+<p class="kv"><span class="k">Note:</span> Interpolated without binding.</p>
+<pre><code>sql = f&#34;SELECT * FROM orders WHERE id = {order_id}&#34;</code></pre>
+<p class="kv"><span class="k">Flow step 3, sink:</span> <code>app/db.py:17</code></p>
+<p class="kv"><span class="k">Note:</span> Executed as written.</p>
+<pre><code>def run(sql):
+	return conn.execute(sql).fetchall()</code></pre>
+<h4>Exploitation scenario</h4>
+<p class="k">Preconditions</p>
+<ul>
+<li>Network access to the application.</li>
+<li>No account is needed.</li>
+</ul>
+<p class="k">Steps</p>
+<ol>
+<li>Request /orders?id=1 to confirm the endpoint answers.</li>
+<li>Request /orders?id=1 UNION SELECT email, password_hash, 3, 4 FROM users.</li>
+<li>Read every user&#39;s email and password hash from the response body.</li>
+</ol>
+<p class="k">Chains into</p>
+<ul>
+<li>Offline cracking of the unsalted hashes, then account takeover.</li>
+</ul>
+<h4>Proof of concept</h4>
+<p class="kv"><span class="k">Status:</span> demonstrated (a proof of concept ran in the sandbox and triggered the flaw)</p>
+<p class="kv"><span class="k">Kind:</span> script</p>
+<p class="k">Summary</p>
+<p class="prose">The script sends the UNION payload and checks that a seeded user&#39;s email comes back.</p>
+<p class="k">Command</p>
+<pre><code>python poc.py --base http://app:8080</code></pre>
+<p class="k">Captured result</p>
+<pre><code>HTTP/1.1 200 OK
+[{&#34;id&#34;: &#34;alice@example.test&#34;, &#34;total&#34;: &#34;5f4dcc3b5aa765d61d8327deb882cf99&#34;}]
+POC OK: leaked 1 seeded credential row</code></pre>
+<p class="kv"><span class="k">Isolation:</span> container, no network egress, read-only root, 512 MiB, 60 s</p>
+<p class="k">Artifacts</p>
+<ul>
+<li><code>poc/SPK-D1927AC6/poc.py</code></li>
+<li><code>poc/SPK-D1927AC6/output.txt</code></li>
+</ul>
+<h4>Blast radius</h4>
+<p class="k">What the attacker gains</p>
+<ul>
+<li>Read access to every table the application account can read.</li>
+<li>Write access through stacked statements.</li>
+</ul>
+<p class="k">Exposed</p>
+<ul>
+<li>users.email</li>
+<li>users.password_hash</li>
+<li>orders</li>
+</ul>
+<p class="k">Kill chain</p>
+<p class="prose">Unauthenticated request, then database read, then credential cracking, then login as any user.</p>
+<p class="kv"><span class="k">Related findings:</span> <code>SPK-EDF9331B</code></p>
+<h4>Remediation</h4>
+<p class="prose">Bind the order id as a query parameter and reject non-numeric ids at the route.</p>
+<p class="k">Patch</p>
+<pre class="diff"><code>--- a/app/routes/orders.py
+&#43;&#43;&#43; b/app/routes/orders.py
+@@ -40,5 &#43;40,5 @@
+     order_id = request.args.get(&#34;id&#34;)
+-    sql = f&#34;SELECT * FROM orders WHERE id = {order_id}&#34;
+-    rows = db.run(sql)
+&#43;    rows = db.run(&#34;SELECT * FROM orders WHERE id = ?&#34;, (int(order_id),))
+     return jsonify(rows)
+</code></pre>
+<p class="k">Why this fixes it</p>
+<p class="prose">A bound parameter is sent as data, so the database never parses it as SQL.</p>
+<p class="k">Defense in depth</p>
+<ul>
+<li>Give the application a database account that cannot read the users table.</li>
+<li>Hash passwords with a slow, salted algorithm.</li>
+</ul>
+<p class="kv"><span class="k">Verification:</span> verified</p>
+<p class="kv"><span class="k">Branch:</span> <code>spackle/fix-SPK-D1927AC6</code></p>
+<h4>Confidence</h4>
+<p class="kv"><span class="k">Level:</span> demonstrated (a proof of concept ran and succeeded)</p>
+<p class="kv"><span class="k">Reason:</span> The proof of concept ran in the sandbox and returned a seeded credential row.</p>
+<h4>Origin</h4>
+<p class="kv"><span class="k">Found by:</span> hunter, semgrep</p>
+</section>
+<section id="SPK-EDF9331B" class="panel finding sev-high">
+<p class="meta"><span class="badge sev-high">HIGH 7.1</span> <code>SPK-EDF9331B</code> &middot; confidence high &middot; status open</p>
+<h3>Reflected cross-site scripting in the search page</h3>
+<h4>Identity</h4>
+<p class="kv"><span class="k">Id:</span> <code>SPK-EDF9331B</code></p>
+<p class="kv"><span class="k">Title:</span> Reflected cross-site scripting in the search page</p>
+<p class="kv"><span class="k">Location:</span> <code>GET /search (parameter q)</code></p>
+<p class="kv"><span class="k">Class:</span> reflected-xss</p>
+<p class="kv"><span class="k">Surface:</span> running-target</p>
+<p class="kv"><span class="k">CWE:</span> CWE-79</p>
+<p class="kv"><span class="k">OWASP:</span> A03:2021 Injection</p>
+<p class="kv"><span class="k">Status:</span> open</p>
+<h4>Severity</h4>
+<p class="kv"><span class="k">Label:</span> high</p>
+<p class="kv"><span class="k">Score:</span> 7.1 (CVSS 4.0)</p>
+<p class="kv"><span class="k">Vector:</span> <code>CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N</code></p>
+<p class="k">Reasoning</p>
+<p class="prose">Needs a logged-in victim&#39;s session to be worth anything, and then reads what that session can read.</p>
+<h4>The flaw</h4>
+<p class="prose">The q parameter is echoed into the results heading without encoding.</p>
+<p class="kv"><span class="k">Flow step 1, source:</span> no file location recorded</p>
+<p class="kv"><span class="k">Note:</span> Marker sent in the query string.</p>
+<pre><code>GET /search?q=spackle7391&lt;i&gt;</code></pre>
+<p class="kv"><span class="k">Flow step 2, sink:</span> no file location recorded</p>
+<p class="kv"><span class="k">Note:</span> Marker reflected with the tag intact.</p>
+<pre><code>&lt;h2&gt;Results for spackle7391&lt;i&gt;&lt;/h2&gt;</code></pre>
+<h4>Exploitation scenario</h4>
+<p class="k">Preconditions</p>
+<ul>
+<li>The victim is logged in and follows a link the attacker supplies.</li>
+</ul>
+<p class="k">Steps</p>
+<ol>
+<li>Send the victim a link to /search with a script payload in q.</li>
+<li>The payload runs in the victim&#39;s session.</li>
+</ol>
+<h4>Proof of concept</h4>
+<p class="kv"><span class="k">Status:</span> reasoned (the exploit path was argued from code or traffic and was not run)</p>
+<p class="kv"><span class="k">Reason:</span> The scope file allows passive checks only, so no script payload was sent.</p>
+<p class="kv"><span class="k">Kind:</span> http-sequence</p>
+<p class="k">Summary</p>
+<p class="prose">A harmless marker with angle brackets was reflected unencoded.</p>
+<h4>Blast radius</h4>
+<p class="k">What the attacker gains</p>
+<ul>
+<li>Actions and reads as the victim.</li>
+</ul>
+<p class="kv"><span class="k">Related findings:</span> <code>SPK-D1927AC6</code></p>
+<h4>Remediation</h4>
+<p class="prose">HTML-encode q where the template writes it, and send a Content-Security-Policy that forbids inline script.</p>
+<h4>Confidence</h4>
+<p class="kv"><span class="k">Level:</span> high (traced end to end, not run)</p>
+<p class="kv"><span class="k">Reason:</span> The reflection was observed in a live response; script execution was not tested.</p>
+<h4>Origin</h4>
+<p class="kv"><span class="k">Found by:</span> dast</p>
+</section>
+<section id="SPK-F1B384CB" class="panel finding sev-medium">
+<p class="meta"><span class="badge sev-medium">MEDIUM unscored (estimate)</span> <code>SPK-F1B384CB</code> &middot; confidence plausible &middot; status open</p>
+<h3>The application container runs as root</h3>
+<h4>Identity</h4>
+<p class="kv"><span class="k">Id:</span> <code>SPK-F1B384CB</code></p>
+<p class="kv"><span class="k">Title:</span> The application container runs as root</p>
+<p class="kv"><span class="k">Location:</span> <code>deploy/Dockerfile:1</code></p>
+<p class="kv"><span class="k">Class:</span> container-runs-as-root</p>
+<p class="kv"><span class="k">Surface:</span> infrastructure</p>
+<p class="kv"><span class="k">CWE:</span> CWE-250</p>
+<p class="kv"><span class="k">Status:</span> open</p>
+<h4>Severity</h4>
+<p class="kv"><span class="k">Label:</span> medium</p>
+<p class="kv"><span class="k">Score:</span> unscored (estimate): no valid CVSS vector was available, so the label is carried over from a scanner or rule</p>
+<p class="k">Reasoning</p>
+<p class="prose">Label carried over from the scanner rule; it matters only after another flaw gives code execution.</p>
+<h4>The flaw</h4>
+<p class="prose">The Dockerfile never sets USER, so the process runs as uid 0 inside the container.</p>
+<p class="kv"><span class="k">Flow step 1, sink:</span> <code>deploy/Dockerfile:1</code></p>
+<pre><code>FROM python:3.12-slim</code></pre>
+<h4>Exploitation scenario</h4>
+<p class="prose">No exploitation scenario was recorded.</p>
+<h4>Proof of concept</h4>
+<p class="kv"><span class="k">Status:</span> not-run (no proof of concept was run)</p>
+<p class="kv"><span class="k">Reason:</span> A configuration weakness with no direct trigger; there is nothing to run.</p>
+<h4>Blast radius</h4>
+<p class="prose">No blast radius was recorded.</p>
+<h4>Remediation</h4>
+<p class="prose">Create an unprivileged user in the image and switch to it with USER.</p>
+<h4>Confidence</h4>
+<p class="kv"><span class="k">Level:</span> plausible (a lead that was not confirmed)</p>
+<p class="kv"><span class="k">Reason:</span> Reported by one scanner rule and not checked against the deployed runtime settings.</p>
+<h4>Origin</h4>
+<p class="kv"><span class="k">Found by:</span> trivy</p>
+</section>
+<section id="SPK-13D0D5BE" class="panel finding sev-low">
+<p class="meta"><span class="badge sev-low">LOW 1.0</span> <code>SPK-13D0D5BE</code> &middot; confidence high &middot; status fixed</p>
+<h3>Password reset tokens are derived with MD5</h3>
+<h4>Identity</h4>
+<p class="kv"><span class="k">Id:</span> <code>SPK-13D0D5BE</code></p>
+<p class="kv"><span class="k">Title:</span> Password reset tokens are derived with MD5</p>
+<p class="kv"><span class="k">Location:</span> <code>app/auth/tokens.py:17-19</code></p>
+<p class="kv"><span class="k">Class:</span> weak-hash</p>
+<p class="kv"><span class="k">Surface:</span> code</p>
+<p class="kv"><span class="k">CWE:</span> CWE-328, CWE-327</p>
+<p class="kv"><span class="k">Status:</span> fixed</p>
+<h4>Severity</h4>
+<p class="kv"><span class="k">Label:</span> low</p>
+<p class="kv"><span class="k">Score:</span> 1.0 (CVSS 4.0)</p>
+<p class="kv"><span class="k">Vector:</span> <code>CVSS:4.0/AV:L/AC:H/AT:P/PR:H/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N</code></p>
+<p class="k">Reasoning</p>
+<p class="prose">Needs local access and a privileged position to observe tokens.</p>
+<h4>The flaw</h4>
+<p class="prose">Reset tokens are the MD5 of the user id and a timestamp, which is guessable.</p>
+<h4>Exploitation scenario</h4>
+<p class="prose">No exploitation scenario was recorded.</p>
+<h4>Proof of concept</h4>
+<p class="kv"><span class="k">Status:</span> reasoned (the exploit path was argued from code or traffic and was not run)</p>
+<p class="kv"><span class="k">Reason:</span> The token recipe is visible in the code; no token was forged.</p>
+<h4>Blast radius</h4>
+<p class="prose">No blast radius was recorded.</p>
+<h4>Remediation</h4>
+<p class="prose">Generate reset tokens from the operating system&#39;s random source.</p>
+<p class="k">Patch</p>
+<pre class="diff"><code>--- a/app/auth/tokens.py
+&#43;&#43;&#43; b/app/auth/tokens.py
+@@ -17,3 &#43;17,1 @@
+-    raw = f&#34;{user.id}{time.time()}&#34;
+-    return hashlib.md5(raw.encode()).hexdigest()
+&#43;    return secrets.token_urlsafe(32)
+</code></pre>
+<p class="kv"><span class="k">Verification:</span> verified</p>
+<p class="kv"><span class="k">Branch:</span> <code>spackle/fix-SPK-13D0D5BE</code></p>
+<h4>Confidence</h4>
+<p class="kv"><span class="k">Level:</span> high (traced end to end, not run)</p>
+<p class="kv"><span class="k">Reason:</span> Traced from the reset handler to the token function.</p>
+<h4>Origin</h4>
+<p class="kv"><span class="k">Found by:</span> hunter</p>
+</section>
+
+<h2 id="dismissed">Dismissed by review</h2>
+<ul>
+<li><code>SPK-CB299C00</code> <span class="badge sev-medium">MEDIUM 5.1</span> Path traversal in the file download handler at <code>app/files.py:88</code><br><span class="k">Reason:</span> The caller passes the name through secure_filename two lines earlier, so no separator reaches the join.</li>
+</ul>
+
+<h2 id="skipped">What was skipped</h2>
+<ul>
+<li>Cap reached: max model calls (40). Not examined: app/admin/reports.py; app/payments/webhook.py.</li>
+<li>Note: Live testing was limited to passive checks by the scope file.</li>
+</ul>
+
+<h2 id="coverage">Coverage</h2>
+<div class="panel">
+<dl class="grid">
+<dt>Files mapped</dt><dd>48</dd>
+<dt>Files not read</dt><dd>3</dd>
+<dt>Languages</dt><dd>python, dockerfile</dd>
+<dt>Frameworks</dt><dd>flask</dd>
+<dt>Entry points</dt><dd>9</dd>
+<dt>Infrastructure files</dt><dd>2</dd>
+<dt>Endpoints</dt><dd>6</dd>
+<dt>Test command</dt><dd><code>pytest -q</code></dd>
+<dt>Leads from seeders</dt><dd>9</dd>
+</dl>
+</div>
+<div class="wide">
+<table>
+<thead><tr><th>Seeder</th><th>Status</th><th>Leads</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>gitleaks</td><td class="status-missing">missing</td><td>0</td><td>not installed; secrets were searched with built-in patterns only</td></tr>
+<tr><td>semgrep</td><td class="status-available">available</td><td>7</td><td></td></tr>
+<tr><td>trivy</td><td class="status-available">available</td><td>2</td><td>configuration checks only</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="usage">Usage</h2>
+<div class="panel">
+<dl class="grid">
+<dt>Model calls</dt><dd>40</dd>
+<dt>Tokens</dt><dd>182400 input, 21950 output (estimated)</dd>
+<dt>Cost</dt><dd>unknown for this model</dd>
+<dt>Sandbox runs</dt><dd>3</dd>
+</dl>
+</div>
+
+<footer>Summary: 4 findings (1 critical, 1 high, 1 medium, 1 low), 1 demonstrated, 1 fixed, 1 dismissed</footer>
+</body>
+</html>

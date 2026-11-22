@@ -1,0 +1,17 @@
+{
+  "fixture": "go-command-injection-01",
+  "language": "go",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The /lookup handler passes the host query parameter into a shell command line run with sh -c in main.go.",
+  "vulnerabilities": [
+    {
+      "class": "command-injection",
+      "cwe": "CWE-78",
+      "file": "main.go",
+      "line": 20,
+      "sink": "exec.Command",
+      "note": "host parameter concatenated into a sh -c command string"
+    }
+  ]
+}

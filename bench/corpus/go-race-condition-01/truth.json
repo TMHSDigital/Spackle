@@ -1,0 +1,17 @@
+{
+  "fixture": "go-race-condition-01",
+  "language": "go",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "Ledger.Withdraw in ledger.go checks the balance under a read lock, releases it, and then deducts under a separate write lock, so concurrent withdrawals can overdraw the account.",
+  "vulnerabilities": [
+    {
+      "class": "race-condition",
+      "cwe": "CWE-367",
+      "file": "ledger.go",
+      "line": 42,
+      "sink": "Ledger.Withdraw",
+      "note": "balance was checked earlier under a different lock acquisition, so the check and the deduction are not atomic"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "fixture": "py-code-injection-01",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "calc.py evaluates an expression taken from the request body with eval(); the emptied builtins do not make that safe.",
+  "vulnerabilities": [
+    {
+      "class": "code-injection",
+      "cwe": "CWE-95",
+      "file": "calc.py",
+      "line": 10,
+      "sink": "eval",
+      "note": "expression from the JSON request body evaluated with eval"
+    }
+  ]
+}

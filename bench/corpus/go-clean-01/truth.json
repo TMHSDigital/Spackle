@@ -1,0 +1,8 @@
+{
+  "fixture": "go-clean-01",
+  "language": "go",
+  "difficulty": "easy",
+  "clean": true,
+  "description": "Clean decoy: a small service that queries SQL, runs an external program and reads files named by the request, all done safely.",
+  "vulnerabilities": []
+}

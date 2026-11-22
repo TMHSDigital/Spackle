@@ -1,0 +1,8 @@
+{
+  "fixture": "py-clean-01",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": true,
+  "description": "Clean decoy: a small service that queries SQL with request data, runs tar, and loads YAML, all done safely.",
+  "vulnerabilities": []
+}

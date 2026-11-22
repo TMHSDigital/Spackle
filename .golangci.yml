@@ -39,6 +39,12 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+          - noctx
+      # The file walker records unreadable entries as skipped and keeps
+      # going. Returning the error would abort the whole scan.
+      - path: internal/walk/walk\.go
+        linters:
+          - nilerr
 
 formatters:
   enable:

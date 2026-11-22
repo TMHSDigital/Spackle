@@ -1,0 +1,17 @@
+{
+  "fixture": "js-insecure-random-01",
+  "language": "javascript",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "Password reset tokens in tokens.js are generated with Math.random.",
+  "vulnerabilities": [
+    {
+      "class": "insecure-random",
+      "cwe": "CWE-338",
+      "file": "tokens.js",
+      "line": 9,
+      "sink": "Math.random",
+      "note": "password reset token characters chosen with Math.random"
+    }
+  ]
+}

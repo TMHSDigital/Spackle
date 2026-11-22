@@ -1,0 +1,17 @@
+{
+  "fixture": "py-sql-injection-01",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The /items endpoint in app.py interpolates the q parameter into a SQL string with an f-string and executes it.",
+  "vulnerabilities": [
+    {
+      "class": "sql-injection",
+      "cwe": "CWE-89",
+      "file": "app.py",
+      "line": 22,
+      "sink": "cursor.execute",
+      "note": "f-string query built from the q parameter"
+    }
+  ]
+}

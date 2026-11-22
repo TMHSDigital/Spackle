@@ -1,0 +1,65 @@
+{
+  "fixture": "infra-container-01",
+  "language": "infrastructure",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "A Dockerfile and a Kubernetes Deployment with unpinned images, a baked-in secret, a root container, a privileged pod, host networking and the Docker socket mounted from the host.",
+  "vulnerabilities": [
+    {
+      "class": "supply-chain",
+      "cwe": "CWE-829",
+      "file": "Dockerfile",
+      "line": 1,
+      "sink": "FROM",
+      "note": "base image uses the mutable latest tag instead of a pinned version or digest"
+    },
+    {
+      "class": "hardcoded-secret",
+      "cwe": "CWE-798",
+      "file": "Dockerfile",
+      "line": 7,
+      "sink": "ENV",
+      "note": "secret value baked into an image layer (fake fixture value)"
+    },
+    {
+      "class": "container-hardening",
+      "cwe": "CWE-250",
+      "file": "Dockerfile",
+      "line": 9,
+      "sink": "CMD",
+      "note": "no USER instruction anywhere, so the process runs as root; anchored on the CMD line"
+    },
+    {
+      "class": "container-hardening",
+      "cwe": "CWE-668",
+      "file": "k8s/deployment.yaml",
+      "line": 17,
+      "sink": "hostNetwork",
+      "note": "pod shares the node network namespace"
+    },
+    {
+      "class": "supply-chain",
+      "cwe": "CWE-829",
+      "file": "k8s/deployment.yaml",
+      "line": 20,
+      "sink": "image",
+      "note": "container image referenced by the latest tag"
+    },
+    {
+      "class": "container-privilege",
+      "cwe": "CWE-250",
+      "file": "k8s/deployment.yaml",
+      "line": 31,
+      "sink": "securityContext.privileged",
+      "note": "container runs privileged"
+    },
+    {
+      "class": "container-privilege",
+      "cwe": "CWE-250",
+      "file": "k8s/deployment.yaml",
+      "line": 38,
+      "sink": "hostPath",
+      "note": "host Docker socket mounted into the container"
+    }
+  ]
+}

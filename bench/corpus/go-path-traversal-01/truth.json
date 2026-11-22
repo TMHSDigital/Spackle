@@ -1,0 +1,17 @@
+{
+  "fixture": "go-path-traversal-01",
+  "language": "go",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "The name query parameter read in handler.go travels through two functions into store.go, where it is joined to the base directory and read without any containment check.",
+  "vulnerabilities": [
+    {
+      "class": "path-traversal",
+      "cwe": "CWE-22",
+      "file": "store.go",
+      "line": 40,
+      "sink": "os.ReadFile",
+      "note": "name from the request is joined to the base directory with no prefix check; source is in handler.go"
+    }
+  ]
+}

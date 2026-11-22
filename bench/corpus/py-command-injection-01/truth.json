@@ -1,0 +1,17 @@
+{
+  "fixture": "py-command-injection-01",
+  "language": "python",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "The project parameter read in views.py is formatted into a command string in archive.py and executed with shell=True in runner.py.",
+  "vulnerabilities": [
+    {
+      "class": "command-injection",
+      "cwe": "CWE-78",
+      "file": "runner.py",
+      "line": 16,
+      "sink": "subprocess.run",
+      "note": "command string built in archive.py from the project and format parameters read in views.py"
+    }
+  ]
+}

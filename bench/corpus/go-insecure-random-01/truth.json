@@ -1,0 +1,17 @@
+{
+  "fixture": "go-insecure-random-01",
+  "language": "go",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "Password reset tokens in main.go are generated with math/rand instead of a cryptographic source.",
+  "vulnerabilities": [
+    {
+      "class": "insecure-random",
+      "cwe": "CWE-338",
+      "file": "main.go",
+      "line": 29,
+      "sink": "math/rand.Intn",
+      "note": "password reset token drawn from math/rand"
+    }
+  ]
+}

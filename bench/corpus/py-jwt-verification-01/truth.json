@@ -1,0 +1,17 @@
+{
+  "fixture": "py-jwt-verification-01",
+  "language": "python",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "tokens.py computes whether the token signature matches but discards the result, so decode() accepts tokens with any signature.",
+  "vulnerabilities": [
+    {
+      "class": "jwt-verification",
+      "cwe": "CWE-347",
+      "file": "tokens.py",
+      "line": 41,
+      "sink": "tokens.decode",
+      "note": "return value of the signature check is ignored, so forged tokens are accepted"
+    }
+  ]
+}

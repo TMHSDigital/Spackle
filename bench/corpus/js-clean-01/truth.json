@@ -1,0 +1,8 @@
+{
+  "fixture": "js-clean-01",
+  "language": "javascript",
+  "difficulty": "easy",
+  "clean": true,
+  "description": "Clean decoy: helpers that run a child process, read request-named files, compare tokens, hash with MD5 and query SQL, all done safely.",
+  "vulnerabilities": []
+}

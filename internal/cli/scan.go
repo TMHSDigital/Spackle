@@ -1,0 +1,112 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/signal"
+	"path/filepath"
+
+	"github.com/TMHSDigital/spackle/internal/config"
+	"github.com/TMHSDigital/spackle/internal/engine"
+	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/report"
+)
+
+func runScan(env Env, args []string) int {
+	fs := newFlagSet(env, "scan", "[path|url]", "Find, demonstrate, explain and fix flaws in a target.\nThe target is a directory, a git URL, or the URL of an application you run.\nWith no target, the current directory is scanned.")
+	var g globalFlags
+	g.register(fs)
+	pos, err := parseInterleaved(fs, args)
+	if err != nil {
+		return flagExit(err)
+	}
+	if len(pos) > 1 {
+		fmt.Fprintf(env.Stderr, "spackle scan: expected one target, got %d (%q).\nScan one target per run. Quote a path that contains spaces.\n", len(pos), pos)
+		return ExitUsage
+	}
+	cfg, err := g.load()
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
+		return ExitUsage
+	}
+	tgt := "."
+	if len(pos) == 1 {
+		tgt = pos[0]
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr})
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
+		if errors.Is(err, engine.ErrRefused) {
+			return ExitUsage
+		}
+		return ExitError
+	}
+	if err := emit(env, cfg, res.Run, res.RunDir); err != nil {
+		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
+		return ExitError
+	}
+	fmt.Fprintf(env.Stderr, "Run %s stored in %s\n", res.RunID, res.RunDir)
+	return exitFor(cfg, res.Run)
+}
+
+// emit writes the requested report formats. The terminal format goes to
+// stdout. Other formats go to --out when it is set, to stdout when exactly
+// one format was requested, and otherwise stay in the run directory, where
+// every format is always written.
+func emit(env Env, cfg config.Config, run report.Run, runDir string) error {
+	formats := cfg.Output.Formats
+	for _, format := range formats {
+		ext, _ := report.Ext(format)
+		switch {
+		case ext == "txt":
+			if err := report.Terminal(run, env.Stdout, wantColor(env.Stdout)); err != nil {
+				return err
+			}
+		case cfg.Output.Dir != "":
+			if err := os.MkdirAll(cfg.Output.Dir, 0o750); err != nil {
+				return fmt.Errorf("create output directory %s: %w", cfg.Output.Dir, err)
+			}
+			path := filepath.Join(cfg.Output.Dir, "report."+ext)
+			f, err := os.Create(path) //nolint:gosec // the operator chose the output directory
+			if err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
+			}
+			rerr := report.Render(format, run, f)
+			if cerr := f.Close(); rerr == nil {
+				rerr = cerr
+			}
+			if rerr != nil {
+				return fmt.Errorf("write %s: %w", path, rerr)
+			}
+			fmt.Fprintf(env.Stderr, "Wrote %s\n", path)
+		case len(formats) == 1:
+			if err := report.Render(format, run, env.Stdout); err != nil {
+				return err
+			}
+		default:
+			fmt.Fprintf(env.Stderr, "Wrote %s\n", filepath.Join(runDir, "reports", "report."+ext))
+		}
+	}
+	return nil
+}
+
+// exitFor returns ExitFindings when an open finding is at or above the
+// configured threshold.
+func exitFor(cfg config.Config, run report.Run) int {
+	if cfg.Output.FailOn == "never" {
+		return ExitOK
+	}
+	threshold := finding.LabelRank(cfg.Output.FailOn)
+	for _, f := range run.Findings {
+		if f.Status == finding.StatusOpen && finding.LabelRank(f.Severity.Label) >= threshold {
+			return ExitFindings
+		}
+	}
+	return ExitOK
+}

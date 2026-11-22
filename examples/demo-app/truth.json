@@ -1,0 +1,177 @@
+{
+  "fixture": "demo-app",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The bundled Spackle demo target: a tiny standard-library notes web app with one planted flaw per route, plus a deliberately weak Dockerfile, Kubernetes manifest, Terraform file and CI workflow.",
+  "vulnerabilities": [
+    {
+      "class": "hardcoded-secret",
+      "cwe": "CWE-798",
+      "file": "app.py",
+      "line": 17,
+      "sink": "SECRET_KEY",
+      "note": "token signing key hardcoded in source (fake fixture value)"
+    },
+    {
+      "class": "xss",
+      "cwe": "CWE-79",
+      "file": "app.py",
+      "line": 57,
+      "sink": "handle_search",
+      "note": "GET /search reflects q into the HTML response unescaped"
+    },
+    {
+      "class": "broken-access-control",
+      "cwe": "CWE-639",
+      "file": "app.py",
+      "line": 64,
+      "sink": "db.get_note",
+      "note": "GET /note returns any note by id to any signed-in user, with no ownership check"
+    },
+    {
+      "class": "command-injection",
+      "cwe": "CWE-78",
+      "file": "app.py",
+      "line": 72,
+      "sink": "subprocess.run",
+      "note": "GET /ping concatenates host into a shell command"
+    },
+    {
+      "class": "path-traversal",
+      "cwe": "CWE-22",
+      "file": "app.py",
+      "line": 78,
+      "sink": "open",
+      "note": "GET /file joins name to NOTES_DIR with no containment check"
+    },
+    {
+      "class": "ssrf",
+      "cwe": "CWE-918",
+      "file": "app.py",
+      "line": 84,
+      "sink": "urllib.request.urlopen",
+      "note": "GET /fetch requests an arbitrary url server-side"
+    },
+    {
+      "class": "unsafe-deserialization",
+      "cwe": "CWE-502",
+      "file": "app.py",
+      "line": 91,
+      "sink": "pickle.loads",
+      "note": "POST /import unpickles the request body"
+    },
+    {
+      "class": "information-disclosure",
+      "cwe": "CWE-209",
+      "file": "app.py",
+      "line": 117,
+      "sink": "traceback.format_exc",
+      "note": "error responses include the full Python traceback"
+    },
+    {
+      "class": "weak-hash",
+      "cwe": "CWE-328",
+      "file": "db.py",
+      "line": 19,
+      "sink": "hashlib.md5",
+      "note": "passwords stored as unsalted MD5"
+    },
+    {
+      "class": "sql-injection",
+      "cwe": "CWE-89",
+      "file": "db.py",
+      "line": 51,
+      "sink": "sqlite3.Connection.execute",
+      "note": "GET /search builds the query with an f-string from q"
+    },
+    {
+      "class": "supply-chain",
+      "cwe": "CWE-829",
+      "file": "Dockerfile",
+      "line": 1,
+      "sink": "FROM",
+      "note": "base image uses the mutable latest tag"
+    },
+    {
+      "class": "hardcoded-secret",
+      "cwe": "CWE-798",
+      "file": "Dockerfile",
+      "line": 5,
+      "sink": "ENV",
+      "note": "secret value baked into an image layer (fake fixture value)"
+    },
+    {
+      "class": "container-hardening",
+      "cwe": "CWE-250",
+      "file": "Dockerfile",
+      "line": 7,
+      "sink": "CMD",
+      "note": "no USER instruction, so the app runs as root; anchored on the CMD line"
+    },
+    {
+      "class": "container-hardening",
+      "cwe": "CWE-770",
+      "file": "deploy/k8s.yaml",
+      "line": 18,
+      "sink": "containers",
+      "note": "container has no resource limits; anchored on the container entry"
+    },
+    {
+      "class": "supply-chain",
+      "cwe": "CWE-829",
+      "file": "deploy/k8s.yaml",
+      "line": 19,
+      "sink": "image",
+      "note": "container image referenced by the latest tag"
+    },
+    {
+      "class": "container-privilege",
+      "cwe": "CWE-250",
+      "file": "deploy/k8s.yaml",
+      "line": 26,
+      "sink": "securityContext.privileged",
+      "note": "container runs privileged"
+    },
+    {
+      "class": "supply-chain",
+      "cwe": "CWE-829",
+      "file": ".github/workflows/ci.yml",
+      "line": 15,
+      "sink": "uses",
+      "note": "action referenced by a mutable tag instead of a commit SHA"
+    },
+    {
+      "class": "ci-injection",
+      "cwe": "CWE-829",
+      "file": ".github/workflows/ci.yml",
+      "line": 17,
+      "sink": "actions/checkout ref",
+      "note": "pull_request_target workflow checks out and then runs untrusted pull request code"
+    },
+    {
+      "class": "ci-injection",
+      "cwe": "CWE-78",
+      "file": ".github/workflows/ci.yml",
+      "line": 23,
+      "sink": "run",
+      "note": "pull request title expanded directly into a shell script"
+    },
+    {
+      "class": "public-storage",
+      "cwe": "CWE-732",
+      "file": "infra/main.tf",
+      "line": 22,
+      "sink": "aws_s3_bucket_acl.acl",
+      "note": "bucket ACL grants public read"
+    },
+    {
+      "class": "network-exposure",
+      "cwe": "CWE-284",
+      "file": "infra/main.tf",
+      "line": 34,
+      "sink": "aws_security_group.ingress",
+      "note": "SSH (port 22) open to the whole internet"
+    }
+  ]
+}

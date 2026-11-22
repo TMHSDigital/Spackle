@@ -1,0 +1,17 @@
+{
+  "fixture": "js-code-injection-01",
+  "language": "javascript",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "server.js compiles a pricing formula taken from the JSON request body with the Function constructor and runs it.",
+  "vulnerabilities": [
+    {
+      "class": "code-injection",
+      "cwe": "CWE-94",
+      "file": "server.js",
+      "line": 29,
+      "sink": "Function constructor",
+      "note": "formula string from the request body compiled and executed"
+    }
+  ]
+}

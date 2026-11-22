@@ -1,0 +1,17 @@
+{
+  "fixture": "go-auth-bypass-01",
+  "language": "go",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "The admin check in the /flags handler in main.go only runs for POST, while the same handler also mutates state for PUT and DELETE.",
+  "vulnerabilities": [
+    {
+      "class": "auth-bypass",
+      "cwe": "CWE-287",
+      "file": "main.go",
+      "line": 31,
+      "sink": "flagsHandler",
+      "note": "admin check is gated on POST only; PUT and DELETE reach the mutating switch unauthenticated"
+    }
+  ]
+}

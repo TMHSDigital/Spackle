@@ -1,0 +1,17 @@
+{
+  "fixture": "js-sql-injection-01",
+  "language": "javascript",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "Filter values read in routes.js are concatenated into a WHERE clause in filters.js and that clause is spliced into the statement prepared in db.js.",
+  "vulnerabilities": [
+    {
+      "class": "sql-injection",
+      "cwe": "CWE-89",
+      "file": "db.js",
+      "line": 19,
+      "sink": "DatabaseSync.prepare",
+      "note": "where clause concatenated in filters.js from the status and customer parameters read in routes.js"
+    }
+  ]
+}

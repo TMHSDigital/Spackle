@@ -1,0 +1,17 @@
+{
+  "fixture": "go-sql-injection-01",
+  "language": "go",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The /products handler formats the category query parameter into a SQL string with fmt.Sprintf and runs it in main.go.",
+  "vulnerabilities": [
+    {
+      "class": "sql-injection",
+      "cwe": "CWE-89",
+      "file": "main.go",
+      "line": 37,
+      "sink": "sql.DB.Query",
+      "note": "query string built with fmt.Sprintf from the category parameter"
+    }
+  ]
+}

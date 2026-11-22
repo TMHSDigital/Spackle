@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Spackle",
+          "informationUri": "https://github.com/TMHSDigital/Spackle",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "container-runs-as-root",
+              "shortDescription": {
+                "text": "container-runs-as-root"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/250.html",
+              "properties": {
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-250"
+                ]
+              }
+            },
+            {
+              "id": "reflected-xss",
+              "shortDescription": {
+                "text": "reflected-xss"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/79.html",
+              "properties": {
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-79"
+                ],
+                "security-severity": "7.1"
+              }
+            },
+            {
+              "id": "sql-injection",
+              "shortDescription": {
+                "text": "sql-injection"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/89.html",
+              "properties": {
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-89"
+                ],
+                "security-severity": "9.3"
+              }
+            },
+            {
+              "id": "weak-hash",
+              "shortDescription": {
+                "text": "weak-hash"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/327.html",
+              "properties": {
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327",
+                  "external/cwe/cwe-328"
+                ],
+                "security-severity": "1.0"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "sql-injection",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "SQL injection in the order lookup lets any visitor read the whole database\n\nThe order id from the URL is formatted straight into a SQL string. Nothing between the route and the query parses or binds it, so the caller controls the statement.\n\nRemediation: Bind the order id as a query parameter and reject non-numeric ids at the route."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/routes/orders.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 42,
+                  "endLine": 44
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "spackle/v1": "SPK-D1927AC6"
+          },
+          "properties": {
+            "security-severity": "9.3",
+            "confidence": "demonstrated",
+            "proof_status": "demonstrated"
+          }
+        },
+        {
+          "ruleId": "reflected-xss",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "Reflected cross-site scripting in the search page\n\nThe q parameter is echoed into the results heading without encoding.\n\nRemediation: HTML-encode q where the template writes it, and send a Content-Security-Policy that forbids inline script."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /search?q"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "spackle/v1": "SPK-EDF9331B"
+          },
+          "properties": {
+            "security-severity": "7.1",
+            "confidence": "high",
+            "proof_status": "reasoned"
+          }
+        },
+        {
+          "ruleId": "container-runs-as-root",
+          "ruleIndex": 0,
+          "level": "warning",
+          "message": {
+            "text": "The application container runs as root\n\nThe Dockerfile never sets USER, so the process runs as uid 0 inside the container.\n\nRemediation: Create an unprivileged user in the image and switch to it with USER."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "deploy/Dockerfile",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1,
+                  "endLine": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "spackle/v1": "SPK-F1B384CB"
+          },
+          "properties": {
+            "confidence": "plausible",
+            "proof_status": "not-run"
+          }
+        },
+        {
+          "ruleId": "weak-hash",
+          "ruleIndex": 3,
+          "level": "note",
+          "message": {
+            "text": "Password reset tokens are derived with MD5\n\nReset tokens are the MD5 of the user id and a timestamp, which is guessable.\n\nRemediation: Generate reset tokens from the operating system's random source."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/auth/tokens.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 17,
+                  "endLine": 19
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "spackle/v1": "SPK-13D0D5BE"
+          },
+          "properties": {
+            "security-severity": "1.0",
+            "confidence": "high",
+            "proof_status": "reasoned"
+          }
+        }
+      ]
+    }
+  ]
+}

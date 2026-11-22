@@ -1,0 +1,17 @@
+{
+  "fixture": "py-broken-access-control-01",
+  "language": "python",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "The /invoices/<id> route in app.py requires a session but returns any invoice by id without comparing its owner to the signed-in user.",
+  "vulnerabilities": [
+    {
+      "class": "broken-access-control",
+      "cwe": "CWE-639",
+      "file": "app.py",
+      "line": 20,
+      "sink": "store.get_invoice",
+      "note": "invoice fetched by client-supplied id and returned with no ownership check"
+    }
+  ]
+}

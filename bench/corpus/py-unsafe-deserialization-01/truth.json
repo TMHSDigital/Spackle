@@ -1,0 +1,17 @@
+{
+  "fixture": "py-unsafe-deserialization-01",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "app.py restores user preferences by unpickling a base64 cookie value sent by the client.",
+  "vulnerabilities": [
+    {
+      "class": "unsafe-deserialization",
+      "cwe": "CWE-502",
+      "file": "app.py",
+      "line": 21,
+      "sink": "pickle.loads",
+      "note": "pickle payload taken from the prefs cookie"
+    }
+  ]
+}

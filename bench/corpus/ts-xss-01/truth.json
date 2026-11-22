@@ -1,0 +1,17 @@
+{
+  "fixture": "ts-xss-01",
+  "language": "typescript",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The /search handler in server.ts writes the q parameter into an HTML response without escaping it.",
+  "vulnerabilities": [
+    {
+      "class": "xss",
+      "cwe": "CWE-79",
+      "file": "server.ts",
+      "line": 39,
+      "sink": "res.end",
+      "note": "q parameter interpolated into the HTML body unescaped (the list items next to it are escaped)"
+    }
+  ]
+}

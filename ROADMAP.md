@@ -6,8 +6,8 @@ Spackle is pre-release. Version 0.1.0 is in progress and no release has been pub
 
 ## v0.1.0 milestones
 
-- [ ] M0: public foundation
-- [ ] M1: mapper, seeders, reporting
+- [x] M0: public foundation
+- [x] M1: mapper, seeders, reporting
 - [ ] M2: agents and rich findings
 - [ ] M3: sandbox, prover, fixer
 - [ ] M4: running-target analysis and debug mode

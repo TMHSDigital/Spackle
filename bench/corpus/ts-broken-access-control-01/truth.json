@@ -1,0 +1,17 @@
+{
+  "fixture": "ts-broken-access-control-01",
+  "language": "typescript",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "canEdit in policy.ts compares the session user to an owner id supplied in the request body instead of the stored document owner, so any member can edit any document.",
+  "vulnerabilities": [
+    {
+      "class": "broken-access-control",
+      "cwe": "CWE-639",
+      "file": "policy.ts",
+      "line": 21,
+      "sink": "canEdit",
+      "note": "authorization compares against the ownerId field sent by the client in server.ts, not doc.ownerId"
+    }
+  ]
+}

@@ -1,0 +1,409 @@
+{
+  "schema": "spackle.report/v1",
+  "run": {
+    "id": "20261122T120000Z-demo",
+    "spackle_version": "0.1.0",
+    "command": "scan",
+    "target": "examples/demo-app",
+    "target_kind": "path",
+    "commit": "3850163c0ffee",
+    "mode": "agentic",
+    "provider": "openai-compatible",
+    "model": "local-coder-14b",
+    "offline": true,
+    "scope": "http://127.0.0.1:8080",
+    "scope_source": "scope-file",
+    "isolation": "container, no network egress, read-only root",
+    "started_at": "2026-11-22T12:00:00Z",
+    "ended_at": "2026-11-22T12:07:31Z",
+    "outcome": "budget-exhausted"
+  },
+  "counts": {
+    "total": 5,
+    "open": 3,
+    "fixed": 1,
+    "dismissed": 1,
+    "demonstrated": 1,
+    "critical": 1,
+    "high": 1,
+    "medium": 1,
+    "low": 1,
+    "none": 0
+  },
+  "findings": [
+    {
+      "id": "SPK-D1927AC6",
+      "title": "SQL injection in the order lookup lets any visitor read the whole database",
+      "surface": "code",
+      "class": "sql-injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "owasp": [
+        "A03:2021 Injection"
+      ],
+      "location": {
+        "file": "app/routes/orders.py",
+        "start_line": 42,
+        "end_line": 44,
+        "symbol": "get_order"
+      },
+      "severity": {
+        "cvss_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+        "cvss_score": 9.3,
+        "label": "critical",
+        "reasoning": "Reachable over the network with no login, and it exposes and can alter every table the application account can reach."
+      },
+      "flaw": {
+        "description": "The order id from the URL is formatted straight into a SQL string. Nothing between the route and the query parses or binds it, so the caller controls the statement.",
+        "flow": [
+          {
+            "role": "source",
+            "file": "app/routes/orders.py",
+            "line": 40,
+            "quote": "order_id = request.args.get(\"id\")",
+            "note": "Attacker-controlled query parameter."
+          },
+          {
+            "role": "propagation",
+            "file": "app/routes/orders.py",
+            "line": 42,
+            "quote": "sql = f\"SELECT * FROM orders WHERE id = {order_id}\"",
+            "note": "Interpolated without binding."
+          },
+          {
+            "role": "sink",
+            "file": "app/db.py",
+            "line": 17,
+            "quote": "def run(sql):\n\treturn conn.execute(sql).fetchall()",
+            "note": "Executed as written."
+          }
+        ]
+      },
+      "exploitation": {
+        "preconditions": [
+          "Network access to the application.",
+          "No account is needed."
+        ],
+        "steps": [
+          "Request /orders?id=1 to confirm the endpoint answers.",
+          "Request /orders?id=1 UNION SELECT email, password_hash, 3, 4 FROM users.",
+          "Read every user's email and password hash from the response body."
+        ],
+        "chains_into": [
+          "Offline cracking of the unsalted hashes, then account takeover."
+        ]
+      },
+      "proof": {
+        "status": "demonstrated",
+        "kind": "script",
+        "summary": "The script sends the UNION payload and checks that a seeded user's email comes back.",
+        "artifacts": [
+          "poc/SPK-D1927AC6/poc.py",
+          "poc/SPK-D1927AC6/output.txt"
+        ],
+        "command": "python poc.py --base http://app:8080",
+        "result": "HTTP/1.1 200 OK\n[{\"id\": \"alice@example.test\", \"total\": \"5f4dcc3b5aa765d61d8327deb882cf99\"}]\nPOC OK: leaked 1 seeded credential row",
+        "isolation": "container, no network egress, read-only root, 512 MiB, 60 s"
+      },
+      "blast_radius": {
+        "gains": [
+          "Read access to every table the application account can read.",
+          "Write access through stacked statements."
+        ],
+        "exposed": [
+          "users.email",
+          "users.password_hash",
+          "orders"
+        ],
+        "kill_chain": "Unauthenticated request, then database read, then credential cracking, then login as any user.",
+        "related": [
+          "SPK-EDF9331B"
+        ]
+      },
+      "remediation": {
+        "summary": "Bind the order id as a query parameter and reject non-numeric ids at the route.",
+        "patch": "--- a/app/routes/orders.py\n+++ b/app/routes/orders.py\n@@ -40,5 +40,5 @@\n     order_id = request.args.get(\"id\")\n-    sql = f\"SELECT * FROM orders WHERE id = {order_id}\"\n-    rows = db.run(sql)\n+    rows = db.run(\"SELECT * FROM orders WHERE id = ?\", (int(order_id),))\n     return jsonify(rows)\n",
+        "why": "A bound parameter is sent as data, so the database never parses it as SQL.",
+        "defense_in_depth": [
+          "Give the application a database account that cannot read the users table.",
+          "Hash passwords with a slow, salted algorithm."
+        ],
+        "verification": "verified",
+        "branch": "spackle/fix-SPK-D1927AC6"
+      },
+      "confidence": {
+        "level": "demonstrated",
+        "reason": "The proof of concept ran in the sandbox and returned a seeded credential row."
+      },
+      "origin": [
+        "hunter",
+        "semgrep"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "SPK-EDF9331B",
+      "title": "Reflected cross-site scripting in the search page",
+      "surface": "running-target",
+      "class": "reflected-xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "owasp": [
+        "A03:2021 Injection"
+      ],
+      "location": {
+        "method": "GET",
+        "endpoint": "/search",
+        "parameter": "q"
+      },
+      "severity": {
+        "cvss_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+        "cvss_score": 7.1,
+        "label": "high",
+        "reasoning": "Needs a logged-in victim's session to be worth anything, and then reads what that session can read."
+      },
+      "flaw": {
+        "description": "The q parameter is echoed into the results heading without encoding.",
+        "flow": [
+          {
+            "role": "source",
+            "quote": "GET /search?q=spackle7391<i>",
+            "note": "Marker sent in the query string."
+          },
+          {
+            "role": "sink",
+            "quote": "<h2>Results for spackle7391<i></h2>",
+            "note": "Marker reflected with the tag intact."
+          }
+        ]
+      },
+      "exploitation": {
+        "preconditions": [
+          "The victim is logged in and follows a link the attacker supplies."
+        ],
+        "steps": [
+          "Send the victim a link to /search with a script payload in q.",
+          "The payload runs in the victim's session."
+        ]
+      },
+      "proof": {
+        "status": "reasoned",
+        "kind": "http-sequence",
+        "summary": "A harmless marker with angle brackets was reflected unencoded.",
+        "reason": "The scope file allows passive checks only, so no script payload was sent."
+      },
+      "blast_radius": {
+        "gains": [
+          "Actions and reads as the victim."
+        ],
+        "related": [
+          "SPK-D1927AC6"
+        ]
+      },
+      "remediation": {
+        "summary": "HTML-encode q where the template writes it, and send a Content-Security-Policy that forbids inline script."
+      },
+      "confidence": {
+        "level": "high",
+        "reason": "The reflection was observed in a live response; script execution was not tested."
+      },
+      "origin": [
+        "dast"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "SPK-F1B384CB",
+      "title": "The application container runs as root",
+      "surface": "infrastructure",
+      "class": "container-runs-as-root",
+      "cwe": [
+        "CWE-250"
+      ],
+      "location": {
+        "file": "deploy/Dockerfile",
+        "start_line": 1
+      },
+      "severity": {
+        "cvss_score": 0,
+        "label": "medium",
+        "reasoning": "Label carried over from the scanner rule; it matters only after another flaw gives code execution.",
+        "unscored": true
+      },
+      "flaw": {
+        "description": "The Dockerfile never sets USER, so the process runs as uid 0 inside the container.",
+        "flow": [
+          {
+            "role": "sink",
+            "file": "deploy/Dockerfile",
+            "line": 1,
+            "quote": "FROM python:3.12-slim"
+          }
+        ]
+      },
+      "exploitation": {},
+      "proof": {
+        "status": "not-run",
+        "reason": "A configuration weakness with no direct trigger; there is nothing to run."
+      },
+      "blast_radius": {},
+      "remediation": {
+        "summary": "Create an unprivileged user in the image and switch to it with USER."
+      },
+      "confidence": {
+        "level": "plausible",
+        "reason": "Reported by one scanner rule and not checked against the deployed runtime settings."
+      },
+      "origin": [
+        "trivy"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "SPK-13D0D5BE",
+      "title": "Password reset tokens are derived with MD5",
+      "surface": "code",
+      "class": "weak-hash",
+      "cwe": [
+        "CWE-328",
+        "CWE-327"
+      ],
+      "location": {
+        "file": "app/auth/tokens.py",
+        "start_line": 17,
+        "end_line": 19
+      },
+      "severity": {
+        "cvss_vector": "CVSS:4.0/AV:L/AC:H/AT:P/PR:H/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+        "cvss_score": 1,
+        "label": "low",
+        "reasoning": "Needs local access and a privileged position to observe tokens."
+      },
+      "flaw": {
+        "description": "Reset tokens are the MD5 of the user id and a timestamp, which is guessable."
+      },
+      "exploitation": {},
+      "proof": {
+        "status": "reasoned",
+        "reason": "The token recipe is visible in the code; no token was forged."
+      },
+      "blast_radius": {},
+      "remediation": {
+        "summary": "Generate reset tokens from the operating system's random source.",
+        "patch": "--- a/app/auth/tokens.py\n+++ b/app/auth/tokens.py\n@@ -17,3 +17,1 @@\n-    raw = f\"{user.id}{time.time()}\"\n-    return hashlib.md5(raw.encode()).hexdigest()\n+    return secrets.token_urlsafe(32)\n",
+        "verification": "verified",
+        "branch": "spackle/fix-SPK-13D0D5BE"
+      },
+      "confidence": {
+        "level": "high",
+        "reason": "Traced from the reset handler to the token function."
+      },
+      "origin": [
+        "hunter"
+      ],
+      "status": "fixed"
+    }
+  ],
+  "dismissed": [
+    {
+      "id": "SPK-CB299C00",
+      "title": "Path traversal in the file download handler",
+      "surface": "code",
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22"
+      ],
+      "location": {
+        "file": "app/files.py",
+        "start_line": 88
+      },
+      "severity": {
+        "cvss_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:A/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+        "cvss_score": 5.1,
+        "label": "medium",
+        "reasoning": "Would expose files readable by the application."
+      },
+      "flaw": {
+        "description": "The name parameter is joined onto the upload directory."
+      },
+      "exploitation": {},
+      "proof": {
+        "status": "failed",
+        "reason": "The request with ../ segments returned 404."
+      },
+      "blast_radius": {},
+      "remediation": {
+        "summary": "No change is needed."
+      },
+      "confidence": {
+        "level": "plausible",
+        "reason": "The join looked unsafe before the caller was read."
+      },
+      "origin": [
+        "hunter"
+      ],
+      "status": "dismissed",
+      "dismiss_reason": "The caller passes the name through secure_filename two lines earlier, so no separator reaches the join."
+    }
+  ],
+  "skipped": [
+    {
+      "cap": "max model calls (40)",
+      "skipped": [
+        "app/admin/reports.py",
+        "app/payments/webhook.py"
+      ]
+    }
+  ],
+  "notes": [
+    "Live testing was limited to passive checks by the scope file."
+  ],
+  "coverage": {
+    "map": {
+      "files": 48,
+      "skipped": 3,
+      "languages": [
+        "python",
+        "dockerfile"
+      ],
+      "frameworks": [
+        "flask"
+      ],
+      "entry_points": 9,
+      "infra_files": 2,
+      "test_command": "pytest -q",
+      "endpoints": 6
+    },
+    "seeders": [
+      {
+        "name": "gitleaks",
+        "available": false,
+        "note": "not installed; secrets were searched with built-in patterns only",
+        "leads": 0
+      },
+      {
+        "name": "semgrep",
+        "available": true,
+        "leads": 7
+      },
+      {
+        "name": "trivy",
+        "available": true,
+        "note": "configuration checks only",
+        "leads": 2
+      }
+    ],
+    "leads": 9
+  },
+  "usage": {
+    "model_calls": 40,
+    "input_tokens": 182400,
+    "output_tokens": 21950,
+    "tokens_estimated": true,
+    "cost_usd": null,
+    "cost_known": false,
+    "sandbox_runs": 3
+  }
+}

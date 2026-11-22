@@ -24,13 +24,16 @@ Point it at your own code, your own running application, or your own infrastruct
 ## Status
 
 > [!NOTE]
-> Spackle is pre-release. This repository holds the foundation: the CLI skeleton, the test and release pipeline, and the design. The scanning pipeline is being built in the open, milestone by milestone. [ROADMAP.md](ROADMAP.md) lists what has landed, and this README only describes commands that work in the current `main`.
+> Spackle is pre-release. The deterministic half of the pipeline works today. The model-driven stages (investigation, proof, review, fixes) are being built in the open, milestone by milestone. [ROADMAP.md](ROADMAP.md) lists what has landed, and this README only describes commands that work in the current `main`.
 
 What works today:
 
 | | |
 | :--- | :--- |
-| **CLI skeleton** | `spackle help` and `spackle version`. Every other command says plainly that it is not in this build yet. |
+| **`spackle scan <dir>`** | Maps a local directory or git URL and reports leads from the built-in rules for Go, Python and JavaScript/TypeScript, secrets, Dockerfiles, Kubernetes manifests, Terraform and GitHub workflows, plus any of Semgrep, gitleaks, osv-scanner, Trivy and hadolint that are installed. No model is used yet, so every finding is labelled `plausible` and `not-run`. |
+| **`spackle report <run-id>`** | Rebuilds a stored run from its ledger as terminal text, Markdown, HTML, JSON or SARIF. |
+| **`spackle doctor`** | Reports the container runtime, sandbox images, scanners and model configuration it finds. |
+| **Evidence ledger** | Every run writes `.spackle/runs/<run-id>/ledger.jsonl` and the reports are a pure function of it. Secret values never enter it. |
 | **Invariant tests** | A test parses every Go file in the module and fails the build if any code opens a network listener. |
 | **Pipeline** | CI on Linux, macOS and Windows across two Go versions, CodeQL, govulncheck, OpenSSF Scorecard, and a release workflow with signed checksums, an SBOM and build provenance. |
 
@@ -91,7 +94,7 @@ You need Go 1.26 or newer.
 git clone https://github.com/TMHSDigital/Spackle.git
 cd Spackle
 .\make.ps1 build
-.\spackle.exe help
+.\spackle.exe scan .\examples\demo-app
 ```
 
 </details>
@@ -105,7 +108,7 @@ cd Spackle
 git clone https://github.com/TMHSDigital/Spackle.git
 cd Spackle
 make build
-./spackle help
+./spackle scan ./examples/demo-app
 ```
 
 </details>

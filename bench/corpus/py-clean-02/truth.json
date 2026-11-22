@@ -1,0 +1,8 @@
+{
+  "fixture": "py-clean-02",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": true,
+  "description": "Clean decoy: a feed fetcher that uses MD5, secret comparison, random identifiers and a server-side URL fetch, all done safely.",
+  "vulnerabilities": []
+}

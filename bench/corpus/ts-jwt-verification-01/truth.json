@@ -1,0 +1,17 @@
+{
+  "fixture": "ts-jwt-verification-01",
+  "language": "typescript",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "verifyToken in auth.ts only checks the signature when the token header says HS256, so a token whose header names any other algorithm (for example none) is accepted unsigned.",
+  "vulnerabilities": [
+    {
+      "class": "jwt-verification",
+      "cwe": "CWE-347",
+      "file": "auth.ts",
+      "line": 29,
+      "sink": "verifyToken",
+      "note": "signature verified only for the HS256 branch; other alg values skip verification and fall through to accept the claims"
+    }
+  ]
+}

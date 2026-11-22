@@ -1,0 +1,25 @@
+{
+  "fixture": "py-hardcoded-secret-01",
+  "language": "python",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "config.py embeds an API key and a database password as string literals; both are fake fixture values.",
+  "vulnerabilities": [
+    {
+      "class": "hardcoded-secret",
+      "cwe": "CWE-798",
+      "file": "config.py",
+      "line": 5,
+      "sink": "api_key",
+      "note": "API key literal assigned in source"
+    },
+    {
+      "class": "hardcoded-secret",
+      "cwe": "CWE-798",
+      "file": "config.py",
+      "line": 13,
+      "sink": "DB_PASSWORD",
+      "note": "database password literal assigned in source"
+    }
+  ]
+}

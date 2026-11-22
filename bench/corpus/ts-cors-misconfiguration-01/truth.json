@@ -1,0 +1,17 @@
+{
+  "fixture": "ts-cors-misconfiguration-01",
+  "language": "typescript",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "server.ts reflects any request Origin into Access-Control-Allow-Origin and also allows credentials on a cookie-authenticated endpoint.",
+  "vulnerabilities": [
+    {
+      "class": "cors-misconfiguration",
+      "cwe": "CWE-942",
+      "file": "server.ts",
+      "line": 25,
+      "sink": "res.setHeader",
+      "note": "arbitrary Origin reflected together with Access-Control-Allow-Credentials: true"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "fixture": "go-ssrf-01",
+  "language": "go",
+  "difficulty": "hard",
+  "clean": false,
+  "description": "The /node-status handler builds an outbound URL from the node query parameter through a formatting helper and fetches it server-side in main.go.",
+  "vulnerabilities": [
+    {
+      "class": "ssrf",
+      "cwe": "CWE-918",
+      "file": "main.go",
+      "line": 34,
+      "sink": "http.Client.Get",
+      "note": "target URL assembled from the node parameter by statusProbe.endpoint with no host allowlist"
+    }
+  ]
+}

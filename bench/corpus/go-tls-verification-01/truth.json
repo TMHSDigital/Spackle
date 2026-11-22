@@ -1,0 +1,17 @@
+{
+  "fixture": "go-tls-verification-01",
+  "language": "go",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The HTTP client built in main.go disables TLS certificate verification with InsecureSkipVerify.",
+  "vulnerabilities": [
+    {
+      "class": "tls-verification",
+      "cwe": "CWE-295",
+      "file": "main.go",
+      "line": 19,
+      "sink": "tls.Config.InsecureSkipVerify",
+      "note": "certificate verification disabled on the client used for the rates API"
+    }
+  ]
+}

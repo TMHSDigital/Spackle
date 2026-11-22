@@ -1,0 +1,8 @@
+{
+  "fixture": "go-clean-02",
+  "language": "go",
+  "difficulty": "easy",
+  "clean": true,
+  "description": "Clean decoy: an authenticated fetch proxy that uses MD5, random tokens, a secret comparison and a server-side HTTP request, all done safely.",
+  "vulnerabilities": []
+}

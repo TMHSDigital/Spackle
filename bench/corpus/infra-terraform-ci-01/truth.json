@@ -1,0 +1,57 @@
+{
+  "fixture": "infra-terraform-ci-01",
+  "language": "infrastructure",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "A Terraform module with a public bucket, SSH open to the internet and an unencrypted database, plus a GitHub Actions workflow with write-all permissions, an unpinned third-party action and an issue title interpolated into a shell step.",
+  "vulnerabilities": [
+    {
+      "class": "public-storage",
+      "cwe": "CWE-732",
+      "file": "main.tf",
+      "line": 26,
+      "sink": "aws_s3_bucket_acl.acl",
+      "note": "bucket ACL grants public read"
+    },
+    {
+      "class": "network-exposure",
+      "cwe": "CWE-284",
+      "file": "main.tf",
+      "line": 39,
+      "sink": "aws_security_group.ingress",
+      "note": "SSH (port 22) open to the whole internet"
+    },
+    {
+      "class": "unencrypted-storage",
+      "cwe": "CWE-311",
+      "file": "main.tf",
+      "line": 51,
+      "sink": "aws_db_instance.storage_encrypted",
+      "note": "database storage encryption explicitly disabled"
+    },
+    {
+      "class": "ci-permissions",
+      "cwe": "CWE-732",
+      "file": ".github/workflows/triage.yml",
+      "line": 7,
+      "sink": "permissions",
+      "note": "workflow token granted every write scope"
+    },
+    {
+      "class": "supply-chain",
+      "cwe": "CWE-829",
+      "file": ".github/workflows/triage.yml",
+      "line": 17,
+      "sink": "uses",
+      "note": "third-party action referenced by a mutable branch and handed the token"
+    },
+    {
+      "class": "ci-injection",
+      "cwe": "CWE-78",
+      "file": ".github/workflows/triage.yml",
+      "line": 25,
+      "sink": "run",
+      "note": "attacker-controlled issue title expanded directly into a shell script"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "fixture": "js-open-redirect-01",
+  "language": "javascript",
+  "difficulty": "easy",
+  "clean": false,
+  "description": "The /login/complete handler in server.js redirects to the next query parameter without restricting it to local paths.",
+  "vulnerabilities": [
+    {
+      "class": "open-redirect",
+      "cwe": "CWE-601",
+      "file": "server.js",
+      "line": 20,
+      "sink": "res.writeHead",
+      "note": "Location header set from the next parameter with no validation"
+    }
+  ]
+}
