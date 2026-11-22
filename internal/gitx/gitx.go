@@ -203,7 +203,9 @@ func Archive(ctx context.Context, dir, rev, dest string) error {
 	}
 	// git archive only reads the object database: it does not touch the
 	// operator's index or working tree, unlike a checkout with --work-tree.
-	cmd := exec.CommandContext(ctx, "git", "archive", "--format=tar", rev) //nolint:gosec // fixed program, argument vector, no shell
+	// autocrlf is forced off so the export holds the bytes that were
+	// committed, whatever the machine-wide git configuration says.
+	cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "archive", "--format=tar", rev) //nolint:gosec // fixed program, argument vector, no shell
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
 	var stderr bytes.Buffer

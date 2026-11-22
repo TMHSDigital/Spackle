@@ -178,15 +178,13 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 	return m, nil
 }
 
+// sameDir reports whether two paths are the same directory. It compares
+// file identity, not spelling: on Windows the same directory can be written
+// with a short (8.3) name, a different case, or forward slashes.
 func sameDir(a, b string) bool {
-	ra, err1 := filepath.EvalSymlinks(a)
-	rb, err2 := filepath.EvalSymlinks(b)
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	absA, _ := filepath.Abs(ra)
-	absB, _ := filepath.Abs(rb)
-	return strings.EqualFold(filepath.Clean(absA), filepath.Clean(absB))
+	sa, err1 := os.Stat(a)
+	sb, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
 }
 
 func isCodeLang(lang string) bool {
