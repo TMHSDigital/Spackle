@@ -1,10 +1,8 @@
 # Comparison with other tools
 
-Status: this describes the v0.1.0 design. `ROADMAP.md` tracks which milestones have landed.
-
 ## How to read this
 
-Spackle is new and unproven. Every other tool on this page is established, has real users, and has been tested against far more code and far more targets than Spackle has. Where this page says "Spackle does differently", it describes the v0.1.0 design, not a measured result. Spackle publishes no benchmark numbers until a results file is committed.
+Spackle is new and unproven. Every other tool on this page is established, has real users, and has been tested against far more code and far more targets than Spackle has. Where this page says "Spackle does differently", it describes what the v0.1.0 code does, not a measured comparison with the other tool. Spackle's own benchmark numbers are in the README, generated from committed results files; [benchmark.md](benchmark.md) explains what they do and do not show.
 
 Spackle uses several of these tools as lead sources. Its seeders can run Semgrep, gitleaks, osv-scanner, Trivy, and hadolint when they are installed, and feed their output into the pipeline. In those cases Spackle depends on the other tool and does not replace it.
 
@@ -12,7 +10,7 @@ This page avoids version-specific claims. Products change, and some statements b
 
 ## ARTEX
 
-ARTEX is an open source agentic engine for offensive security testing. It is the project that prompted Spackle: the Spackle design document describes it as a pure offensive tool that shipped with listening ports and default credentials and was reused by criminals. ARTEX is licensed under AGPL-3.0. Spackle is a clean-room project. It copies no code, prompts, or assets from ARTEX, and credits it as inspiration only. The statements about ARTEX on this page come from the Spackle design document and have not been verified against the current ARTEX release.
+ARTEX was published as an open source agentic engine for offensive security testing. It is the project that prompted Spackle: the Spackle design document describes it as a pure offensive tool that shipped with listening ports and default credentials and was reused by criminals. ARTEX is licensed under AGPL-3.0. Spackle is a clean-room project. It copies no code, prompts, or assets from ARTEX, and credits it as inspiration only. The statements about ARTEX on this page come from the Spackle design document and have not been verified against the current ARTEX release. The upstream ARTEX repository is no longer public, so this page does not link to it and these statements cannot be checked there.
 
 Does better than Spackle:
 
@@ -26,7 +24,7 @@ Spackle does differently:
 - Requires an explicit authorized scope before any request to a live target.
 - Opens no listener and has no credentials to default.
 - Redacts detected secrets before any model call.
-- Adds remediation: it writes a patch and verifies it against the tests and the proof.
+- Adds remediation for code findings: it writes a patch and checks it in a sandbox against the proof and the project's tests.
 - Keeps proofs as evidence in a run folder and does not package them as standalone tools.
 - Is licensed under Apache-2.0.
 
@@ -47,7 +45,7 @@ Spackle does differently:
 - Uses Semgrep as one lead source when it is installed.
 - Adds model stages that reason about whether a lead is reachable, and a reviewer that tries to refute it.
 - Tries to prove a finding by running a proof of concept in a sandbox.
-- Writes a patch and re-runs the tests and the proof against it.
+- Writes a patch and re-runs the proof and the project's tests against it.
 - Also examines running targets and infrastructure files.
 
 ## CodeQL
@@ -102,7 +100,7 @@ Does better than Spackle:
 Spackle does differently:
 
 - Runs on the operator machine and works with a model the operator chooses, including a local one.
-- Verifies a fix by re-running the tests and the proof of concept in a sandbox, and rejects a patch that regresses or fails to close the proof.
+- Checks a fix by re-running the proof of concept and the project's tests in a sandbox, and rejects a patch that breaks a passing suite or fails to close the proof.
 - Finds issues itself. Autofix fixes alerts that another scanner raised.
 - Works outside GitHub.
 
@@ -120,10 +118,11 @@ Does better than Spackle:
 
 Spackle does differently:
 
-- Does not use nuclei as a lead source in v0.1 and has no comparable template library. Its DAST baseline is a small fixed set of non-destructive probes.
+- Does not use nuclei as a lead source in v0.1 and has no comparable template library. Its running-target baseline is a small fixed set of non-destructive probes against one application.
 - Binds every request to an authorized scope, and refuses redirects and links that leave it.
-- Sends state-changing methods only when the scope file allows them.
-- Connects a running-target finding to source code and a fix when the source is available.
+- Sends state-changing methods only when the scope allows them.
+- Stores every request and response as evidence, and with a model has each probe finding assessed and explained, with follow-up requests held to the same scope.
+- Does not write fixes for running-target findings in v0.1. Fixes are for code findings.
 
 ## CAI (Cybersecurity AI by Alias Robotics)
 
@@ -142,7 +141,7 @@ Spackle does differently:
 - Gives the model no shell on the host. Model-written code runs only in a sandbox container.
 - Enforces scope, budgets, and tool permissions in code, where the model cannot change them.
 - Renders reports from an append-only ledger.
-- Ends with a verified fix.
+- Ends, for code findings, with a fix checked against the proof.
 
 ## PentestGPT
 
@@ -160,7 +159,7 @@ Spackle does differently:
 - Runs a pipeline without a human choosing each step, inside a scope fixed before the run.
 - Examines source code and infrastructure files as well as running targets.
 - Produces typed findings with computed CVSS 4.0 scores, not free-form guidance.
-- Tries to prove findings in a sandbox and writes and verifies fixes.
+- Tries to prove code findings in a sandbox, and writes fixes and checks them against the proof.
 
 ## Summary table
 
@@ -180,8 +179,8 @@ Cells use "yes", "no", "partly", "varies", or "not verified". Notes follow the t
 
 Notes:
 
-- **Spackle, proves findings.** Auto-run proofs cover Go, Python, and TypeScript/JavaScript, and need a container runtime. Without one, nothing is demonstrated.
-- **Spackle, writes fixes.** The fixer needs a model. With no model, Spackle reports leads only.
+- **Spackle, proves findings.** Auto-run proofs cover code findings in Go, Python, and TypeScript/JavaScript, and need a model and a container runtime. Without them, no code finding is demonstrated. A proof is model-written: see `docs/THREAT_MODEL.md` for what "demonstrated" does and does not mean. Some running-target findings are demonstrated by the recorded request and response alone.
+- **Spackle, writes fixes.** The fixer needs a model and a container runtime, and covers code findings. With no model, Spackle reports leads only.
 - **Spackle, runs offline.** With no model, or with a model on loopback. External scanners and image pulls have their own network behavior, described in `docs/PRIVACY.md`.
 - **ARTEX, listens.** This is taken from the Spackle design document, not from a check of the current release.
 - **Semgrep, writes fixes.** Rules can carry a fix pattern. Model-assisted fixes belong to the commercial platform, as far as we know.

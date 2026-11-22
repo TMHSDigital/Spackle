@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="spackle: Find it. Prove it. Explain it. Fix it. Agentic security and debugging for systems you own.">
+<rect width="1280" height="640" fill="#1B1714"/>
+<rect x="0" y="0" width="1280" height="8" fill="#FF8A4C"/>
+<g transform="translate(112 128) scale(4)">
+<rect x="1.5" y="1.5" width="41" height="41" rx="7" fill="#26201B" stroke="#3A3029" stroke-width="3"/>
+<path d="M10 6 L17 16 L13 23 L22 31 L19 38" fill="none" stroke="#7F7466" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="9" y="17" width="30" height="13" rx="3" fill="#FF8A4C" transform="rotate(-18 24 23.5)"/>
+</g>
+<text x="336" y="266" font-family="ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="150" fill="#F3EDE4" font-weight="700" textLength="630" lengthAdjust="spacingAndGlyphs" xml:space="preserve">spackle</text>
+<rect x="847" y="356" width="184" height="56" rx="4" fill="#FF8A4C"/>
+<text x="112" y="398" font-family="ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="40" fill="#B5A999" textLength="744" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Find it. Prove it. Explain it. </text>
+<text x="855" y="398" font-family="ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="40" fill="#1B1714" font-weight="600" textLength="168" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Fix it.</text>
+<rect x="112" y="452" width="1056" height="1" fill="#3A3029"/>
+<text x="112" y="520" font-family="ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="32" fill="#F3EDE4" textLength="979" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Agentic security and debugging for systems you own.</text>
+</svg>

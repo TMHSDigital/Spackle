@@ -109,6 +109,9 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 			files[name] = string(b)
 		}
 		if !rt.ImagePresent(ctx, j.man.Image) {
+			if opts.Config.Offline {
+				return outcomes, fmt.Errorf("%w: sandbox image %s is not on this machine and offline mode does not pull images; pull it once while online", ErrRefused, j.man.Image)
+			}
 			if perr := rt.Pull(ctx, j.man.Image); perr != nil {
 				return outcomes, fmt.Errorf("sandbox image %s is not available: %w", j.man.Image, perr)
 			}

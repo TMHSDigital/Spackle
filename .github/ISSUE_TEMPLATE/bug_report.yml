@@ -45,7 +45,7 @@ body:
     attributes:
       label: Spackle version
       description: The release tag, or the commit SHA if you built from source.
-      placeholder: commit 4120686
+      placeholder: v0.1.0
     validations:
       required: true
   - type: input

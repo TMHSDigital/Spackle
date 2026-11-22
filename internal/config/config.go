@@ -350,6 +350,10 @@ func (c Config) Validate() error {
 			add("[stages.%s] is not a stage: use one of %s", name, strings.Join(Stages, ", "))
 			continue
 		}
+		if !c.Stages[name].Configured() {
+			add("[stages.%s] has no provider, so it would be ignored: set provider (the other fields are inherited from [model] when the provider is the same)", name)
+			continue
+		}
 		// Check the resolved model, so a stage may inherit fields from
 		// [model] when it uses the same provider.
 		checkModel("[stages."+name+"]", c.ForStage(name))

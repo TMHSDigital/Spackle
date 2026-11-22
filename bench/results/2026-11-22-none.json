@@ -1,0 +1,940 @@
+{
+  "schema": "spackle.bench/v1",
+  "date": "2026-11-22",
+  "spackle_version": "0.1.0",
+  "mode": "deterministic",
+  "model": "none",
+  "corpus": {
+    "fixtures": 32,
+    "clean": 6,
+    "vulnerable": 26,
+    "truth_entries": 38,
+    "by_language": {
+      "go": 10,
+      "infrastructure": 2,
+      "javascript": 5,
+      "python": 10,
+      "typescript": 5
+    }
+  },
+  "totals": {
+    "true_positives": 26,
+    "false_positives": 5,
+    "false_negatives": 12,
+    "precision": 0.8387,
+    "recall": 0.6842,
+    "f1": 0.7536,
+    "verified_fixes": 0,
+    "verified_fix_rate": 0,
+    "cost_usd": 0,
+    "cost_known": true,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "tokens_estimated": false,
+    "cost_per_finding": 0,
+    "decoys_flagged": 2,
+    "clean_fixtures": 6
+  },
+  "by_language": {
+    "go": {
+      "true_positives": 4,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0.6667,
+      "recall": 0.5,
+      "f1": 0.5714,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 1,
+      "clean_fixtures": 2
+    },
+    "infrastructure": {
+      "true_positives": 12,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "precision": 0.8571,
+      "recall": 0.9231,
+      "f1": 0.8889,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 0,
+      "clean_fixtures": 0
+    },
+    "javascript": {
+      "true_positives": 3,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0.75,
+      "recall": 0.75,
+      "f1": 0.75,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 1,
+      "clean_fixtures": 1
+    },
+    "python": {
+      "true_positives": 7,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0.7778,
+      "f1": 0.875,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 0,
+      "clean_fixtures": 2
+    },
+    "typescript": {
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 0,
+      "clean_fixtures": 1
+    }
+  },
+  "by_difficulty": {
+    "easy": {
+      "true_positives": 24,
+      "false_positives": 5,
+      "false_negatives": 4,
+      "precision": 0.8276,
+      "recall": 0.8571,
+      "f1": 0.8421,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 2,
+      "clean_fixtures": 6
+    },
+    "hard": {
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 8,
+      "precision": 1,
+      "recall": 0.2,
+      "f1": 0.3333,
+      "verified_fixes": 0,
+      "verified_fix_rate": 0,
+      "cost_usd": 0,
+      "cost_known": true,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "tokens_estimated": false,
+      "cost_per_finding": 0,
+      "decoys_flagged": 0,
+      "clean_fixtures": 0
+    }
+  },
+  "fixtures": [
+    {
+      "fixture": "go-auth-bypass-01",
+      "language": "go",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "auth-bypass",
+          "cwe": "CWE-287",
+          "file": "main.go",
+          "line": 31,
+          "sink": "flagsHandler",
+          "note": "admin check is gated on POST only; PUT and DELETE reach the mutating switch unauthenticated"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-clean-01",
+      "language": "go",
+      "difficulty": "easy",
+      "clean": true,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-clean-02",
+      "language": "go",
+      "difficulty": "easy",
+      "clean": true,
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 0,
+      "matched": [],
+      "missed": [],
+      "spurious": [
+        {
+          "id": "SPK-C922F70A",
+          "class": "weak-hash",
+          "file": "util.go",
+          "line": 28,
+          "confidence": "plausible",
+          "status": "open",
+          "fixed": false
+        }
+      ],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-command-injection-01",
+      "language": "go",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "command-injection",
+          "file": "main.go",
+          "line": 20,
+          "finding_id": "SPK-7DB9D3B9",
+          "reported_line": 20
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-insecure-random-01",
+      "language": "go",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "insecure-random",
+          "file": "main.go",
+          "line": 29,
+          "finding_id": "SPK-6C0CA8E2",
+          "reported_line": 29
+        }
+      ],
+      "missed": [],
+      "spurious": [
+        {
+          "id": "SPK-C5E760C7",
+          "class": "hardcoded-secret",
+          "file": "main.go",
+          "line": 12,
+          "confidence": "plausible",
+          "status": "open",
+          "fixed": false
+        }
+      ],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-path-traversal-01",
+      "language": "go",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "path-traversal",
+          "cwe": "CWE-22",
+          "file": "store.go",
+          "line": 40,
+          "sink": "os.ReadFile",
+          "note": "name from the request is joined to the base directory with no prefix check; source is in handler.go"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-race-condition-01",
+      "language": "go",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "race-condition",
+          "cwe": "CWE-367",
+          "file": "ledger.go",
+          "line": 42,
+          "sink": "Ledger.Withdraw",
+          "note": "balance was checked earlier under a different lock acquisition, so the check and the deduction are not atomic"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-sql-injection-01",
+      "language": "go",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "sql-injection",
+          "file": "main.go",
+          "line": 37,
+          "finding_id": "SPK-CFDA3716",
+          "reported_line": 36
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-ssrf-01",
+      "language": "go",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "ssrf",
+          "cwe": "CWE-918",
+          "file": "main.go",
+          "line": 34,
+          "sink": "http.Client.Get",
+          "note": "target URL assembled from the node parameter by statusProbe.endpoint with no host allowlist"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "go-tls-verification-01",
+      "language": "go",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "tls-verification",
+          "file": "main.go",
+          "line": 19,
+          "finding_id": "SPK-046AE901",
+          "reported_line": 19
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "infra-container-01",
+      "language": "infrastructure",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 6,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "matched": [
+        {
+          "class": "supply-chain",
+          "file": "Dockerfile",
+          "line": 1,
+          "finding_id": "SPK-95BD4592",
+          "reported_line": 1
+        },
+        {
+          "class": "hardcoded-secret",
+          "file": "Dockerfile",
+          "line": 7,
+          "finding_id": "SPK-2F0EDF8A",
+          "reported_line": 7
+        },
+        {
+          "class": "container-hardening",
+          "file": "k8s/deployment.yaml",
+          "line": 17,
+          "finding_id": "SPK-F8AFCF12",
+          "reported_line": 19
+        },
+        {
+          "class": "supply-chain",
+          "file": "k8s/deployment.yaml",
+          "line": 20,
+          "finding_id": "SPK-06F97262",
+          "reported_line": 20
+        },
+        {
+          "class": "container-privilege",
+          "file": "k8s/deployment.yaml",
+          "line": 31,
+          "finding_id": "SPK-0D038115",
+          "reported_line": 31
+        },
+        {
+          "class": "container-privilege",
+          "file": "k8s/deployment.yaml",
+          "line": 38,
+          "finding_id": "SPK-DF1A8227",
+          "reported_line": 37
+        }
+      ],
+      "missed": [
+        {
+          "class": "container-hardening",
+          "cwe": "CWE-250",
+          "file": "Dockerfile",
+          "line": 9,
+          "sink": "CMD",
+          "note": "no USER instruction anywhere, so the process runs as root; anchored on the CMD line"
+        }
+      ],
+      "spurious": [
+        {
+          "id": "SPK-6CBE195E",
+          "class": "container-privilege",
+          "file": "k8s/deployment.yaml",
+          "line": 17,
+          "confidence": "plausible",
+          "status": "open",
+          "fixed": false
+        },
+        {
+          "id": "SPK-027D024C",
+          "class": "container-hardening",
+          "file": "Dockerfile",
+          "line": 1,
+          "confidence": "plausible",
+          "status": "open",
+          "fixed": false
+        }
+      ],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "infra-terraform-ci-01",
+      "language": "infrastructure",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 6,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "public-storage",
+          "file": "main.tf",
+          "line": 26,
+          "finding_id": "SPK-732EB9F8",
+          "reported_line": 26
+        },
+        {
+          "class": "network-exposure",
+          "file": "main.tf",
+          "line": 39,
+          "finding_id": "SPK-ACCD6431",
+          "reported_line": 39
+        },
+        {
+          "class": "unencrypted-storage",
+          "file": "main.tf",
+          "line": 51,
+          "finding_id": "SPK-35C8E6EC",
+          "reported_line": 51
+        },
+        {
+          "class": "ci-permissions",
+          "file": ".github/workflows/triage.yml",
+          "line": 7,
+          "finding_id": "SPK-5B920D3B",
+          "reported_line": 7
+        },
+        {
+          "class": "supply-chain",
+          "file": ".github/workflows/triage.yml",
+          "line": 17,
+          "finding_id": "SPK-3D5D5262",
+          "reported_line": 17
+        },
+        {
+          "class": "ci-injection",
+          "file": ".github/workflows/triage.yml",
+          "line": 25,
+          "finding_id": "SPK-01EBEAE7",
+          "reported_line": 25
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "js-clean-01",
+      "language": "javascript",
+      "difficulty": "easy",
+      "clean": true,
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 0,
+      "matched": [],
+      "missed": [],
+      "spurious": [
+        {
+          "id": "SPK-44603713",
+          "class": "weak-hash",
+          "file": "tools.js",
+          "line": 40,
+          "confidence": "plausible",
+          "status": "open",
+          "fixed": false
+        }
+      ],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "js-code-injection-01",
+      "language": "javascript",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "code-injection",
+          "file": "server.js",
+          "line": 29,
+          "finding_id": "SPK-233121E9",
+          "reported_line": 29
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "js-insecure-random-01",
+      "language": "javascript",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "insecure-random",
+          "file": "tokens.js",
+          "line": 9,
+          "finding_id": "SPK-378EEBA7",
+          "reported_line": 9
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "js-open-redirect-01",
+      "language": "javascript",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "open-redirect",
+          "cwe": "CWE-601",
+          "file": "server.js",
+          "line": 20,
+          "sink": "res.writeHead",
+          "note": "Location header set from the next parameter with no validation"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "js-sql-injection-01",
+      "language": "javascript",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "sql-injection",
+          "file": "db.js",
+          "line": 19,
+          "finding_id": "SPK-63B66CE8",
+          "reported_line": 18
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-broken-access-control-01",
+      "language": "python",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "broken-access-control",
+          "cwe": "CWE-639",
+          "file": "app.py",
+          "line": 20,
+          "sink": "store.get_invoice",
+          "note": "invoice fetched by client-supplied id and returned with no ownership check"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-clean-01",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": true,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-clean-02",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": true,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-code-injection-01",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "code-injection",
+          "file": "calc.py",
+          "line": 10,
+          "finding_id": "SPK-4A049882",
+          "reported_line": 10
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-command-injection-01",
+      "language": "python",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "command-injection",
+          "file": "runner.py",
+          "line": 16,
+          "finding_id": "SPK-61D42580",
+          "reported_line": 16
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-hardcoded-secret-01",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "hardcoded-secret",
+          "file": "config.py",
+          "line": 5,
+          "finding_id": "SPK-A770FA94",
+          "reported_line": 5
+        },
+        {
+          "class": "hardcoded-secret",
+          "file": "config.py",
+          "line": 13,
+          "finding_id": "SPK-173F8681",
+          "reported_line": 13
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-jwt-verification-01",
+      "language": "python",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "jwt-verification",
+          "cwe": "CWE-347",
+          "file": "tokens.py",
+          "line": 41,
+          "sink": "tokens.decode",
+          "note": "return value of the signature check is ignored, so forged tokens are accepted"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-sql-injection-01",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "sql-injection",
+          "file": "app.py",
+          "line": 22,
+          "finding_id": "SPK-E0E3D74E",
+          "reported_line": 21
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-unsafe-deserialization-01",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "unsafe-deserialization",
+          "file": "app.py",
+          "line": 21,
+          "finding_id": "SPK-EDFE66F5",
+          "reported_line": 21
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "py-weak-hash-01",
+      "language": "python",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [
+        {
+          "class": "weak-hash",
+          "file": "accounts.py",
+          "line": 21,
+          "finding_id": "SPK-61A91C51",
+          "reported_line": 21
+        }
+      ],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "ts-broken-access-control-01",
+      "language": "typescript",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "broken-access-control",
+          "cwe": "CWE-639",
+          "file": "policy.ts",
+          "line": 21,
+          "sink": "canEdit",
+          "note": "authorization compares against the ownerId field sent by the client in server.ts, not doc.ownerId"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "ts-clean-01",
+      "language": "typescript",
+      "difficulty": "easy",
+      "clean": true,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "matched": [],
+      "missed": [],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "ts-cors-misconfiguration-01",
+      "language": "typescript",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "cors-misconfiguration",
+          "cwe": "CWE-942",
+          "file": "server.ts",
+          "line": 25,
+          "sink": "res.setHeader",
+          "note": "arbitrary Origin reflected together with Access-Control-Allow-Credentials: true"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "ts-jwt-verification-01",
+      "language": "typescript",
+      "difficulty": "hard",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "jwt-verification",
+          "cwe": "CWE-347",
+          "file": "auth.ts",
+          "line": 29,
+          "sink": "verifyToken",
+          "note": "signature verified only for the HS256 branch; other alg values skip verification and fall through to accept the claims"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    },
+    {
+      "fixture": "ts-xss-01",
+      "language": "typescript",
+      "difficulty": "easy",
+      "clean": false,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "matched": [],
+      "missed": [
+        {
+          "class": "xss",
+          "cwe": "CWE-79",
+          "file": "server.ts",
+          "line": 39,
+          "sink": "res.end",
+          "note": "q parameter interpolated into the HTML body unescaped (the list items next to it are escaped)"
+        }
+      ],
+      "spurious": [],
+      "verified_fixes": 0
+    }
+  ]
+}

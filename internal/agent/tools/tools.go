@@ -383,3 +383,15 @@ func schema(props string, required ...string) json.RawMessage {
 	}
 	return json.RawMessage(`{"type":"object","properties":{` + props + `},"required":` + string(req) + `,"additionalProperties":false}`)
 }
+
+// NewNetworkRegistry returns a registry with no file tools, for a target
+// that is a running application rather than a directory. Tools are added
+// with Add (the scope-bound http_request tool). Results are still
+// truncated, redacted and enveloped by Call.
+func NewNetworkRegistry(sealer *envelope.Sealer) *Registry {
+	r := &Registry{env: Env{Sealer: sealer}, tools: map[string]Tool{}, redacted: map[string]string{}}
+	if sealer == nil {
+		r.rootErr = errors.New("the tool environment has no envelope sealer; this is a Spackle bug, stop and report it")
+	}
+	return r
+}

@@ -472,7 +472,7 @@ func orEmptyNote(blocks []block, note string) []block {
 func proofMeaning(status string) string {
 	switch status {
 	case finding.ProofDemonstrated:
-		return "a proof of concept ran in the sandbox and triggered the flaw"
+		return "the flaw's effect was observed: a proof of concept ran in the sandbox, or a recorded exchange shows it"
 	case finding.ProofReasoned:
 		return "the exploit path was argued from code or traffic and was not run"
 	case finding.ProofNotRun:
@@ -486,7 +486,7 @@ func proofMeaning(status string) string {
 func confidenceMeaning(level string) string {
 	switch level {
 	case finding.ConfidenceDemonstrated:
-		return "a proof of concept ran and succeeded"
+		return "the flaw's effect was observed, by a sandboxed proof or a recorded exchange"
 	case finding.ConfidenceHigh:
 		return "traced end to end, not run"
 	case finding.ConfidencePlausible:

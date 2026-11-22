@@ -132,6 +132,24 @@ class Handler(BaseHTTPRequestHandler):
         self.dispatch(POST_ROUTES, self.rfile.read(length))
 
 
+INDEX = b"""<html><head><title>Notes demo</title></head><body>
+<h1>Notes demo</h1>
+<form action="/search"><input name="q" value="welcome"><button>Search</button></form>
+<ul>
+<li><a href="/search?q=welcome">Search notes</a></li>
+<li><a href="/note?id=1">Open note 1</a></li>
+<li><a href="/file?name=welcome.txt">Download welcome.txt</a></li>
+</ul>
+</body></html>"""
+
+
+def handle_index(params, user):
+    return 200, "text/html; charset=utf-8", INDEX
+
+
+GET_ROUTES["/"] = handle_index
+
+
 def main():
     global CONN
     os.makedirs(NOTES_DIR, exist_ok=True)

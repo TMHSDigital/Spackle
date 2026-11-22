@@ -20,9 +20,14 @@ Spackle is designed to examine systems on behalf of the person running it. It mu
 - A secret value reaching a model provider or appearing in a report.
 - Content from a target changing the scope, the budget, or the tool permissions of a run.
 - A proof of concept or other model-written code executing on the host outside the sandbox.
+- A model reading a file outside the target, or a fix changing your working tree, index or current branch.
 - A request leaving the authorized scope, including through a redirect or a followed link.
 - `--offline` allowing a connection to a non-loopback address.
 - A sandbox escape made possible by Spackle's own configuration of the container.
+- A target repository running code on the host through Spackle's use of git.
+- The MCP server: a tool call that scans or reads outside the directories named with `--root`, reaches a running target, or reads outside the runs directory.
+- The MCP server: a tool call that makes Spackle call a model, and so spend money, when the server was started without `--allow-model`.
+- An API key being accepted from a flag or a config file, written to disk, or sent to a host other than its provider.
 - A release artifact whose signature or provenance does not verify.
 
 ## What does not count
@@ -37,8 +42,8 @@ These are not security problems in Spackle, and a normal issue is the right plac
 
 The design rests on four principles. [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) describes each one and how it is enforced. [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) say what has been built so far.
 
-- **Authorized use only.** A live target requires a scope file or a typed confirmation of the exact host before any request is sent. Redirects and links that leave the scope are refused and logged.
-- **No listening ports.** No package opens a listener, and a test fails the build if one appears outside test files. The MCP server speaks over stdin and stdout only.
+- **Authorized use only.** A running target requires a scope file, a `[scope]` table in config, or a typed confirmation of the exact host before any request is sent. Redirects and links that leave the scope are refused and logged.
+- **No listening ports.** No package opens a listener, and a test fails the build if one appears outside test files. The MCP server speaks over stdin and stdout only, scans only local directories inside the roots you name, and calls a model only when you start it with `--allow-model`.
 - **Secrets are redacted before any model call.** Every outbound message and tool result passes through redaction first. A secret finding records the file, line, rule, and a short hash of the value, never the value.
 - **Clean room from ARTEX.** No ARTEX code, prompt, or asset is in this repository.
 

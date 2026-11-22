@@ -292,3 +292,36 @@ func TestEstimateWording(t *testing.T) {
 		}
 	}
 }
+
+func TestOfflineSkipsNetworkScannersAndRefusesClones(t *testing.T) {
+	in := []seed.Seeder{fakeSeeder{name: "semgrep"}, fakeSeeder{name: "gitleaks"}, fakeSeeder{name: "trivy"}, fakeSeeder{name: "osv-scanner"}, fakeSeeder{name: "builtin-code"}}
+	out := offlineSeeders(in)
+	for _, s := range out {
+		ok, note := s.Available()
+		wantSkipped := networkSeeders[s.Name()]
+		if ok == wantSkipped {
+			t.Errorf("%s: available=%v in offline mode", s.Name(), ok)
+		}
+		if wantSkipped && !strings.Contains(note, "offline mode") {
+			t.Errorf("%s: note = %q", s.Name(), note)
+		}
+	}
+
+	o := opts(t)
+	o.Config.Offline = true
+	o.Target = "https://github.com/TMHSDigital/Spackle.git"
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !errors.Is(err, llm.ErrOffline) {
+		t.Fatalf("offline clone: err = %v", err)
+	}
+
+	// The skipped scanners still appear in the report, with the reason.
+	o = opts(t, fakeSeeder{name: "semgrep", leads: []seed.Lead{sqlLead()}})
+	o.Config.Offline = true
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Run.Findings) != 0 || len(res.Run.Seeders) != 1 || res.Run.Seeders[0].Available || !strings.Contains(res.Run.Seeders[0].Note, "offline mode") {
+		t.Fatalf("findings=%d seeders=%+v", len(res.Run.Findings), res.Run.Seeders)
+	}
+}

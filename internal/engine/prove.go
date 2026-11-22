@@ -95,6 +95,9 @@ func (l *lab) image(ctx context.Context, lang string) (string, error) {
 		return img, nil
 	}
 	if !l.runtime.ImagePresent(ctx, img) {
+		if l.r.cfg.Offline {
+			return "", fmt.Errorf("sandbox image %s is not on this machine and offline mode does not pull images; pull it once while online", img)
+		}
 		l.r.say("Pulling sandbox image %s", img)
 		if err := l.runtime.Pull(ctx, img); err != nil {
 			return "", fmt.Errorf("sandbox image %s is not available: %w", img, err)

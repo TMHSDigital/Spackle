@@ -42,7 +42,9 @@ func runScan(env Env, args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes)})
+	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin,
+	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
 		if errors.Is(err, engine.ErrRefused) {

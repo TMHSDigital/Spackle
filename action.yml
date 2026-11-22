@@ -1,0 +1,160 @@
+name: Spackle
+description: >-
+  Find, demonstrate, explain and fix security flaws in the code of this repository,
+  and upload the findings to GitHub code scanning.
+author: TMHSDigital
+branding:
+  icon: shield
+  color: orange
+
+inputs:
+  path:
+    description: Directory to scan, relative to the workspace.
+    required: false
+    default: '.'
+  version:
+    description: Spackle release to install, for example v0.1.0. "latest" resolves the newest release.
+    required: false
+    default: latest
+  fail-on:
+    description: Lowest severity that fails the job (critical, high, medium, low or never).
+    required: false
+    default: high
+  upload-sarif:
+    description: Upload the SARIF report to GitHub code scanning. Needs "security-events: write".
+    required: false
+    default: 'true'
+  provider:
+    description: Model provider (anthropic, openai, openai-compatible or ollama). Leave empty to run the deterministic stages only, which need no key and cost nothing.
+    required: false
+    default: ''
+  model:
+    description: Model name for the provider.
+    required: false
+    default: ''
+  base-url:
+    description: Endpoint for the openai-compatible provider.
+    required: false
+    default: ''
+  budget-usd:
+    description: Hard cap on model spend for the run, in USD.
+    required: false
+    default: '2'
+  fix:
+    description: Write and verify fixes. Off by default in CI; findings are still reported.
+    required: false
+    default: 'false'
+  args:
+    description: Extra arguments passed to "spackle scan".
+    required: false
+    default: ''
+  github-token:
+    description: Token used to download the release and verify its provenance.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  sarif:
+    description: Path of the SARIF report.
+    value: ${{ steps.scan.outputs.sarif }}
+  exit-code:
+    description: Exit code of the scan (0 no findings at or above fail-on, 1 findings, 2 usage, 3 failure).
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Spackle
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SPACKLE_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        case "${RUNNER_OS}" in
+          Linux) os=linux; ext=tar.gz ;;
+          macOS) os=darwin; ext=tar.gz ;;
+          Windows) os=windows; ext=zip ;;
+          *) echo "::error::Spackle has no release for ${RUNNER_OS}"; exit 2 ;;
+        esac
+        case "${RUNNER_ARCH}" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::Spackle has no release for ${RUNNER_ARCH}"; exit 2 ;;
+        esac
+        tag="${SPACKLE_VERSION}"
+        if [ "${tag}" = "latest" ]; then
+          tag="$(gh release view --repo TMHSDigital/Spackle --json tagName --jq .tagName)"
+        fi
+        dir="${RUNNER_TEMP}/spackle-${tag}"
+        mkdir -p "${dir}"
+        archive="spackle_${tag#v}_${os}_${arch}.${ext}"
+        gh release download "${tag}" --repo TMHSDigital/Spackle --dir "${dir}" --clobber \
+          --pattern "${archive}" --pattern checksums.txt
+        # Verify the archive against the signed checksum list, then verify
+        # that the archive was built by the Spackle release workflow.
+        (cd "${dir}" && grep " ${archive}\$" checksums.txt > expected.txt && \
+          (sha256sum -c expected.txt 2>/dev/null || shasum -a 256 -c expected.txt))
+        gh attestation verify "${dir}/${archive}" --repo TMHSDigital/Spackle
+        if [ "${ext}" = "zip" ]; then
+          unzip -q -o "${dir}/${archive}" -d "${dir}"
+        else
+          tar -xzf "${dir}/${archive}" -C "${dir}"
+        fi
+        echo "${dir}" >> "${GITHUB_PATH}"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        SPACKLE_PATH: ${{ inputs.path }}
+        SPACKLE_FAIL_ON: ${{ inputs.fail-on }}
+        SPACKLE_PROVIDER: ${{ inputs.provider }}
+        SPACKLE_MODEL: ${{ inputs.model }}
+        SPACKLE_BASE_URL: ${{ inputs.base-url }}
+        SPACKLE_BUDGET_USD: ${{ inputs.budget-usd }}
+        SPACKLE_FIX: ${{ inputs.fix }}
+        SPACKLE_ARGS: ${{ inputs.args }}
+      run: |
+        set -uo pipefail
+        out="${RUNNER_TEMP}/spackle-report"
+        # Inputs are passed through the environment and as separate
+        # arguments, never interpolated into this script.
+        args=(scan "${SPACKLE_PATH}" --yes --format sarif,markdown --out "${out}" --fail-on "${SPACKLE_FAIL_ON}")
+        if [ -n "${SPACKLE_PROVIDER}" ]; then
+          args+=(--provider "${SPACKLE_PROVIDER}" --model "${SPACKLE_MODEL}" --budget-usd "${SPACKLE_BUDGET_USD}")
+          if [ -n "${SPACKLE_BASE_URL}" ]; then args+=(--base-url "${SPACKLE_BASE_URL}"); fi
+        fi
+        if [ "${SPACKLE_FIX}" = "true" ]; then args+=(--fix); else args+=(--no-fix); fi
+        if [ -n "${SPACKLE_ARGS}" ]; then
+          read -r -a extra <<< "${SPACKLE_ARGS}"
+          args+=("${extra[@]}")
+        fi
+        spackle "${args[@]}"
+        code=$?
+        echo "exit-code=${code}" >> "${GITHUB_OUTPUT}"
+        echo "sarif=${out}/report.sarif" >> "${GITHUB_OUTPUT}"
+        if [ -f "${out}/report.sarif" ]; then echo "has-sarif=true" >> "${GITHUB_OUTPUT}"; fi
+        if [ -f "${out}/report.md" ]; then cat "${out}/report.md" >> "${GITHUB_STEP_SUMMARY}"; fi
+        # Do not fail yet: the SARIF upload below must run first.
+        exit 0
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' && steps.scan.outputs.has-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif }}
+        category: spackle
+
+    - name: Result
+      shell: bash
+      env:
+        CODE: ${{ steps.scan.outputs.exit-code }}
+      run: |
+        case "${CODE}" in
+          0) echo "Spackle: no findings at or above the fail-on threshold." ;;
+          1) echo "::error::Spackle found issues at or above the fail-on threshold. See the job summary and the code scanning alerts."; exit 1 ;;
+          2) echo "::error::Spackle refused to run (bad arguments, configuration, or missing authorization). See the log above."; exit 2 ;;
+          *) echo "::error::Spackle failed (exit ${CODE}). See the log above."; exit "${CODE:-3}" ;;
+        esac

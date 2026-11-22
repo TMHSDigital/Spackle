@@ -154,10 +154,3 @@ func flagExit(err error) int {
 	}
 	return ExitUsage
 }
-
-// notYet reports a command that this build does not include. It exists so a
-// pre-release binary says so plainly instead of pretending to work.
-func notYet(env Env, name string) int {
-	fmt.Fprintf(env.Stderr, "spackle %s: not available in this build (%s).\nThis command lands before v0.1.0; ROADMAP.md tracks progress.\n", name, version.Version)
-	return ExitError
-}

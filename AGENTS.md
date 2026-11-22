@@ -4,9 +4,9 @@ This file is for AI coding agents working in this repository. Human contributors
 
 ## What this project is
 
-Spackle is an agentic security and debugging CLI for systems the operator owns or is authorized to test. It is designed to find flaws, prove them in a container sandbox, explain exploitation and blast radius, and write the fix. It is one static Go binary (`spackle`, module `github.com/TMHSDigital/spackle`), licensed Apache-2.0.
+Spackle is an agentic security and debugging CLI for systems the operator owns or is authorized to test. It finds flaws, proves them in a container sandbox, explains exploitation and blast radius, and writes the fix. It is one static Go binary (`spackle`, module `github.com/TMHSDigital/spackle`), licensed Apache-2.0.
 
-The project is pre-release. Do not describe a feature as shipped unless the code and tests for it are on `main`. [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) hold the status.
+Do not describe a feature as shipped unless the code and tests for it are on `main`. [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) hold the status.
 
 ## Commands
 
@@ -17,8 +17,14 @@ The project is pre-release. Do not describe a feature as shipped unless the code
 | Run the linters | `make lint` | `.\make.ps1 lint` |
 | Format the code | `make fmt` | `.\make.ps1 fmt` |
 | Tidy `go.mod` | `make tidy` | `.\make.ps1 tidy` |
+| Run the tests with the race detector (needs cgo) | `make test-race` | `.\make.ps1 test-race` |
+| Run the benchmark corpus | `make bench` | `.\make.ps1 bench` |
+| Remove build output | `make clean` | `.\make.ps1 clean` |
+| Lint, test, then build | `make all` | `.\make.ps1 all` |
 
 Run `lint`, `test`, and `build` before you call a change done. CI runs the same three on Linux, macOS, and Windows with no API key and no container runtime.
+
+`lint` runs `go vet` and `golangci-lint` v2. The linter must be built with a Go version at least as new as the one in use. A linter binary built with an older Go fails to load the code: rebuild it with the current toolchain instead of skipping the lint step.
 
 Update report golden files with:
 
@@ -31,7 +37,7 @@ Read the diff of every golden file you update. A golden change you cannot explai
 ## Layout
 
 - `cmd/spackle/main.go` only calls `cli.Main`.
-- `internal/` holds every package. The package table is in [CONTRIBUTING.md](CONTRIBUTING.md) and in the design document.
+- `internal/` holds every package: `agent` (with `agent/tools`), `authz`, `bench`, `budget`, `cli`, `config`, `dast`, `diffx`, `engine`, `envelope`, `finding`, `gitx`, `ledger`, `llm`, `mapper`, `mcp`, `policy`, `redact`, `report`, `sandbox`, `seed`, `target`, `version`, `walk`. The table with one line per package is in [CONTRIBUTING.md](CONTRIBUTING.md) and in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - `bench/corpus/` and `examples/demo-app/` hold fixtures that are vulnerable on purpose. Do not fix them and do not lint them.
 - `bench/results/` holds committed benchmark results. Never edit one by hand.
 - `docs/superpowers/` holds the design specification (`specs/`) and the implementation plan (`plans/`). Read the spec before you change behavior.

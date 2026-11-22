@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'">
+<title>Spackle: find it, prove it, explain it, fix it</title>
+<meta name="description" content="Agentic security and debugging that finds real flaws, proves them, explains how they would be exploited, and fixes them. For systems you own or are authorized to test.">
+<link rel="canonical" href="https://tmhsdigital.github.io/Spackle/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Spackle">
+<meta property="og:title" content="Spackle: find it, prove it, explain it, fix it">
+<meta property="og:description" content="Agentic security and debugging that finds real flaws, proves them, explains how they would be exploited, and fixes them.">
+<meta property="og:url" content="https://tmhsdigital.github.io/Spackle/">
+<meta property="og:image" content="https://tmhsdigital.github.io/Spackle/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="spackle: Find it. Prove it. Explain it. Fix it.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Spackle: find it, prove it, explain it, fix it">
+<meta name="twitter:description" content="Agentic security and debugging that finds real flaws, proves them, explains how they would be exploited, and fixes them.">
+<meta name="twitter:image" content="https://tmhsdigital.github.io/Spackle/assets/social-preview.png">
+<meta name="twitter:image:alt" content="spackle: Find it. Prove it. Explain it. Fix it.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#1B1714" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F6F1EA" media="(prefers-color-scheme: light)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #1B1714;
+  --raised: #26201B;
+  --border: #3A3029;
+  --fg: #F3EDE4;
+  --muted: #B5A999;
+  --dim: #7F7466;
+  --accent: #FF8A4C;
+  --secondary: #C4A1FF;
+  --ok: #7BD389;
+  --critical: #FF5D5D;
+  --medium: #F2C14E;
+  --low: #8FB8DE;
+  --link: var(--accent);
+  --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #F6F1EA;
+    --raised: #FFFFFF;
+    --border: #DDD2C3;
+    --fg: #231C16;
+    --muted: #5E5247;
+    --dim: #75695B;
+    --accent: #C2521A;
+    --secondary: #6A3FC0;
+    --ok: #1F6B3A;
+    --critical: #B3261E;
+    --medium: #7A5600;
+    --low: #2B5F8A;
+    /* #C2521A is 4.1:1 on #F6F1EA, so link text uses a darker step of the same orange (5.3:1). */
+    --link: #A8440F;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 1.0625rem/1.7 var(--sans);
+}
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
+a:hover { text-decoration-thickness: 2px; }
+a:focus-visible, pre:focus-visible, .scroll:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+code, pre { font-family: var(--mono); font-size: 0.875em; }
+p code, li code, td code, dd code { overflow-wrap: anywhere; }
+code.nb { white-space: nowrap; }
+p { margin: 0 0 1rem; }
+img { max-width: 100%; height: auto; display: block; }
+
+.skip {
+  position: absolute; left: 1rem; top: -4rem;
+  background: var(--raised); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.5rem 0.9rem; z-index: 2;
+}
+.skip:focus { top: 1rem; }
+
+.wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+.prose { max-width: 68ch; }
+
+/* header */
+.top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem 2rem; flex-wrap: wrap;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.top .brand { display: block; border-radius: 8px; }
+.top .brand img { width: 15rem; }
+.top nav ul, footer ul {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem;
+}
+.top nav { font-size: 0.95rem; }
+.top nav a { color: var(--muted); text-decoration: none; }
+.top nav a:hover { color: var(--fg); text-decoration: underline; }
+
+/* hero */
+.hero { padding: 3.5rem 0 3rem; }
+h1 {
+  font: 600 clamp(1.85rem, 4.3vw, 3rem)/1.14 var(--serif);
+  letter-spacing: -0.01em;
+  margin: 0 0 1.5rem;
+  max-width: 27ch;
+  text-wrap: balance;
+}
+.lede { font-size: 1.15rem; line-height: 1.6; max-width: 62ch; margin: 0 0 0.75rem; }
+.who { color: var(--muted); max-width: 62ch; margin: 0 0 1.75rem; }
+.hero pre { max-width: 44rem; }
+.hero figure { margin: 2.5rem 0 0; }
+.hero figure img { width: 860px; border-radius: 12px; }
+
+/* code */
+pre {
+  margin: 0 0 1rem;
+  padding: 0.95rem 1.1rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+  line-height: 1.6;
+  tab-size: 2;
+}
+pre code { font-size: 1em; }
+pre .c { color: var(--muted); }
+.label {
+  font: 600 0.8rem/1.4 var(--mono);
+  color: var(--muted);
+  margin: 1.5rem 0 0.45rem;
+}
+
+/* callout */
+.notice {
+  margin: 0 0 3rem;
+  padding: 1.1rem 1.3rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+}
+.notice p { margin: 0; max-width: 72ch; }
+
+/* sections */
+section { padding: 3rem 0; border-top: 1px solid var(--border); }
+h2 {
+  font: 600 clamp(1.5rem, 3vw, 2rem)/1.2 var(--serif);
+  margin: 0 0 1.1rem;
+  text-wrap: balance;
+}
+h3 { font: 600 1rem/1.35 var(--sans); margin: 0 0 0.4rem; }
+section > :last-child { margin-bottom: 0; }
+.plain { padding-left: 1.15rem; margin: 0 0 1rem; max-width: 68ch; }
+.plain li { margin-bottom: 0.6rem; }
+.plain li::marker { color: var(--dim); }
+
+/* why: cards */
+.cards {
+  list-style: none; margin: 1.75rem 0 0; padding: 0;
+  display: grid; grid-template-columns: 1fr; gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.cards li { background: var(--bg); padding: 1.25rem 1.3rem 1.35rem; }
+.cards h3 { display: flex; align-items: baseline; gap: 0.6rem; }
+.cards h3::before {
+  content: ""; flex: none;
+  width: 0.5rem; height: 0.5rem;
+  background: var(--accent);
+  border-radius: 1px;
+  transform: translateY(-0.05rem);
+}
+.cards p { margin: 0; color: var(--muted); font-size: 0.97rem; line-height: 1.6; }
+
+@media (min-width: 36rem) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 60rem) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* how: pipeline */
+.flow-box { margin: 1.75rem 0 2rem; }
+.flow {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.6rem 0;
+  font: 0.86rem/1.2 var(--mono);
+}
+.flow li { display: flex; align-items: center; }
+.flow li + li::before {
+  content: ""; flex: none;
+  width: 1.1rem; height: 1px;
+  background: var(--dim);
+}
+.flow span {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.flow .gate span { border-color: var(--accent); }
+.ledger {
+  margin: 0.6rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--dim);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.ledger b { font: 600 0.86rem var(--mono); color: var(--fg); margin-right: 0.35rem; }
+
+/* finding */
+.finding {
+  margin: 1.75rem 0 1.5rem;
+  max-width: 50rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--raised);
+}
+.finding > * { padding-left: 1.3rem; padding-right: 1.3rem; }
+.finding .src {
+  margin: 0; padding-top: 0.65rem; padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted); font-size: 0.9rem; line-height: 1.5;
+}
+.finding h3 { font: 600 1.02rem/1.45 var(--mono); margin: 0; padding-top: 1.1rem; overflow-wrap: anywhere; }
+.finding dl { margin: 0; padding-top: 0.9rem; padding-bottom: 1.2rem; }
+.finding dl > div { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 0 1rem; padding: 0.45rem 0; border-top: 1px solid var(--border); }
+.finding dl > div:first-child { border-top: 0; }
+.finding dt { color: var(--muted); font-size: 0.9rem; }
+.finding dd { margin: 0; min-width: 0; }
+.finding dd pre { margin: 0.15rem 0 0; background: var(--bg); }
+.sev { font: 700 0.9rem var(--mono); color: var(--link); }
+.conf { font: 700 0.9rem var(--mono); color: var(--ok); }
+
+/* tables */
+.scroll { overflow-x: auto; margin: 1.5rem 0 1.25rem; border: 1px solid var(--border); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 0.7rem 1rem; border-top: 1px solid var(--border); }
+thead th { border-top: 0; font-weight: 600; color: var(--muted); font-size: 0.88rem; background: var(--raised); }
+tbody th { font-weight: 600; }
+.privacy tbody th { width: 13rem; }
+.bench th, .bench td { white-space: nowrap; }
+.bench td { font-family: var(--mono); font-size: 0.86rem; }
+
+.top-link { margin: 1.75rem 0 0; font-size: 0.9rem; }
+
+footer { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: var(--muted); font-size: 0.95rem; }
+footer ul { margin-bottom: 0.9rem; }
+footer p { margin: 0; }
+
+@media (max-width: 40rem) {
+  body { font-size: 1rem; }
+  .hero { padding: 2.25rem 0 2.25rem; }
+  .top .brand img { width: 12.5rem; }
+  section { padding: 2.25rem 0; }
+  .finding > * { padding-left: 1rem; padding-right: 1rem; }
+  .finding dl > div { grid-template-columns: 1fr; }
+  .privacy tbody th { width: 38%; }
+  th, td { padding: 0.65rem 0.75rem; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap" id="top">
+
+<header class="top">
+  <a class="brand" href="./"><img src="assets/wordmark.svg" width="520" height="132" alt="spackle: Find it. Prove it. Explain it. Fix it."></a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="#quick-start">Quick start</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#findings">Findings</a></li>
+      <li><a href="#running-targets">Running targets</a></li>
+      <li><a href="#privacy">Privacy</a></li>
+      <li><a href="https://github.com/TMHSDigital/Spackle">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+
+<div class="hero">
+  <h1>Agentic security and debugging that finds real flaws, proves them, explains how they would be exploited, and fixes them.</h1>
+  <p class="lede">Point it at your own code, your own running application, or your own infrastructure files. It reports what is wrong, shows the evidence, says how sure it is, and hands you a checked patch.</p>
+  <p class="who">Built for developers, AppSec engineers and small security teams testing systems they own or are authorized to test.</p>
+  <pre tabindex="0"><code>go install github.com/TMHSDigital/spackle/cmd/spackle@latest</code></pre>
+  <figure>
+    <img src="assets/demo.svg" width="860" height="516" alt="spackle in a terminal: a scan of the bundled demo app lists findings with their severity and confidence, then prints a one-line summary.">
+  </figure>
+</div>
+
+<aside class="notice" aria-label="Authorized use">
+  <p><strong>Authorized use only.</strong> Point Spackle at systems you own or have explicit written permission to test. Testing someone else's system without consent is not security work and may be a crime. You are responsible for complying with the laws that apply to you.</p>
+</aside>
+
+<section id="quick-start" aria-labelledby="h-quick-start">
+  <h2 id="h-quick-start">Quick start</h2>
+  <p class="prose">Spackle is one static binary. The first run below needs no model, no key and no container runtime.</p>
+
+  <h3 class="label">Windows (PowerShell)</h3>
+<pre tabindex="0"><code>go install github.com/TMHSDigital/spackle/cmd/spackle@latest
+git clone https://github.com/TMHSDigital/Spackle.git
+cd Spackle
+spackle scan .\examples\demo-app</code></pre>
+
+  <h3 class="label">Linux and macOS</h3>
+<pre tabindex="0"><code>go install github.com/TMHSDigital/spackle/cmd/spackle@latest
+git clone https://github.com/TMHSDigital/Spackle.git
+cd Spackle
+spackle scan ./examples/demo-app</code></pre>
+
+  <p class="prose">That scan is deterministic: built-in rules plus any scanners you have installed. Every finding it prints is labelled <code>plausible</code>, because nothing has confirmed it yet. To have Spackle investigate, prove and fix, give it a model and a container runtime:</p>
+
+  <h3 class="label">With a model</h3>
+<pre tabindex="0"><code>spackle doctor                     <span class="c"># what is installed, what is missing</span>
+export ANTHROPIC_API_KEY=...       <span class="c"># your own key; Spackle ships none</span>
+spackle scan ./examples/demo-app --provider anthropic --model claude-opus-5-5</code></pre>
+
+  <p class="prose">Before a paid run Spackle prints an estimate and the hard caps, and waits for a yes. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/config.md">Configuration</a> covers OpenRouter, other OpenAI-compatible endpoints and fully local models.</p>
+</section>
+
+<section id="why" aria-labelledby="h-why">
+  <h2 id="h-why">Why Spackle</h2>
+  <ul class="cards">
+    <li>
+      <h3>Proof, not a hunch</h3>
+      <p>A finding is demonstrated by a proof of concept run in a sandbox, or by the recorded request and response for a running target. When nothing was run, the finding says so.</p>
+    </li>
+    <li>
+      <h3>The attacker's view</h3>
+      <p>Each finding gives preconditions, the attack step by step, what it chains into and the blast radius, written for the person who has to decide what to fix first.</p>
+    </li>
+    <li>
+      <h3>Fix and verify</h3>
+      <p>The fixer writes the smallest patch. It is accepted only if the changed files still compile, the proof stops working, and a passing test suite still passes.</p>
+    </li>
+    <li>
+      <h3>Runs offline</h3>
+      <p>Ollama and any local OpenAI-compatible server are first-class. <code class="nb">--offline</code> refuses every connection that would leave the machine.</p>
+    </li>
+    <li>
+      <h3>No listening ports</h3>
+      <p>Spackle is a command, not a server. Nothing binds a port, there are no default credentials, and a test fails the build if that ever changes.</p>
+    </li>
+    <li>
+      <h3>Evidence ledger</h3>
+      <p>Every run writes an append-only ledger. Reports are rebuilt from it alone, so a report is the same bytes every time.</p>
+    </li>
+    <li>
+      <h3>Honest confidence</h3>
+      <p><code>demonstrated</code>, <code>high</code> or <code>plausible</code>, each with its reason. A separate reviewer tries to refute every finding, and what it refutes is listed with why.</p>
+    </li>
+    <li>
+      <h3>Your secrets stay put</h3>
+      <p>Secret detection runs before anything reaches a model. Reports name the rule, the location and a short hash, never the value.</p>
+    </li>
+  </ul>
+</section>
+
+<section id="how-it-works" aria-labelledby="h-how">
+  <h2 id="h-how">How it works</h2>
+  <div class="flow-box">
+    <ol class="flow" aria-label="Pipeline stages, in order">
+      <li class="gate"><span>Scope gate</span></li>
+      <li><span>Mapper</span></li>
+      <li><span>Seeders</span></li>
+      <li><span>Planner</span></li>
+      <li><span>Investigators</span></li>
+      <li><span>Reviewer</span></li>
+      <li><span>Prover</span></li>
+      <li><span>Fixer</span></li>
+      <li><span>Reports</span></li>
+    </ol>
+    <p class="ledger"><b>Evidence ledger</b> Every stage from the mapper to the fixer writes to it, and reports are rebuilt from it alone.</p>
+  </div>
+  <ul class="plain">
+    <li><strong>Scope gate.</strong> A live URL needs an authorized scope before a single request is sent. Local source does not.</li>
+    <li><strong>Mapper and seeders</strong> use no model. The mapper finds languages, frameworks, entry points and trust boundaries. Seeders produce leads from built-in rules (Go, Python, JavaScript and TypeScript, secrets, Dockerfiles, Kubernetes, Terraform, GitHub workflows) and from Semgrep, gitleaks, osv-scanner, Trivy and hadolint when they are installed. Leads are hints, not verdicts.</li>
+    <li><strong>Planner</strong> turns the map and the leads into a short list of questions worth answering.</li>
+    <li><strong>Investigators</strong> answer one question each with read-only tools confined to the target. Every draft is checked before it counts: quoted lines must exist in the file they cite, and the CVSS 4.0 score is computed by Spackle from the vector.</li>
+    <li><strong>Reviewer</strong> sees only the claim, not the reasoning, and tries to refute it.</li>
+    <li><strong>Prover</strong> writes a small proof of concept and runs it in a container with no network, no capabilities, a read-only root and a read-only copy of your source.</li>
+    <li><strong>Fixer</strong> returns whole files; Spackle computes the patch, checks it in the sandbox, and commits accepted fixes to <code>spackle/&lt;run-id&gt;</code> in a separate worktree. Your working tree is never touched.</li>
+  </ul>
+  <p class="prose">Scope, budgets and tool permissions are enforced in code. Nothing in a target can change them, because no tool exists whose effect is to change them. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/ARCHITECTURE.md">docs/ARCHITECTURE.md</a> has the detail.</p>
+</section>
+
+<section id="findings" aria-labelledby="h-findings">
+  <h2 id="h-findings">Anatomy of a finding</h2>
+  <p class="prose">Every finding has the same parts:</p>
+  <ul class="plain">
+    <li>identity</li>
+    <li>severity, with its CVSS 4.0 vector</li>
+    <li>the flaw</li>
+    <li>the exploitation scenario</li>
+    <li>the proof</li>
+    <li>the blast radius</li>
+    <li>the remediation</li>
+    <li>a confidence label, with its reason</li>
+  </ul>
+
+  <article class="finding" aria-labelledby="h-example">
+    <p class="src">Real output, from a running-target scan of the bundled demo app on localhost with no model configured.</p>
+    <h3 id="h-example">SPK-9658B583: Path traversal in parameter name of /file</h3>
+    <dl>
+      <div><dt>Severity</dt><dd><span class="sev">HIGH 8.7</span></dd></div>
+      <div><dt>Confidence</dt><dd><span class="conf">demonstrated</span></dd></div>
+      <div><dt>Location</dt><dd><code>GET /file (parameter name)</code></dd></div>
+      <div><dt>The flaw</dt><dd>GET /file with name set to ..\..\..\..\..\..\windows\win.ini returned status 200 with the content of a system file. The parameter is used as a file path without being confined to the intended directory, so any file the server process can read can be downloaded.</dd></div>
+      <div><dt>Captured result</dt><dd><pre tabindex="0"><code>; for 16-bit app support [fonts] [extensions] [mci extensions] [files] [Mail] MAPI=1</code></pre></dd></div>
+      <div><dt>Remediation</dt><dd>Resolve the requested name against a fixed base directory and refuse any result outside it, or map the parameter to an allowlist of files instead of using it as a path.</dd></div>
+    </dl>
+  </article>
+
+  <p class="prose">With a model, the exploitation scenario and remediation are written for the specific application instead of the class.</p>
+  <p class="prose">Reports render as terminal text, Markdown, HTML, JSON and SARIF. <code>spackle report &lt;run-id&gt; --format html</code> rebuilds any of them from the ledger. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/findings.md">docs/findings.md</a> documents every field.</p>
+</section>
+
+<section id="running-targets" aria-labelledby="h-running">
+  <h2 id="h-running">Running targets</h2>
+  <p class="prose">Point Spackle at an application you run. It crawls within scope, probes without changing state, and ties each finding to the stored request and response that show it.</p>
+<pre tabindex="0"><code><span class="c"># scope.toml</span>
+hosts = ["localhost:8081"]
+statement = "My own dev server."</code></pre>
+<pre tabindex="0"><code>spackle scan http://localhost:8081 --authorize scope.toml</code></pre>
+  <ul class="plain">
+    <li>Without a scope file or a <code>[scope]</code> table, Spackle asks you to type the host to confirm, once per run. With <code class="nb">--yes</code> or in CI it refuses instead of asking.</li>
+    <li>Hosts match exactly. Redirects and links that leave scope are not followed. <code>localhost</code> and <code>127.0.0.1</code> are different hosts.</li>
+    <li>Only GET, HEAD and OPTIONS are sent unless the scope file sets <code>allow_unsafe_methods = true</code>.</li>
+    <li>With a model configured, an investigator assesses each observation and may send follow-up requests through the same scope and the same request cap.</li>
+  </ul>
+</section>
+
+<section id="debug" aria-labelledby="h-debug">
+  <h2 id="h-debug">Debug mode</h2>
+  <p class="prose">Start from a failing test or an issue. Spackle reproduces it in the sandbox, finds the root cause, writes a fix and verifies it.</p>
+<pre tabindex="0"><code>spackle debug . --test TestCheckoutTotal
+spackle debug . --issue bug-report.md --good v1.4.0   <span class="c"># bisect from a known good revision</span></code></pre>
+  <p class="prose">Debug mode needs a model and a container runtime. Without them it tells you what is missing and prints the reproduction command it would have run.</p>
+</section>
+
+<section id="ci" aria-labelledby="h-ci">
+  <h2 id="h-ci">CI</h2>
+<pre tabindex="0"><code>name: spackle
+on: [pull_request]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: TMHSDigital/Spackle@v0.1.0
+        with:
+          fail-on: high</code></pre>
+  <p class="prose">The action installs a release, verifies its checksum and build provenance, runs the scan, and uploads SARIF so findings appear in GitHub code scanning. By default it runs the deterministic stages, which need no key and cost nothing. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/ci.md">docs/ci.md</a> shows how to add a model and lists every input.</p>
+</section>
+
+<section id="mcp" aria-labelledby="h-mcp">
+  <h2 id="h-mcp">MCP</h2>
+  <p class="prose"><code>spackle mcp</code> serves Spackle's tools to an MCP client over stdin and stdout. You set the limits on the command line and the model chooses only within them: it can scan directories under <code class="nb">--root</code>, read reports and findings, and nothing else. It cannot pick a provider, raise a budget or reach a live target.</p>
+<pre tabindex="0"><code>claude mcp add spackle -- spackle mcp --root /absolute/path/to/project</code></pre>
+  <p class="prose"><a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/mcp.md">docs/mcp.md</a> has the tool list and client configuration.</p>
+</section>
+
+<section id="privacy" aria-labelledby="h-privacy">
+  <h2 id="h-privacy">Privacy</h2>
+  <div class="scroll">
+    <table class="privacy">
+      <thead>
+        <tr><th scope="col">Mode</th><th scope="col">What leaves the machine</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">No model configured</th><td>Nothing from Spackle. Installed scanners may fetch their own vulnerability databases.</td></tr>
+        <tr><th scope="row">Hosted provider</th><td>Prompts, plus redacted excerpts of the files the model asks to read, go to the provider you chose. Secret values are replaced before sending.</td></tr>
+        <tr><th scope="row">Local model</th><td>Requests go to localhost only.</td></tr>
+        <tr><th scope="row"><code class="nb">--offline</code></th><td>Any non-loopback connection by Spackle is refused, and a remote provider is rejected before the run starts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">There is no telemetry and no update check. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/PRIVACY.md">docs/PRIVACY.md</a> has the full account.</p>
+</section>
+
+<section id="benchmark" aria-labelledby="h-benchmark">
+  <h2 id="h-benchmark">Benchmark</h2>
+  <p class="prose"><code>bench/corpus</code> holds small fixture projects in Go, Python and TypeScript/JavaScript with planted, documented flaws, plus clean decoys that only look risky. <code>make bench</code> scores a run against the ground truth. This table is generated from the results files committed under <a href="https://github.com/TMHSDigital/Spackle/tree/main/bench/results">bench/results</a> and is never edited by hand.</p>
+  <div class="scroll" tabindex="0" role="region" aria-label="Benchmark results">
+    <table class="bench">
+      <thead>
+        <tr><th scope="col">Date</th><th scope="col">Version</th><th scope="col">Model</th><th scope="col">Mode</th><th scope="col">Precision</th><th scope="col">Recall</th><th scope="col">Verified-fix rate</th><th scope="col">Cost per finding</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2026-11-22</td><td>0.1.0</td><td>none</td><td>deterministic</td><td>83.9%</td><td>68.4%</td><td>n/a</td><td>n/a</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">Small synthetic fixtures are not your codebase, and these numbers will not transfer to it unchanged. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/benchmark.md">docs/benchmark.md</a> explains the scoring and how to run it with your own model.</p>
+</section>
+
+<section id="limits" aria-labelledby="h-limits">
+  <h2 id="h-limits">Limits</h2>
+  <ul class="plain">
+    <li>Proofs and fixes are run automatically for Go, Python and TypeScript/JavaScript. Other languages get findings and analysis only.</li>
+    <li>The sandbox has no network, so a proof can use the standard library and what is already in the repository, and nothing that would need installing.</li>
+    <li>Without Docker or Podman nothing is executed: findings are reasoned, not demonstrated, and no fix is verified.</li>
+    <li>This is agentic work. It needs a capable tool-calling model. Small local models produce malformed answers; Spackle rejects those and falls back to reporting leads, which is safe but not useful.</li>
+    <li>Running-target mode sends plain HTTP requests. It does not drive a browser or log in for you.</li>
+    <li>A model writes the proofs. <code>demonstrated</code> means the proof ran and printed an unguessable marker. Read the stored proof before you rely on it.</li>
+  </ul>
+  <p class="top-link"><a href="#top">&uarr; Back to top</a></p>
+</section>
+
+</main>
+
+<footer>
+  <nav aria-label="Project links">
+    <ul>
+      <li><a href="https://github.com/TMHSDigital/Spackle">Repository</a></li>
+      <li><a href="https://github.com/TMHSDigital/Spackle/tree/main/docs">Documentation</a></li>
+      <li><a href="https://github.com/TMHSDigital/Spackle/blob/main/SECURITY.md">Security policy</a></li>
+      <li><a href="https://github.com/TMHSDigital/Spackle/blob/main/LICENSE">License: Apache-2.0</a></li>
+    </ul>
+  </nav>
+  <p>This page loads no fonts, scripts or trackers from other sites.</p>
+</footer>
+
+</div>
+</body>
+</html>

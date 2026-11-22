@@ -4,7 +4,7 @@ Thanks for helping. Bug reports, detection accuracy reports, new rules, and docu
 
 By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Security problems go through a private report, described in [SECURITY.md](SECURITY.md), and not through a public issue.
 
-Spackle is pre-release. [ROADMAP.md](ROADMAP.md) lists the milestones and [CHANGELOG.md](CHANGELOG.md) records what has landed.
+[ROADMAP.md](ROADMAP.md) lists the milestones and what is planned after v0.1.0. [CHANGELOG.md](CHANGELOG.md) records what has landed.
 
 ## The one rule
 
@@ -39,9 +39,22 @@ cd Spackle
 make build
 ```
 
-Both entry points take the same targets: `build`, `test`, `lint`, `fmt`, `tidy`, `bench`, `clean`. Use `.\make.ps1 <target>` on Windows and `make <target>` elsewhere.
+Both entry points take the same targets. Use `.\make.ps1 <target>` on Windows and `make <target>` elsewhere.
 
-`lint` needs [golangci-lint](https://golangci-lint.run) v2 on your `PATH`. The dev container in `.devcontainer/` installs it for you.
+| Target | What it does |
+|---|---|
+| `build` | Builds the `spackle` binary (`spackle.exe` on Windows) with `CGO_ENABLED=0` |
+| `test` | Runs the unit tests in shuffled order |
+| `test-race` | Runs the unit tests with the race detector. Needs cgo and a C compiler |
+| `lint` | Runs `go vet` and `golangci-lint` |
+| `fmt` | Runs `gofmt -s` over `cmd` and `internal` |
+| `tidy` | Runs `go mod tidy` |
+| `bench` | Builds, then runs the benchmark corpus and writes a results file |
+| `clean` | Removes build output |
+| `all` | `lint`, `test`, then `build` |
+| `help` | Lists the targets |
+
+`lint` needs [golangci-lint](https://golangci-lint.run) v2 on your `PATH`. The linter must be built with a Go version at least as new as the one you are using: a binary built with an older Go refuses to load code that targets a newer one. If you see that error, rebuild it with your current toolchain (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@<version>`). CI pins the linter version in `.github/workflows/ci.yml`, and the dev container in `.devcontainer/` installs the same one for you.
 
 ## Check your change
 
@@ -61,7 +74,13 @@ On Windows:
 .\make.ps1 build
 ```
 
-CI runs on Linux, macOS, and Windows with no API key and no container runtime. Tests must pass in that environment. Use the fake provider in `internal/llm` for anything that would otherwise call a model.
+CI runs on Linux, macOS, and Windows with no API key and no container runtime. Tests must pass in that environment. A separate Linux job runs the sandbox integration tests with Docker. Use the fake provider in `internal/llm` for anything that would otherwise call a model.
+
+The report renderers are tested against golden files. When you change report output on purpose, update them and read the diff:
+
+```shell
+go test ./internal/report -update
+```
 
 ## How the code is laid out
 
@@ -69,28 +88,32 @@ CI runs on Linux, macOS, and Windows with no API key and no container runtime. T
 
 | Package | Responsibility |
 |---|---|
+| `agent` | The model-driven stages (planner, investigator, endpoint assessment, reviewer, chain analysis, prover, fixer, debugger), the shared tool loop, draft validation and the prompts. `agent/tools` is the allowlisted read-only tool registry |
+| `authz` | The authorized-scope gate for running targets: scope file parsing, host, port, path and method matching, the typed confirmation |
+| `bench` | The benchmark corpus loader, runner, scoring and results files |
+| `budget` | Hard caps on tokens, cost, wall time and sandbox runs, plus stagnation detection |
 | `cli` | Subcommand dispatch, flags, exit codes, help with the authorized-use notice |
-| `config` | `spackle.toml` loading, flag and env merge, per-stage provider selection |
-| `target` | Classifies a target as a local path, git URL, or live URL, and decides whether the scope gate applies |
-| `authz` | The authorized-scope gate: scope file parsing, host and CIDR matching, per-run confirmation |
-| `mapper` | The target map, built with no model: languages, frameworks, entry points, trust boundaries, test and build commands |
-| `seed` | Lead producers: external scanner adapters and built-in rules for code, secrets, Dockerfile, Kubernetes, Terraform, and CI workflows |
-| `redact` | Secret detection and redaction, used by seeders and by the provider wrapper |
+| `config` | `spackle.toml` loading over defaults, validation, per-stage model resolution |
+| `dast` | The scope-bound HTTP client, crawl, baseline probe, exchange capture, and the `http_request` tool |
+| `diffx` | Unified diffs computed from old and new file content |
+| `engine` | The pipeline for one run: scan, running-target scan, prove and fix, verify, debug. Writes the ledger, the evidence folders and the reports |
 | `envelope` | Wraps untrusted content in nonce-delimited data blocks and neutralizes delimiter forgery |
-| `llm` | The provider interface and its implementations (`anthropic`, `openai`, `ollama`, `fake`), usage and cost normalization, the offline guard |
-| `budget` | Hard caps on tokens, cost, wall time, sandbox runs, and findings, plus stagnation detection |
-| `ledger` | The append-only `ledger.jsonl` writer and reader |
-| `finding` | The finding schema, validation, CVSS 4.0 scoring, dedup, and ranking |
-| `agent` | Planner, investigator, reviewer, prover, and fixer loops, and the allowlisted tool registry |
-| `sandbox` | The container runtime abstraction (Docker, Podman): isolation profile, limits, copied-in source |
-| `dast` | The scope-bound HTTP client, baseline probe, crawl, and request and response capture |
-| `debug` | Debug mode: reproduce, bisect, root cause, fix, verify |
-| `gitx` | Git plumbing: commit SHA, worktree and branch creation, bisect, clone |
-| `report` | Renderers for terminal, Markdown, HTML, JSON, and SARIF 2.1.0. The only input is a ledger |
+| `finding` | The finding schema, validation, CVSS 4.0 scoring, class defaults, dedup, and ranking |
+| `gitx` | Git through its command line with hooks disabled: commit lookup, clone, worktree, commit, archive, draft pull request |
+| `ledger` | The append-only `ledger.jsonl` writer and reader, and the event payload types |
+| `llm` | The provider interface and its implementations (`anthropic`, `openai`, `ollama`, `fake`), pricing, the redacting wrapper, the offline guard |
+| `mapper` | The target map, built with no model: languages, frameworks, entry points, trust boundaries, test command |
 | `mcp` | The stdio MCP server |
-| `bench` | The corpus runner and scoring |
+| `policy` | Tests only: repository-wide invariants such as no listener anywhere in the module |
+| `redact` | Secret detection and redaction, used by seeders, tools, evidence writers and the provider wrapper |
+| `report` | Loads a run from its ledger and renders terminal, Markdown, HTML, JSON, and SARIF 2.1.0 |
+| `sandbox` | Runs untrusted code in a locked-down container through the `docker` or `podman` command line |
+| `seed` | Lead producers: built-in rules for code, secrets, Dockerfile, Kubernetes, Terraform, and CI workflows, and external scanner adapters |
+| `target` | Classifies a target as a local path, git URL, or running URL |
+| `version` | Build metadata set by the linker |
+| `walk` | The safe file listing and path resolution every stage uses to read the target |
 
-The table describes the design. Some packages may not exist yet. The design document is in `docs/superpowers/specs/`.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes how the packages fit together. The design document is in `docs/superpowers/specs/`.
 
 ## Benchmark
 

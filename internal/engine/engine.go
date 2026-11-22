@@ -46,6 +46,14 @@ type Options struct {
 	Confirm func(Estimate) bool
 	// ProviderFactory overrides how model providers are built, for tests.
 	ProviderFactory func(config.Model) (llm.Provider, error)
+	// ScopeFile is the --authorize scope file for a live target.
+	ScopeFile string
+	// Yes is true for --yes and CI: never prompt for authorization.
+	Yes bool
+	// Interactive is true when Stdin is a terminal a person can answer on.
+	Interactive bool
+	// Stdin is read for the interactive scope confirmation.
+	Stdin io.Reader
 	// OpenPR overrides how a pull request is opened for --pr, for tests.
 	OpenPR func(ctx context.Context, req gitx.PRRequest) (string, error)
 	// DetectRuntime overrides container runtime detection, for tests.
@@ -235,7 +243,11 @@ func FromLead(l seed.Lead, notRunReason string) finding.Finding {
 		Status: finding.StatusOpen,
 	}
 	if len(info.Steps) > 0 {
-		f.Exploitation.Steps = append([]string{"Typical for this class of flaw; not confirmed for this code:"}, info.Steps...)
+		// These steps are class knowledge, not an analysis of this code.
+		// Say so in the text itself, so no reader mistakes one for the other.
+		steps := append([]string(nil), info.Steps...)
+		steps[0] += " (these steps are typical for this class of flaw; they were not confirmed for this code)"
+		f.Exploitation.Steps = steps
 	}
 	if l.Snippet != "" {
 		f.Flaw.Flow = []finding.FlowStep{{Role: "sink", File: l.File, Line: l.Line, Quote: l.Snippet}}

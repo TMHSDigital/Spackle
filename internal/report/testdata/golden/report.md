@@ -103,7 +103,7 @@ def run(sql):
 
 #### Proof of concept
 
-- **Status:** demonstrated (a proof of concept ran in the sandbox and triggered the flaw)
+- **Status:** demonstrated (the flaw's effect was observed: a proof of concept ran in the sandbox, or a recorded exchange shows it)
 - **Kind:** script
 
 **Summary**
@@ -181,7 +181,7 @@ A bound parameter is sent as data, so the database never parses it as SQL.
 
 #### Confidence
 
-- **Level:** demonstrated (a proof of concept ran and succeeded)
+- **Level:** demonstrated (the flaw's effect was observed, by a sandboxed proof or a recorded exchange)
 - **Reason:** The proof of concept ran in the sandbox and returned a seeded credential row.
 
 #### Origin

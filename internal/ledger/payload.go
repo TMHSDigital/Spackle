@@ -118,3 +118,15 @@ type Intent struct {
 	Priority   int      `json:"priority"`
 	Source     string   `json:"source"` // planner|fallback
 }
+
+// HTTPExchange is the data of an http.exchange event: a pointer to one
+// recorded request and response. The full exchange, redacted, is in the
+// referenced evidence file.
+type HTTPExchange struct {
+	ID     string `json:"id"`
+	Method string `json:"method"`
+	URL    string `json:"url"`
+	Status int    `json:"status"`
+	Note   string `json:"note,omitempty"`
+	Ref    string `json:"ref"`
+}

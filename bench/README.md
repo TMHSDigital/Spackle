@@ -104,10 +104,15 @@ A reported finding matches a truth entry when all three hold:
 3. the reported line is within 3 lines of the truth line.
 
 Each truth entry can be matched by at most one finding, and each finding can
-match at most one truth entry. A matched finding is a true positive. A finding
-that matches no truth entry is a false positive; this includes every finding
-reported in a clean decoy. A truth entry that no finding matches is a false
-negative.
+match at most one truth entry. When several candidates exist, the smallest line
+distance wins, then the lower finding id. A matched finding is a true positive.
+A finding that matches no truth entry is a false positive; this includes every
+finding reported in a clean decoy. A truth entry that no finding matches is a
+false negative.
+
+Findings that Spackle dismissed are ignored entirely: they are neither true
+positives nor false positives. A fixture whose scan fails is recorded with its
+error, and its truth entries count as false negatives.
 
 ## Metrics
 
@@ -115,20 +120,39 @@ negative.
   (TP / (TP + FP)). It answers "how much of what Spackle reported is real".
 - Recall: true positives divided by all truth entries (TP / (TP + FN)). It
   answers "how much of what is planted did Spackle find".
-- Verified-fix rate: of the true positives for which Spackle proposed a fix,
-  the fraction whose fix is verified. A fix is verified when, after applying
-  it, the fixture still builds, its test suite (where it has one) still
-  passes, and a rescan no longer reports the matched finding.
+- Verified-fix rate: verified fixes divided by true positives. The
+  denominator is every true positive, not only the ones Spackle tried to fix.
+  A true positive counts as a verified fix when its finding has status `fixed`
+  and its verification record starts with `verified`: the proof of concept
+  that demonstrated the flaw no longer succeeds against the patched code, the
+  changed files still compile, and the fixture's test suite (where it has a
+  passing one) still passes. A patch that was written but not verified does
+  not count. A deterministic run attempts no fixes and shows `n/a`.
 - Cost per finding: total model spend for the run divided by the number of
   true positives. Spend on false positives and on decoys is included in the
-  numerator, so noise makes this number worse.
+  numerator, so noise makes this number worse. It shows `unknown` when the
+  model's price is not known, and `n/a` for a deterministic run or a run with
+  no true positives.
+- Decoys flagged: the number of clean fixtures with at least one false
+  positive.
+
+A ratio with a zero denominator is reported as 0. The results file also holds
+F1 and the same totals split by language and by difficulty.
 
 ## Results
 
-Results are only ever produced by `make bench`. Numbers are never typed in by
-hand, estimated, or copied from another run. Each run writes one file,
-`bench/results/<date>-<model>.json`, and that file is committed as produced.
-Any figure quoted in documentation must come from a committed results file.
+Results are only ever produced by `make bench` (`.\make.ps1 bench` on
+Windows), which runs `spackle bench`. Numbers are never typed in by hand,
+estimated, or copied from another run. Each complete run writes one file,
+`bench/results/<date>-<model>.json` (`<date>-none.json` for a deterministic
+run), and that file is committed as produced. A run that stops before every
+fixture is scanned writes no file. An existing file is replaced only with
+`--force`. Any figure quoted in documentation must come from a committed
+results file, and the README table is generated from those files with
+`spackle bench --table`.
+
+[docs/benchmark.md](../docs/benchmark.md) describes the flags, the results
+file format and the limits of what these numbers mean.
 
 ## Adding a fixture
 

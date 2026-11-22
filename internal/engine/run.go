@@ -20,6 +20,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
 	"github.com/TMHSDigital/spackle/internal/version"
+	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
 type runner struct {
@@ -58,7 +59,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 	if tgt.Live() {
-		return Result{}, fmt.Errorf("%w: %s is a live target. Running-target analysis is not in this build yet; scan the application's source directory instead", ErrRefused, tgt.Display)
+		return runLive(ctx, opts, tgt, clock)
 	}
 
 	// Everything that can refuse the run is checked before a run directory
@@ -84,12 +85,21 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	stateDir := opts.Config.StateDir
 
 	root := tgt.Raw
+	if tgt.Kind == target.KindGit && opts.Config.Offline {
+		return Result{}, fmt.Errorf("%w: %w: cloning %s would leave this machine. Clone it yourself and scan the directory, or drop --offline", ErrRefused, llm.ErrOffline, tgt.Display)
+	}
 	if tgt.Kind == target.KindGit {
 		root = filepath.Join(stateDir, "clones", runID)
 		say("Cloning %s", tgt.Display)
 		if err := gitx.Clone(ctx, tgt.Raw, root); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
+	}
+	// Every later stage needs an absolute root: the tool registry refuses a
+	// relative one, because a relative path would silently mean "wherever
+	// the process happens to be".
+	if abs, aerr := filepath.Abs(root); aerr == nil {
+		root = abs
 	}
 
 	// Map and seed before asking for confirmation, so the estimate reflects
@@ -102,6 +112,9 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	seeders := opts.Seeders
 	if seeders == nil {
 		seeders = seed.All()
+	}
+	if opts.Config.Offline {
+		seeders = offlineSeeders(seeders)
 	}
 	say("Running %d seeders", len(seeders))
 	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files)
@@ -235,6 +248,35 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	return finish(runDir, runID)
+}
+
+// networkSeeders are the external scanners that download rules or a
+// vulnerability database when they run. Offline mode promises that nothing
+// leaves the machine, so they are not run in it.
+var networkSeeders = map[string]bool{"semgrep": true, "osv-scanner": true, "trivy": true}
+
+// offlineSeeder stands in for a scanner that offline mode does not run, so
+// the report still shows it and says why it was skipped.
+type offlineSeeder struct{ name string }
+
+func (o offlineSeeder) Name() string { return o.name }
+func (o offlineSeeder) Available() (bool, string) {
+	return false, "not run in offline mode: it downloads rules or a vulnerability database when it runs"
+}
+func (o offlineSeeder) Run(context.Context, string, []walk.File) ([]seed.Lead, error) {
+	return nil, nil
+}
+
+func offlineSeeders(in []seed.Seeder) []seed.Seeder {
+	out := make([]seed.Seeder, 0, len(in))
+	for _, s := range in {
+		if networkSeeders[s.Name()] {
+			out = append(out, offlineSeeder{name: s.Name()})
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // firstSentence shortens an error to its first clause for a one-line note.

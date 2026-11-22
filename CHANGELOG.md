@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-22
+
+The first release.
+
 ### Added
 
 - Repository foundation: license, security policy, contribution guide, CI, release pipeline configuration, and project documentation.
@@ -26,3 +30,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `--pr`, which pushes the fix branch and opens a draft pull request.
 - `spackle mcp`, a stdio MCP server whose limits are set by the operator on the command line.
 - `doctor` now validates each configured model with a free round-trip and warns about small or tool-less local models.
+- Running-target analysis: `spackle scan <url>` behind the authorized-scope gate (`--authorize <scope-file>`, a `[scope]` table, or a typed confirmation of the host). A scope-bound client that never follows a redirect out of scope, a read-only baseline probe (security headers, cookie flags, CORS, error disclosure, directory listing, reflected input, SQL error signatures, open redirect, path traversal, exposed files), every request and response stored as evidence, and model assessment of each observation through a scope-bound `http_request` tool.
+- Debug mode: `spackle debug --test <name>` or `--issue <file|text>` reproduces a failure in the sandbox, finds the root cause, optionally bisects from `--good <ref>`, and writes a verified fix.
+- GitHub Action (`action.yml`) that installs a release, verifies its checksum and provenance, runs a scan and uploads SARIF.
+- Benchmark runner (`make bench`) that scores a run against the corpus ground truth and writes `bench/results/<date>-<model>.json`, and the first committed results file (deterministic, no model).
+- A single-page project site under `docs/`, and README sections generated from real output (`tools/demosvg`, `tools/readme`).
+
+### Fixed
+
+- A target directory that sits inside an unrelated git repository is no longer treated as part of it: fix branches are created only when the fixed files are tracked, and the recorded commit only when the target has tracked files.
+- `git show` is called with text conversion and external diff disabled, so a repository's own git configuration cannot run a program when history is read.
+
+[Unreleased]: https://github.com/TMHSDigital/Spackle/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/TMHSDigital/Spackle/releases/tag/v0.1.0
