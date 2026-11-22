@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an idea for Spackle
+title: "[FEATURE] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste secrets, real target hostnames, or unredacted reports. Security problems in Spackle itself go to a private report: https://github.com/TMHSDigital/Spackle/security/advisories/new
+
+        Features should fit Spackle's purpose: testing systems the operator owns or is authorized to test. Requests that would weaken the scope gate, add a listener, or send unredacted content to a provider will be declined. Check [ROADMAP.md](https://github.com/TMHSDigital/Spackle/blob/main/ROADMAP.md) first, and for open-ended ideas start a [discussion](https://github.com/TMHSDigital/Spackle/discussions).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What you would like Spackle to do.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: The authorized testing, defensive, or debugging scenario this helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation ideas (optional)

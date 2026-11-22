@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use Spackle in teaching or research, please cite it as below."
+title: Spackle
+type: software
+authors:
+  - name: "TM Hospitality Strategies"
+repository-code: "https://github.com/TMHSDigital/Spackle"
+abstract: >-
+  An agentic security and debugging command line tool, written in Go, for
+  systems the operator owns or is authorized to test.
+keywords:
+  - security
+  - static analysis
+  - dynamic analysis
+  - debugging
+  - go
+license: Apache-2.0

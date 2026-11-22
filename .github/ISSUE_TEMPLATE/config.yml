@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/TMHSDigital/Spackle/security/advisories/new
+    about: Please report vulnerabilities in Spackle privately, not in a public issue.
+  - name: Ask a question or share an idea
+    url: https://github.com/TMHSDigital/Spackle/discussions
+    about: Usage questions and open-ended ideas go to Discussions.

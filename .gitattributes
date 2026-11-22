@@ -1,0 +1,25 @@
+# Normalize all text files to LF on commit.
+* text=auto eol=lf
+
+# Go source is always LF (gofmt requirement).
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+
+# Shell scripts stay LF. PowerShell scripts stay CRLF.
+*.sh text eol=lf
+*.ps1 text eol=crlf
+
+# Binaries.
+*.exe binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.woff2 binary
+
+# Report golden files are compared byte for byte, so they are LF everywhere.
+internal/report/testdata/golden/** text eol=lf
+
+# Intentionally vulnerable fixtures do not count toward language statistics.
+bench/corpus/** linguist-vendored
+examples/demo-app/** linguist-vendored

@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a crash, a wrong exit code, or broken output
+title: "[BUG] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste secrets, real target hostnames, or unredacted reports. Replace hostnames with `example.com` and trim output to the lines that matter.
+
+        Found a security vulnerability in Spackle itself? Report it privately instead: https://github.com/TMHSDigital/Spackle/security/advisories/new
+
+        For a false positive, a false negative, a wrong severity, or a wrong fix, use the detection accuracy form.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The exact command, and the smallest target that shows the problem.
+      placeholder: |
+        spackle scan ./path/to/project
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Terminal output with secrets and hostnames removed.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Spackle version
+      description: The release tag, or the commit SHA if you built from source.
+      placeholder: commit 4120686
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11, Ubuntu 24.04, macOS 15
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Container runtime
+      description: Docker or Podman and its version, or "none".
+      placeholder: Docker 28.0, Podman 5.4, none
+  - type: input
+    id: model
+    attributes:
+      label: Model and provider
+      description: The model and provider in use, or "none" for a run with no model.
+      placeholder: none
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

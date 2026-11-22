@@ -1,0 +1,30 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.go]
+indent_style = tab
+
+[Makefile]
+indent_style = tab
+
+[*.{yml,yaml,json,md,toml,html,svg}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.ps1]
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+
+# Golden test data must stay byte-identical to what the renderers produce.
+[internal/report/testdata/**]
+trim_trailing_whitespace = false
+insert_final_newline = false

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="44" height="44" role="img" aria-label="Spackle">
+<rect x="1.5" y="1.5" width="41" height="41" rx="7" fill="#26201B" stroke="#3A3029" stroke-width="3"/>
+<path d="M10 6 L17 16 L13 23 L22 31 L19 38" fill="none" stroke="#7F7466" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="9" y="17" width="30" height="13" rx="3" fill="#FF8A4C" transform="rotate(-18 24 23.5)"/>
+</svg>

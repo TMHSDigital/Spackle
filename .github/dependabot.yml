@@ -1,0 +1,27 @@
+version: 2
+# Each ecosystem's updates are grouped into a single weekly PR rather than one
+# PR per package.
+#
+# The fixtures under bench/corpus and examples/demo-app are intentionally
+# excluded: there are no entries for those directories. Their dependencies are
+# vulnerable on purpose and must stay pinned where they are.
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-modules:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels:
+      - "dependencies"

@@ -1,0 +1,64 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+# Labels follow the conventional-commit type of the pull request title.
+categories:
+  - title: "Features"
+    labels:
+      - "feature"
+  - title: "Fixes"
+    labels:
+      - "fix"
+  - title: "Security"
+    labels:
+      - "security"
+  - title: "Documentation"
+    labels:
+      - "docs"
+  - title: "Maintenance"
+    labels:
+      - "chore"
+      - "dependencies"
+
+autolabeler:
+  - label: "feature"
+    title:
+      - '/^feat(\(.+\))?!?:/i'
+  - label: "fix"
+    title:
+      - '/^fix(\(.+\))?!?:/i'
+  - label: "security"
+    title:
+      - '/^security(\(.+\))?!?:/i'
+  - label: "docs"
+    title:
+      - '/^docs(\(.+\))?!?:/i'
+  - label: "chore"
+    title:
+      - '/^(chore|ci|build|refactor|test|perf)(\(.+\))?!?:/i'
+
+change-template: "- $TITLE (#$NUMBER)"
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - "breaking"
+  minor:
+    labels:
+      - "feature"
+  patch:
+    labels:
+      - "fix"
+      - "security"
+      - "docs"
+      - "chore"
+      - "dependencies"
+  default: patch
+
+template: |
+  ## Changes
+
+  $CHANGES
+
+  Full changelog: https://github.com/TMHSDigital/Spackle/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

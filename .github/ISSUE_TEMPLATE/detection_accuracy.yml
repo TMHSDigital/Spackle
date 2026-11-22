@@ -1,0 +1,87 @@
+name: Detection accuracy
+description: Report a false positive, a false negative, a wrong severity, or a wrong fix
+title: "[ACCURACY] "
+labels: [accuracy]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste secrets, real target hostnames, or unredacted reports. Reduce the code to a minimal snippet that you are free to share, and replace hostnames with `example.com`.
+
+        Found a security vulnerability in Spackle itself? Report it privately instead: https://github.com/TMHSDigital/Spackle/security/advisories/new
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - False positive
+        - False negative
+        - Wrong severity
+        - Wrong fix
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Code
+        - Running target
+        - Infrastructure and config
+        - Debug mode
+    validations:
+      required: true
+  - type: input
+    id: language
+    attributes:
+      label: Language or file type
+      placeholder: Go, Python, TypeScript, Dockerfile, Terraform
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Spackle version
+      description: The release tag, or the commit SHA if you built from source.
+      placeholder: commit 4120686
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and provider
+      description: The model and provider in use, or "none" for a run with no model.
+      placeholder: none
+    validations:
+      required: true
+  - type: input
+    id: finding
+    attributes:
+      label: Finding id or rule id
+      description: The id shown in the report. Leave blank for a false negative with no related finding.
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal reproducing snippet
+      description: The smallest code, config, or request that reproduces the result. No secrets and no real hostnames.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What Spackle should have reported, and why.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What Spackle reported. Paste the relevant part of the finding with secrets and hostnames removed.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

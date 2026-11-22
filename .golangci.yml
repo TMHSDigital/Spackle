@@ -1,0 +1,49 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - gosec
+    - gocritic
+    - misspell
+    - unconvert
+    - errorlint
+    - nilerr
+    - noctx
+    - copyloopvar
+    - usestdlibvars
+    - revive
+  settings:
+    errcheck:
+      # Writes to the terminal and to in-memory builders have no useful
+      # recovery path; a failed write to stdout cannot be reported anywhere.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*strings.Builder).WriteString
+        - (*bytes.Buffer).WriteString
+        - (*text/tabwriter.Writer).Flush
+  exclusions:
+    paths:
+      # Intentionally vulnerable fixtures. They are scan targets, not project code.
+      - bench/corpus
+      - examples/demo-app
+    rules:
+      # Test files are allowed to use gosec-flagged patterns.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - bench/corpus
+      - examples/demo-app

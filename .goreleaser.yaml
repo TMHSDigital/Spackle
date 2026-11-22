@@ -1,0 +1,85 @@
+# GoReleaser configuration. Builds are reproducible: no cgo, trimmed paths,
+# and file timestamps taken from the commit.
+version: 2
+
+project_name: spackle
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: spackle
+    main: ./cmd/spackle
+    binary: spackle
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/TMHSDigital/spackle/internal/version.Version={{ .Version }}
+      - -X github.com/TMHSDigital/spackle/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/TMHSDigital/spackle/internal/version.Date={{ .CommitDate }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - id: archives
+    artifacts: archive
+
+signs:
+  - id: cosign-keyless
+    cmd: cosign
+    artifacts: checksum
+    signature: '${artifact}.sigstore.json'
+    args:
+      - sign-blob
+      - --bundle=${signature}
+      - ${artifact}
+      - --yes
+    output: true
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  github:
+    owner: TMHSDigital
+    name: Spackle
+  prerelease: auto
+  footer: |
+    ## Verify this release
+
+    ```sh
+    cosign verify-blob checksums.txt \
+      --bundle checksums.txt.sigstore.json \
+      --certificate-identity-regexp 'https://github.com/TMHSDigital/Spackle/.github/workflows/release.yml@refs/tags/v.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    sha256sum --ignore-missing -c checksums.txt
+    gh attestation verify <archive> --repo TMHSDigital/Spackle
+    ```

@@ -1,0 +1,30 @@
+# Go binaries and build output
+/spackle
+/spackle.exe
+/dist/
+*.test
+*.out
+coverage.*
+
+# Spackle run folders, ledgers, and caches
+.spackle/
+
+# Local environment and secrets
+.env*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating systems
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local build prompt
+claude_code_prompt.md
+
+# bench/results/ is committed on purpose. Do not ignore it.
