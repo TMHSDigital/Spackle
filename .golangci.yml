@@ -45,6 +45,12 @@ linters:
       - path: internal/walk/walk\.go
         linters:
           - nilerr
+      # The agent stages turn a bad model answer or a failed proof into a
+      # recorded outcome ("rejected", "not demonstrated") and carry on. That
+      # is the design: one failed step must not end the run.
+      - path: internal/(agent|engine)/
+        linters:
+          - nilerr
 
 formatters:
   enable:

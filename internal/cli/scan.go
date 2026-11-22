@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/engine"
@@ -39,7 +42,7 @@ func runScan(env Env, args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr})
+	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes)})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
 		if errors.Is(err, engine.ErrRefused) {
@@ -53,6 +56,38 @@ func runScan(env Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stderr, "Run %s stored in %s\n", res.RunID, res.RunDir)
 	return exitFor(cfg, res.Run)
+}
+
+// confirmer returns the function that asks the operator to accept the cost
+// estimate before a model is called. With --yes, or for a local model that
+// costs nothing, it does not ask. Without a terminal it refuses: a pipe is
+// not consent to spend money.
+func confirmer(env Env, yes bool) func(engine.Estimate) bool {
+	if yes {
+		return nil
+	}
+	return func(est engine.Estimate) bool {
+		if est.Local {
+			return true
+		}
+		if !isTerminal(env.Stdin) {
+			fmt.Fprintln(env.Stderr, "This run would call a paid model and there is no terminal to confirm on.")
+			return false
+		}
+		fmt.Fprint(env.Stderr, "Proceed? [y/N] ")
+		line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
+		answer := strings.ToLower(strings.TrimSpace(line))
+		return answer == "y" || answer == "yes"
+	}
+}
+
+func isTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	st, err := f.Stat()
+	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
 // emit writes the requested report formats. The terminal format goes to

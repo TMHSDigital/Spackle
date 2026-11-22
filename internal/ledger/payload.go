@@ -96,3 +96,25 @@ type RunEnd struct {
 	Outcome string `json:"outcome"` // completed|budget-exhausted|failed
 	Note    string `json:"note,omitempty"`
 }
+
+// ToolCall is the data of a tool.call event. Arguments are redacted and
+// clipped; results are not stored, only their size.
+type ToolCall struct {
+	Stage   string `json:"stage"`
+	Tool    string `json:"tool"`
+	Args    string `json:"args"`
+	IsError bool   `json:"is_error,omitempty"`
+	Bytes   int    `json:"bytes"`
+}
+
+// Intent is the data of an intent event: one planned investigation.
+type Intent struct {
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Class      string   `json:"class,omitempty"`
+	Hypothesis string   `json:"hypothesis"`
+	Files      []string `json:"files,omitempty"`
+	LeadIDs    []string `json:"lead_ids,omitempty"`
+	Priority   int      `json:"priority"`
+	Source     string   `json:"source"` // planner|fallback
+}

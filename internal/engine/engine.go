@@ -19,11 +19,10 @@ import (
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/ledger"
-	"github.com/TMHSDigital/spackle/internal/mapper"
+	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/report"
+	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/seed"
-	"github.com/TMHSDigital/spackle/internal/target"
-	"github.com/TMHSDigital/spackle/internal/version"
 )
 
 // ErrRefused marks a run that was refused before it started (bad target,
@@ -41,6 +40,16 @@ type Options struct {
 	// Clock and RunID make runs reproducible in tests.
 	Clock func() time.Time
 	RunID string
+	// Confirm is asked before a run that will call a model. It receives the
+	// estimate and returns whether to proceed. Nil means proceed without
+	// asking (the caller has already handled --yes).
+	Confirm func(Estimate) bool
+	// ProviderFactory overrides how model providers are built, for tests.
+	ProviderFactory func(config.Model) (llm.Provider, error)
+	// OpenPR overrides how a pull request is opened for --pr, for tests.
+	OpenPR func(ctx context.Context, req gitx.PRRequest) (string, error)
+	// DetectRuntime overrides container runtime detection, for tests.
+	DetectRuntime func(ctx context.Context, preferred string) (sandbox.Runtime, error)
 }
 
 // Result identifies a finished run.
@@ -100,160 +109,6 @@ func ResolveRun(stateDir, id string) (string, error) {
 	default:
 		return "", fmt.Errorf("run id %q is ambiguous: it matches %s", id, strings.Join(matches, ", "))
 	}
-}
-
-type runner struct {
-	opts     Options
-	cfg      config.Config
-	led      *ledger.Writer
-	runDir   string
-	runID    string
-	progress io.Writer
-}
-
-func (r *runner) say(format string, a ...any) {
-	if r.progress != nil {
-		fmt.Fprintf(r.progress, format+"\n", a...)
-	}
-}
-
-// Run executes the pipeline.
-func Run(ctx context.Context, opts Options) (Result, error) {
-	clock := opts.Clock
-	if clock == nil {
-		clock = time.Now
-	}
-	tgt, err := target.Classify(opts.Target)
-	if err != nil {
-		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
-	}
-	if tgt.Live() {
-		return Result{}, fmt.Errorf("%w: %s is a live target. Running-target analysis is not in this build yet; scan the application's source directory instead", ErrRefused, tgt.Display)
-	}
-
-	runID := opts.RunID
-	if runID == "" {
-		if runID, err = NewRunID(clock()); err != nil {
-			return Result{}, err
-		}
-	}
-	stateDir := opts.Config.StateDir
-	runDir := filepath.Join(RunsDir(stateDir), runID)
-	led, err := ledger.Create(runDir, clock)
-	if err != nil {
-		return Result{}, err
-	}
-	r := &runner{opts: opts, cfg: opts.Config, led: led, runDir: runDir, runID: runID, progress: opts.Progress}
-	defer func() { _ = led.Close() }()
-
-	root := tgt.Raw
-	if tgt.Kind == target.KindGit {
-		root = filepath.Join(stateDir, "clones", runID)
-		r.say("Cloning %s", tgt.Display)
-		if err := gitx.Clone(ctx, tgt.Raw, root); err != nil {
-			return Result{}, r.fail(err)
-		}
-	}
-	commit, _ := gitx.HeadSHA(ctx, root)
-
-	start := ledger.RunStart{
-		RunID: runID, Version: version.Version, Command: "scan",
-		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit,
-		Mode: "deterministic", Offline: r.cfg.Offline,
-		Isolation: "not used: no proof of concept was run",
-	}
-	startSeq, err := led.Append(0, ledger.TypeRunStart, start)
-	if err != nil {
-		return Result{}, err
-	}
-
-	r.say("Mapping %s", tgt.Display)
-	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(stateDir, "cache")})
-	if err != nil {
-		return Result{}, r.fail(err)
-	}
-	mapSeq, err := led.Append(startSeq, ledger.TypeMap, ledger.MapSummary{
-		Files: m.FileCount, Skipped: len(m.Skipped), Languages: m.LanguageNames(),
-		Frameworks: m.Frameworks, EntryPoints: len(m.Entry), InfraFiles: len(m.InfraFiles),
-		TestCommand: m.Tests.TestCommand,
-	})
-	if err != nil {
-		return Result{}, err
-	}
-	for _, s := range m.Skipped {
-		if _, err := led.Append(mapSeq, ledger.TypeNote, fmt.Sprintf("Not read: %s (%s)", s.Rel, s.Reason)); err != nil {
-			return Result{}, err
-		}
-	}
-	for _, l := range m.Languages {
-		if !mapper.ProofLanguages[l.Lang] && l.Files > 0 && isAppLanguage(l.Lang) {
-			note := fmt.Sprintf("%s (%d files): findings and analysis only. Proofs are auto-run for Go, Python and TypeScript/JavaScript in this version.", l.Lang, l.Files)
-			if _, err := led.Append(mapSeq, ledger.TypeNote, note); err != nil {
-				return Result{}, err
-			}
-		}
-	}
-
-	seeders := opts.Seeders
-	if seeders == nil {
-		seeders = seed.All()
-	}
-	r.say("Running %d seeders", len(seeders))
-	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files)
-	for _, st := range statuses {
-		if _, err := led.Append(mapSeq, ledger.TypeSeeder, ledger.SeederStatus(st)); err != nil {
-			return Result{}, err
-		}
-	}
-	leadSeq := map[string]int64{}
-	for _, l := range leads {
-		seq, err := led.Append(mapSeq, ledger.TypeLead, l)
-		if err != nil {
-			return Result{}, err
-		}
-		leadSeq[l.ID] = seq
-	}
-
-	// With no model, each lead is reported as a plausible finding.
-	var findings []finding.Finding
-	parent := map[string]int64{}
-	for _, l := range leads {
-		f := FromLead(l, "No model is configured, so this lead was not investigated or demonstrated.")
-		if err := f.Validate(); err != nil {
-			if _, aerr := led.Append(leadSeq[l.ID], ledger.TypeReject, ledger.Reject{Stage: "seed", Intent: l.ID, Reason: err.Error()}); aerr != nil {
-				return Result{}, aerr
-			}
-			continue
-		}
-		if _, seen := parent[f.ID]; !seen {
-			parent[f.ID] = leadSeq[l.ID]
-		}
-		findings = append(findings, f)
-	}
-	findings = finding.Rank(finding.Dedup(findings))
-	if limit := r.cfg.Budget.MaxFindings; limit > 0 && len(findings) > limit {
-		var dropped []string
-		for _, f := range findings[limit:] {
-			dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
-		}
-		findings = findings[:limit]
-		if _, err := led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: fmt.Sprintf("max findings (%d)", limit), Skipped: dropped}); err != nil {
-			return Result{}, err
-		}
-	}
-	for _, f := range findings {
-		if _, err := led.Append(parent[f.ID], ledger.TypeFinding, f); err != nil {
-			return Result{}, err
-		}
-	}
-
-	if _, err := led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: "completed"}); err != nil {
-		return Result{}, err
-	}
-	if err := led.Close(); err != nil {
-		return Result{}, err
-	}
-	return finish(runDir, runID)
 }
 
 // fail records a failed run in the ledger and returns the error.

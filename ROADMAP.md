@@ -8,8 +8,8 @@ Spackle is pre-release. Version 0.1.0 is in progress and no release has been pub
 
 - [x] M0: public foundation
 - [x] M1: mapper, seeders, reporting
-- [ ] M2: agents and rich findings
-- [ ] M3: sandbox, prover, fixer
+- [x] M2: agents and rich findings
+- [x] M3: sandbox, prover, fixer
 - [ ] M4: running-target analysis and debug mode
 - [ ] M5: GitHub Action, pull request output, MCP server
 - [ ] M6: benchmark, docs site, release

@@ -86,6 +86,40 @@ func TopLevel(ctx context.Context, dir string) (string, error) {
 	return run(ctx, dir, "rev-parse", "--show-toplevel")
 }
 
+// Prefix returns the path of dir relative to the top of its work tree, with
+// forward slashes and no trailing slash ("" at the top). Asking git avoids
+// comparing path spellings, which differ on Windows (short names, case).
+func Prefix(ctx context.Context, dir string) (string, error) {
+	if !Available() {
+		return "", ErrNotRepo
+	}
+	out, err := run(ctx, dir, "rev-parse", "--show-prefix")
+	return strings.TrimSuffix(out, "/"), err
+}
+
+// Tracked reports whether every given path (relative to dir) is tracked by
+// git. A directory can sit inside some unrelated repository without being
+// part of it (a temp folder under a home directory that is itself a
+// repository, for example). Spackle only treats a target as "in git" when
+// its files are tracked.
+func Tracked(ctx context.Context, dir string, paths ...string) bool {
+	if !Available() || len(paths) == 0 {
+		return false
+	}
+	args := append([]string{"ls-files", "--error-unmatch", "--"}, paths...)
+	_, err := run(ctx, dir, args...)
+	return err == nil
+}
+
+// HasTracked reports whether dir contains at least one tracked file.
+func HasTracked(ctx context.Context, dir string) bool {
+	if !Available() {
+		return false
+	}
+	out, err := run(ctx, dir, "ls-files", "--", ".")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
 // Status returns `git status --porcelain` output. An empty string means the
 // work tree is clean.
 func Status(ctx context.Context, dir string) (string, error) {
@@ -131,7 +165,10 @@ func Show(ctx context.Context, dir, rev, path string) (string, error) {
 	if strings.HasPrefix(rev, "-") {
 		return "", fmt.Errorf("revision %q is not valid", rev)
 	}
-	args := []string{"show", "--no-color", "--stat", "--patch", rev}
+	// --no-textconv and --no-ext-diff matter: a repository can configure a
+	// text conversion or external diff program in .git/config, and showing a
+	// patch would run it.
+	args := []string{"show", "--no-color", "--no-textconv", "--no-ext-diff", "--stat", "--patch", rev}
 	if path != "" {
 		args = append(args, "--", path)
 	}

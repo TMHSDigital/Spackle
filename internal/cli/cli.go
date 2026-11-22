@@ -65,6 +65,11 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "-v", "--version":
 		return runVersion(env, nil)
 	}
+	// bench is a maintainer tool reached through "make bench". It is kept
+	// out of commands() so it does not appear in the user-facing help.
+	if args[0] == "bench" {
+		return runBench(env, args[1:])
+	}
 	for _, c := range commands() {
 		if c.name == args[0] {
 			return c.run(env, args[1:])

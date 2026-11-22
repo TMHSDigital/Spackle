@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -151,22 +150,4 @@ func modelChecks(ctx context.Context, cfg config.Config) []check {
 		out = append(out, doctorProbe(ctx, cfg, stage, m)...)
 	}
 	return out
-}
-
-// keyEnv returns the environment variable that holds the key for a model.
-func keyEnv(m config.Model) string {
-	if m.APIKeyEnv != "" {
-		return m.APIKeyEnv
-	}
-	return config.DefaultKeyEnv(m.Provider)
-}
-
-// keyPresent reports whether the model's API key variable is set, without
-// ever reading the value into output.
-func keyPresent(m config.Model) (name string, ok bool) {
-	name = keyEnv(m)
-	if name == "" {
-		return "", true
-	}
-	return name, os.Getenv(name) != ""
 }

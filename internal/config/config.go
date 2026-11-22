@@ -86,7 +86,7 @@ type Scope struct {
 // Sandbox configures the container runtime.
 type Sandbox struct {
 	Runtime  string            `toml:"runtime"` // auto|docker|podman|none
-	Network  string            `toml:"network"` // none|host-gateway (only to reach an authorized scope)
+	Network  string            `toml:"network"` // none, or scope to let a proof reach an authorized running target
 	MemoryMB int               `toml:"memory_mb"`
 	CPUs     float64           `toml:"cpus"`
 	PIDs     int               `toml:"pids"`

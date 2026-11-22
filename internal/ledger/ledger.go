@@ -28,6 +28,7 @@ const (
 	TypeSeeder       = "seeder"
 	TypeModelCall    = "model.call"
 	TypeToolCall     = "tool.call"
+	TypeIntent       = "intent"
 	TypeSandboxRun   = "sandbox.run"
 	TypeHTTPExchange = "http.exchange"
 	TypeFinding      = "finding.upsert"
