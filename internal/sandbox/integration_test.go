@@ -200,13 +200,18 @@ func TestIntegrationTimeoutDuringStartupLeavesNoContainer(t *testing.T) {
 	// The timeout fires while the engine is still creating the container. Killing the CLI at
 	// that moment would leave a created, never removed container behind.
 	rt, ctx := integrationRuntime(t)
-	res := mustRun(t, rt, ctx, Spec{
+	res, err := rt.Run(ctx, Spec{
 		Image:   testImage,
 		Cmd:     []string{"sleep", "60"},
 		Profile: Profile{Timeout: 50 * time.Millisecond},
 	})
-	if !res.TimedOut || res.ExitCode != -1 {
-		t.Errorf("TimedOut = %v, ExitCode = %d; want true, -1", res.TimedOut, res.ExitCode)
+	// Which of the two happens depends on how far the engine got before the container was
+	// killed: the command never started (a setup failure), or it had just started (a
+	// timed-out result). Both are correct; what matters here is that nothing is left behind.
+	setupFailure := err != nil && strings.Contains(err.Error(), "never started") && !res.TimedOut
+	timedOut := err == nil && res.TimedOut && res.ExitCode == -1
+	if !setupFailure && !timedOut {
+		t.Errorf("err = %v, TimedOut = %v, ExitCode = %d; want a setup failure or a timed-out result", err, res.TimedOut, res.ExitCode)
 	}
 	assertContainerGone(t, ctx, rt, res)
 }
@@ -320,5 +325,37 @@ func TestIntegrationRunsAgainstAnArchiveExport(t *testing.T) {
 	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"cat", "pkg/data.txt"}, SourceDir: src})
 	if res.ExitCode != 0 || !strings.Contains(res.Stdout, "exported-content") {
 		t.Fatalf("the export was not readable in the sandbox: exit=%d stdout=%q stderr=%q", res.ExitCode, res.Stdout, res.Stderr)
+	}
+}
+
+// Directories a run cannot need are left out of the work directory, and the
+// bootstrap's own ready line never shows up in the program output.
+func TestIntegrationCopyLeavesOutVersionControlAndState(t *testing.T) {
+	rt, ctx := integrationRuntime(t)
+	src := t.TempDir()
+	for _, rel := range []string{
+		"main.py", ".env.example", "pkg/mod.py", "node_modules/dep/index.js", "vendor/lib/lib.go",
+		".git/objects/pack/big.pack", ".spackle/runs/old/ledger.jsonl", ".venv/bin/python", ".mypy_cache/x.json",
+	} {
+		p := filepath.Join(src, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"find", ".", "-type", "f"}, SourceDir: src})
+	if res.ExitCode != 0 {
+		t.Fatalf("exit=%d stderr=%q", res.ExitCode, res.Stderr)
+	}
+	got := strings.Fields(res.Stdout)
+	sort.Strings(got)
+	want := "./.env.example ./main.py ./node_modules/dep/index.js ./pkg/mod.py ./vendor/lib/lib.go"
+	if strings.Join(got, " ") != want {
+		t.Errorf("work directory holds\n%s\nwant\n%s", strings.Join(got, " "), want)
+	}
+	if strings.Contains(res.Stderr, "spackle-bootstrap") {
+		t.Errorf("bootstrap text leaked into the program output: %q", res.Stderr)
 	}
 }

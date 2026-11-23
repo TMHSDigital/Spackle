@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `spackle verify` re-runs proofs against the directory that was scanned, which is now recorded as an absolute path, instead of resolving the target as typed against the current directory.
 - Directories that are pruned by default are now listed in the report as "Not read". `vendor`, `dist`, `build`, `target` and `coverage` are pruned only at the target root or where a marker file shows they are dependencies or build output, so a first-party package with one of those names is scanned.
+- The sandbox no longer copies `.git`, `.spackle`, virtual environments and tool caches from the top of the target into the in-memory work directory, which makes each run faster and leaves more of the memory limit for the program. `node_modules` and `vendor` are still copied.
 
 ### Fixed
 
@@ -29,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Built-in code rules now read comments in the syntax of the file language. A Go or Python statement that starts with `*` and a JavaScript private member that starts with `#` are no longer skipped as comments, a word in a trailing comment can no longer hide a lead, and commented-out code no longer produces one.
 - The Go rule for file paths built from request data no longer treats `filepath.Clean` as a sanitizer: `filepath.Join(base, filepath.Clean(input))` keeps a leading `../` and is now reported. `filepath.Base` and the rooted `Clean("/" + input)` idiom still suppress the lead.
 - Interrupting an agentic scan (Ctrl-C) no longer discards the findings already investigated. Each finding is written to the ledger as soon as it is complete, the run ends with outcome `interrupted`, the reports are written, and the command exits 3. An interrupt during planning is no longer reported as `completed`, and one failed proof or fix step no longer ends the whole run.
+- A sandbox run that times out while the source is still being copied is now reported as a setup failure instead of a timed-out proof.
 
 ## [0.1.0] - 2026-11-22
 

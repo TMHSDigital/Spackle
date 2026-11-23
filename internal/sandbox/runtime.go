@@ -228,10 +228,19 @@ func (r *cliRuntime) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	res.Duration = time.Since(start)
 	res.Stdout, res.Stderr = stdout.String(), stderr.String()
+	// The bootstrap says when the work directory is ready. Take that line out of the
+	// output: it is not something the program wrote.
+	ready := false
+	if before, after, ok := strings.Cut(res.Stderr, bootstrapReady+"\n"); ok {
+		ready, res.Stderr = true, before+after
+	}
 	if interrupted {
 		res.ExitCode = -1
 		if ctx.Err() != nil {
 			return res, fmt.Errorf("sandbox: run cancelled by the caller; container %s was killed: %w", name, ctx.Err())
+		}
+		if !ready {
+			return res, fmt.Errorf("sandbox: preparing the work directory took longer than the %s timeout, so the command never started. Copying the source into the container is part of the run: exclude large directories that the code does not need, or raise the [sandbox] timeout", v.profile.Timeout)
 		}
 		res.TimedOut = true
 		return res, nil

@@ -291,6 +291,8 @@ func TestRunFakeDistinctNames(t *testing.T) {
 func TestRunFakeTimeout(t *testing.T) {
 	rt, log := fakeRuntime(t)
 	t.Setenv("FAKE_SLEEP", "60s")
+	// The work directory was prepared and the command started, then hung.
+	t.Setenv("FAKE_STDERR", bootstrapReady+"\n")
 	spec := baseSpec()
 	spec.Files = map[string]string{"a.txt": "a"}
 	spec.Profile.Timeout = time.Second
@@ -305,6 +307,9 @@ func TestRunFakeTimeout(t *testing.T) {
 	if !res.TimedOut || res.ExitCode != -1 {
 		t.Errorf("TimedOut = %v, ExitCode = %d; want true, -1", res.TimedOut, res.ExitCode)
 	}
+	if strings.Contains(res.Stderr, bootstrapReady) {
+		t.Errorf("the bootstrap's ready line was left in the program output: %q", res.Stderr)
+	}
 	name := containerNameFrom(t, res.Argv)
 	calls := readLog(t, log)
 	if !slices.Contains(calls, "kill "+name) || !slices.Contains(calls, "rm -f "+name) {
@@ -315,11 +320,28 @@ func TestRunFakeTimeout(t *testing.T) {
 	}
 }
 
+// A run that times out before the work directory is ready never started the
+// command. That is a setup failure, and must not read as a result.
+func TestRunFakeTimeoutDuringSetupIsAnError(t *testing.T) {
+	rt, _ := fakeRuntime(t)
+	t.Setenv("FAKE_SLEEP", "60s")
+	spec := baseSpec()
+	spec.Profile.Timeout = time.Second
+	res, err := rt.Run(context.Background(), spec)
+	if err == nil || !strings.Contains(err.Error(), "never started") {
+		t.Fatalf("err = %v, want a setup failure", err)
+	}
+	if res.TimedOut {
+		t.Error("a setup timeout must not be flagged as a timed-out command")
+	}
+}
+
 func TestRunFakeTimeoutKillsStuckCLI(t *testing.T) {
 	// The engine ignores the kill: the CLI itself must still be stopped by the backstop.
 	rt, _ := fakeRuntime(t)
 	t.Setenv("FAKE_SLEEP", "90s")
 	t.Setenv("FAKE_IGNORE_KILL", "1")
+	t.Setenv("FAKE_STDERR", bootstrapReady+"\n")
 	spec := baseSpec()
 	spec.Profile.Timeout = 500 * time.Millisecond
 	start := time.Now()

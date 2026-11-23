@@ -414,7 +414,7 @@ Proofs of concept, compile checks, test runs and fix checks run only in a contai
 | `timeout` | 2m | Wall-clock limit for one run, enforced by the host. Above 15m is refused |
 | `[sandbox.images]` | see above | Image per language: `go`, `python`, `javascript`, `typescript` |
 
-Every run uses `--network none` (by default), `--cap-drop ALL`, `--security-opt no-new-privileges`, a read-only root filesystem, user `65534:65534`, and tmpfs mounts for `/work` and `/tmp`. Your source is mounted read-only and copied into `/work` inside the container, so the working tree cannot be changed. Go module downloads are turned off when there is no network.
+Every run uses `--network none` (by default), `--cap-drop ALL`, `--security-opt no-new-privileges`, a read-only root filesystem, user `65534:65534`, and tmpfs mounts for `/work` and `/tmp`. Your source is mounted read-only and copied into `/work` inside the container, so the working tree cannot be changed. The copy leaves out top-level directories a run cannot need: `.git`, `.hg`, `.svn`, `.spackle`, `.venv`, `venv`, `.tox`, `.mypy_cache`, `.pytest_cache`, `.terraform`, `.idea` and `.vscode`. `node_modules` and `vendor` are copied, because a proof or a test suite may import from them. `/work` is held in memory and counts against `memory_mb`, so the limit has to cover the copied source as well as the program. A copy that fails or does not finish within `timeout` is reported as a setup failure, never as a proof result. Go module downloads are turned off when there is no network.
 
 Things to know:
 

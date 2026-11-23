@@ -41,14 +41,29 @@ const (
 	// would look like a proof that no longer reproduces, which could wrongly pass a fix.
 	bootstrapFailExit = 122
 	bootstrapMarker   = "spackle-bootstrap: "
+	// bootstrapReady is written to stderr once the work directory is ready, just before the
+	// command starts. Run removes it from the captured output. A run that times out without
+	// it never started the command: that is a setup failure, not a result.
+	bootstrapReady = "spackle-bootstrap: ready"
 
 	// bootstrap is the only shell text this package ever runs. It is a constant on purpose:
 	// Cmd arrives as positional parameters and the subdirectory as an environment variable,
 	// so no caller-supplied or model-supplied text is ever parsed as shell.
+	//
+	// The source is copied entry by entry so that the top-level directories a run cannot need
+	// are left out: version control data, Spackle's own state, virtual environments (built
+	// for the host, not for the container) and tool caches. They can be most of a checkout,
+	// and /work is a tmpfs that counts against the memory limit. node_modules and vendor are
+	// copied, because a proof or a test suite may import from them.
 	bootstrap = `fail() { echo "spackle-bootstrap: $1" >&2; exit 122; }; ` +
-		`if [ -d /src ]; then cp -R /src/. /work/ || fail "could not copy the source into /work"; fi; ` +
+		`if [ -d /src ]; then for f in /src/* /src/.[!.]* /src/..?*; do ` +
+		`if [ -e "$f" ] || [ -L "$f" ]; then case "${f##*/}" in ` +
+		`.git|.hg|.svn|.spackle|.venv|venv|.tox|.mypy_cache|.pytest_cache|.terraform|.idea|.vscode) ;; ` +
+		`*) cp -R "$f" /work/ || fail "could not copy the source into /work" ;; ` +
+		`esac; fi; done; fi; ` +
 		`if [ -d /spackle-in ]; then cp -R /spackle-in/. /work/ || fail "could not copy the staged files into /work"; fi; ` +
 		`if [ -n "${SPACKLE_SUBDIR:-}" ]; then cd "/work/${SPACKLE_SUBDIR}" || fail "the work subdirectory does not exist"; fi; ` +
+		`echo "spackle-bootstrap: ready" >&2; ` +
 		`exec "$@"`
 )
 
