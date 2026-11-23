@@ -31,12 +31,7 @@ func isTerraformPath(rel string) bool {
 }
 
 func (infraSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
-	var leads []Lead
-	var firstErr error
-	for _, f := range files {
-		if err := ctx.Err(); err != nil {
-			return leads, fmt.Errorf("built-in infrastructure checks stopped early: %w; rerun the scan to cover the remaining files", err)
-		}
+	return eachFile(ctx, "built-in infrastructure checks", files, func(f walk.File) ([]Lead, error) {
 		var check func(rel, text string) []Lead
 		switch {
 		case f.Lang == "dockerfile":
@@ -48,18 +43,14 @@ func (infraSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead
 		case f.Lang == "yaml":
 			check = k8sLeads
 		default:
-			continue
+			return nil, nil
 		}
 		text, err := walk.ReadText(f.Abs)
 		if err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("built-in infrastructure checks could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
-			}
-			continue
+			return nil, fmt.Errorf("built-in infrastructure checks could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
 		}
-		leads = append(leads, check(f.Rel, text)...)
-	}
-	return leads, firstErr
+		return check(f.Rel, text), nil
+	})
 }
 
 // infraCheck is the fixed part of an infrastructure lead.

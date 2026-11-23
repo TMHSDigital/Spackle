@@ -8,8 +8,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
@@ -132,4 +134,55 @@ func Sort(leads []Lead) []Lead {
 		}
 	})
 	return leads
+}
+
+// eachFile runs check over files in a worker pool sized to the machine and
+// returns the leads in file order, so the result does not depend on
+// scheduling. check returns nil leads for a file it does not handle. The
+// first error in file order is returned with the leads of the other files:
+// one unreadable file must not hide the rest. what names the seeder in the
+// message for a cancelled run.
+func eachFile(ctx context.Context, what string, files []walk.File, check func(f walk.File) ([]Lead, error)) ([]Lead, error) {
+	type result struct {
+		leads []Lead
+		err   error
+	}
+	results := make([]result, len(files))
+	next := make(chan int)
+	var wg sync.WaitGroup
+	workers := min(runtime.GOMAXPROCS(0), len(files))
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				results[i].leads, results[i].err = check(files[i])
+			}
+		}()
+	}
+	var stopped error
+feed:
+	for i := range files {
+		select {
+		case next <- i:
+		case <-ctx.Done():
+			stopped = fmt.Errorf("%s stopped early: %w; rerun the scan to cover the remaining files", what, ctx.Err())
+			break feed
+		}
+	}
+	close(next)
+	wg.Wait()
+
+	var leads []Lead
+	var firstErr error
+	for _, r := range results {
+		leads = append(leads, r.leads...)
+		if r.err != nil && firstErr == nil {
+			firstErr = r.err
+		}
+	}
+	if stopped != nil {
+		return leads, stopped
+	}
+	return leads, firstErr
 }

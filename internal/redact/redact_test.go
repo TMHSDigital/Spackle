@@ -268,3 +268,45 @@ func TestEmptyAndPlainText(t *testing.T) {
 		t.Errorf("plain text changed: %q %+v", out, ms)
 	}
 }
+
+// Every rule is gated by a literal check, and the gate never hides a match:
+// for each rule, a text the regular expression matches must pass its gate.
+func TestRuleGatesNeverHideAMatch(t *testing.T) {
+	samples := map[string]string{
+		"private-key-block":     "-----BEGIN RSA PRIVATE KEY-----\nMIIB\n-----END RSA PRIVATE KEY-----",
+		"aws-access-key-id":     "id = ASIA" + "IOSFODNN7EXAMPLE",
+		"aws-secret-access-key": "AWS_Secret_Access_Key = wJalrXUtnFEMI/K7MDENG/bPxRfiCY" + "EXAMPLEKEY",
+		"github-token":          "github_pat_" + "11ABCDEFG0123456789_abcdefghij",
+		"gitlab-token":          "glpat-" + "abcdefghij0123456789",
+		"slack-token":           "xoxb-" + "1234567890-abcdefghij",
+		"slack-webhook":         "https://hooks.slack.com/services/" + "T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+		"stripe-key":            "rk_live_" + "abcdefghijklmnopqrstuvwx",
+		"google-api-key":        "AIza" + "SyA1234567890abcdefghijklmnopqrstuv",
+		"anthropic-key":         "sk-ant-" + "abcdefghijklmnopqrstuv",
+		"openai-key":            "sk-" + "abcdefghijklmnopqrstuvwx",
+		"jwt":                   "eyJhbGciOiJ" + ".eyJzdWIiOiIx" + ".c2lnbmF0dXJl",
+		"basic-auth-url":        "postgres://app:" + "s3cr3t-Pa55w0rd" + "@db.internal/app",
+		"generic-secret":        "Client-Secret: \"" + "q9Zr7Lm2Xv8Tn4Kd" + "\"",
+	}
+	for _, r := range rules {
+		if len(r.any) == 0 {
+			t.Errorf("rule %s has no literal gate", r.name)
+		}
+		sample, ok := samples[r.name]
+		if !ok {
+			t.Errorf("rule %s has no sample in this test", r.name)
+			continue
+		}
+		if !r.re.MatchString(sample) {
+			t.Errorf("the sample for %s does not match its rule; fix the sample", r.name)
+			continue
+		}
+		found := false
+		for _, m := range Scan(sample) {
+			found = found || m.Rule == r.name || m.Start >= 0
+		}
+		if !found {
+			t.Errorf("rule %s: the gate hid a match in %q", r.name, sample)
+		}
+	}
+}

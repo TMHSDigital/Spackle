@@ -153,27 +153,18 @@ func (s codeSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lea
 			byLang[l] = append(byLang[l], &s.rules[i])
 		}
 	}
-	var leads []Lead
-	var firstErr error
-	for _, f := range files {
-		if err := ctx.Err(); err != nil {
-			return leads, fmt.Errorf("built-in code rules stopped early: %w; rerun the scan to cover the remaining files", err)
-		}
+	return eachFile(ctx, "built-in code rules", files, func(f walk.File) ([]Lead, error) {
 		rules := byLang[f.Lang]
 		if len(rules) == 0 || isTestPath(f.Rel) {
-			continue
+			return nil, nil
 		}
 		text, err := walk.ReadText(f.Abs)
 		if err != nil {
 			// One unreadable file must not hide the leads from the rest.
-			if firstErr == nil {
-				firstErr = fmt.Errorf("built-in code rules could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
-			}
-			continue
+			return nil, fmt.Errorf("built-in code rules could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
 		}
-		leads = append(leads, matchRules(rules, f.Lang, f.Rel, text)...)
-	}
-	return leads, firstErr
+		return matchRules(rules, f.Lang, f.Rel, text), nil
+	})
 }
 
 func matchRules(rules []*Rule, lang, rel, text string) []Lead {

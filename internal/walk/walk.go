@@ -288,7 +288,15 @@ func ListWith(root string, opts Options) (Result, error) {
 			skip(rel, "not a regular file")
 			return nil
 		}
-		fi, ierr := os.Stat(abs)
+		// The directory entry already has the file's size. Only a symlink
+		// needs a stat of its own, to see the file it points at.
+		var fi fs.FileInfo
+		var ierr error
+		if d.Type()&fs.ModeSymlink != 0 {
+			fi, ierr = os.Stat(abs)
+		} else {
+			fi, ierr = d.Info()
+		}
 		if ierr != nil {
 			skip(rel, "unreadable: "+ierr.Error())
 			return nil

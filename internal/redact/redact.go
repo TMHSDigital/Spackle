@@ -35,6 +35,31 @@ type rule struct {
 	// because RE2 has no lookaround and some rules need to reject
 	// placeholders and low-entropy strings.
 	keep func(value string) bool
+	// any lists literals of which at least one occurs in every text the
+	// rule can match. The regular expression runs only when one is
+	// present. Most files hold none of them, so most rules cost one
+	// substring search instead of a full regexp pass. With fold set the
+	// literals are lower case and are looked up in the lower-cased text.
+	any  []string
+	fold bool
+}
+
+// possible reports whether the rule's literal gate lets text through.
+// lower returns the lower-cased text, computed at most once per scan.
+func (r rule) possible(text string, lower func() string) bool {
+	if len(r.any) == 0 {
+		return true
+	}
+	hay := text
+	if r.fold {
+		hay = lower()
+	}
+	for _, lit := range r.any {
+		if strings.Contains(hay, lit) {
+			return true
+		}
+	}
+	return false
 }
 
 const genericNames = `password|passwd|pwd|secret|token|api[_-]?key|apikey|auth[_-]?token|access[_-]?key|client[_-]?secret`
@@ -46,61 +71,75 @@ const genericNames = `password|passwd|pwd|secret|token|api[_-]?key|apikey|auth[_
 var rules = []rule{
 	{
 		name: "private-key-block",
+		any:  []string{"-----BEGIN"},
 		re:   regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`),
 	},
 	{
 		name: "aws-access-key-id",
+		any:  []string{"AKIA", "ASIA"},
 		re:   regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`),
 	},
 	{
-		name:   "aws-secret-access-key",
+		name: "aws-secret-access-key",
+		any:  []string{"aws"}, fold: true,
 		re:     regexp.MustCompile(`(?i)aws[a-z0-9_.-]*secret[a-z0-9_.-]*["']?\s*(?::=|=>|=|:)\s*["']?([a-z0-9/+]{40})(?:[^a-z0-9/+=]|$)`),
 		groups: []int{1},
 	},
 	{
 		name: "github-token",
+		any:  []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"},
 		re:   regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{22,}\b`),
 	},
 	{
 		name: "gitlab-token",
+		any:  []string{"glpat-"},
 		re:   regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}`),
 	},
 	{
 		name: "slack-token",
+		any:  []string{"xox"},
 		re:   regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{10,}`),
 	},
 	{
 		name: "slack-webhook",
+		any:  []string{"hooks.slack.com"},
 		re:   regexp.MustCompile(`https://hooks\.slack\.com/services/[A-Za-z0-9_/+-]{20,}`),
 	},
 	{
 		name: "stripe-key",
+		any:  []string{"k_live_"},
 		re:   regexp.MustCompile(`\b[sr]k_live_[A-Za-z0-9]{24,}`),
 	},
 	{
 		name: "google-api-key",
+		any:  []string{"AIza"},
 		re:   regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}`),
 	},
 	{
 		name: "anthropic-key",
+		any:  []string{"sk-ant-"},
 		re:   regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`),
 	},
 	{
 		name: "openai-key",
+		any:  []string{"sk-"},
 		re:   regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`),
 	},
 	{
 		name: "jwt",
+		any:  []string{"eyJ"},
 		re:   regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}`),
 	},
 	{
 		name:   "basic-auth-url",
+		any:    []string{"://"},
 		re:     regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9+.-]*://[^\s:/@"'<>]+:([^\s@/"'<>]+)@[A-Za-z0-9\[]`),
 		groups: []int{1},
 		keep:   func(v string) bool { return !isPlaceholder(v) },
 	},
 	{
-		name:   "generic-secret",
+		name: "generic-secret",
+		any:  []string{"passw", "pwd", "secret", "token", "api", "access"}, fold: true,
 		re:     regexp.MustCompile(`(?i)(?:` + genericNames + `)[a-z0-9_-]*["']?\s*(?::=|=>|=|:)\s*(?:"([^"\n]{8,})"|'([^'\n]{8,})')`),
 		groups: []int{1, 2},
 		keep:   func(v string) bool { return !isPlaceholder(v) && entropy(v) >= 3.0 },
@@ -133,9 +172,22 @@ func Scan(text string) []Match {
 	if text == "" {
 		return nil
 	}
-	markers := marker.FindAllStringIndex(text, -1)
+	var markers [][]int
+	if strings.Contains(text, "[REDACTED:") {
+		markers = marker.FindAllStringIndex(text, -1)
+	}
+	lowered := ""
+	lower := func() string {
+		if lowered == "" {
+			lowered = strings.ToLower(text)
+		}
+		return lowered
+	}
 	var cands []candidate
 	for prio, r := range rules {
+		if !r.possible(text, lower) {
+			continue
+		}
 		for _, loc := range r.re.FindAllStringSubmatchIndex(text, -1) {
 			start, end := -1, -1
 			if len(r.groups) == 0 {
