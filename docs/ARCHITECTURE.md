@@ -200,6 +200,7 @@ Every directory under `internal/`:
 | `sandbox` | Runs untrusted code in a locked-down container by driving the `docker` or `podman` command line |
 | `seed` | Lead producers: built-in rules for code, secrets and infrastructure files, and adapters for external scanners |
 | `target` | Classifies a target as a path, a git remote or a running URL |
+| `textx` | The one rune-safe helper that clips a string before it goes into a ledger event, a prompt or an error message |
 | `version` | Build metadata set by the linker |
 | `walk` | The safe file listing and path resolution every stage uses to read the target |
 

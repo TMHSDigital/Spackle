@@ -21,6 +21,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/version"
 )
 
@@ -106,7 +107,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 		return Result{}, err
 	}
 	if st := grant.Statement(); st != "" {
-		if _, err := led.Append(startSeq, ledger.TypeNote, "Operator's authorization statement: "+clipText(st, 400)); err != nil {
+		if _, err := led.Append(startSeq, ledger.TypeNote, "Operator's authorization statement: "+textx.Clip(st, 400)); err != nil {
 			return Result{}, err
 		}
 	}
@@ -331,7 +332,7 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 			if ctx.Err() != nil {
 				return nil, "", ctx.Err()
 			}
-			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: f.ID, Reason: "the assessment failed: " + clipText(aerr.Error(), 300)}); err != nil {
+			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: f.ID, Reason: "the assessment failed: " + textx.Clip(aerr.Error(), 300)}); err != nil {
 				return nil, "", err
 			}
 			continue

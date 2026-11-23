@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // maxResponseBytes caps a provider response so a faulty endpoint cannot
@@ -143,23 +145,16 @@ func errorMessage(data []byte) string {
 				Type    string `json:"type"`
 			}
 			if json.Unmarshal(shapes.Error, &obj) == nil && obj.Message != "" {
-				return truncate(obj.Message, 400)
+				return textx.Clip(obj.Message, 400)
 			}
 			var s string
 			if json.Unmarshal(shapes.Error, &s) == nil && s != "" {
-				return truncate(s, 400)
+				return textx.Clip(s, 400)
 			}
 		}
 		if shapes.Msg != "" {
-			return truncate(shapes.Msg, 400)
+			return textx.Clip(shapes.Msg, 400)
 		}
 	}
-	return truncate(strings.TrimSpace(string(data)), 400)
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
+	return textx.Clip(strings.TrimSpace(string(data)), 400)
 }

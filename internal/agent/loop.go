@@ -17,6 +17,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/redact"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // Runner runs one stage's conversations against a provider.
@@ -105,7 +106,7 @@ func (r *Runner) Run(ctx context.Context, parent int64, system, user string, reg
 			results = append(results, res)
 			args, _ := redact.Apply(string(call.Args))
 			if _, lerr := r.Ledger.Append(seq, ledger.TypeToolCall, ledger.ToolCall{
-				Stage: r.Stage, Tool: call.Name, Args: clip(args, 500), IsError: res.IsError, Bytes: len(res.Content),
+				Stage: r.Stage, Tool: call.Name, Args: textx.Clip(args, 500), IsError: res.IsError, Bytes: len(res.Content),
 			}); lerr != nil {
 				return out, lerr
 			}
@@ -154,7 +155,7 @@ func (r *Runner) complete(ctx context.Context, parent int64, req llm.Request) (l
 		err = fmt.Errorf("%w: the wall time cap was reached during a model call, which was stopped", budget.ErrExhausted)
 	}
 	if err != nil {
-		rec.Error = clip(err.Error(), 300)
+		rec.Error = textx.Clip(err.Error(), 300)
 		// A failed call is recorded so the ledger shows it happened.
 		if _, lerr := r.Ledger.Append(parent, ledger.TypeModelCall, rec); lerr != nil {
 			return llm.Response{}, 0, lerr
@@ -175,11 +176,4 @@ func (r *Runner) complete(ctx context.Context, parent int64, req llm.Request) (l
 		return llm.Response{}, 0, lerr
 	}
 	return resp, seq, nil
-}
-
-func clip(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/llm"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -65,7 +66,7 @@ func (r *Registry) grep(ctx context.Context, raw json.RawMessage) (label, text s
 	}
 	re, err := regexp.Compile(a.Pattern)
 	if err != nil {
-		return "", "", fmt.Errorf("pattern does not compile (%s); use RE2 syntax and escape literal ( ) [ ] { } . * + ? | with a backslash", clip(err.Error(), 160))
+		return "", "", fmt.Errorf("pattern does not compile (%s); use RE2 syntax and escape literal ( ) [ ] { } . * + ? | with a backslash", textx.Clip(err.Error(), 160))
 	}
 	if a.Glob != "" {
 		if _, err := path.Match(strings.TrimPrefix(a.Glob, "**/"), ""); err != nil {
@@ -122,7 +123,7 @@ func (r *Registry) grep(ctx context.Context, raw json.RawMessage) (label, text s
 		}
 	}
 
-	label = "grep \"" + clip(a.Pattern, 100) + "\""
+	label = "grep \"" + textx.Clip(a.Pattern, 100) + "\""
 	if matches == 0 {
 		fmt.Fprintf(&b, "[no matches in %d files]\n", searched)
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/redact"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -197,7 +198,7 @@ func (r *Registry) Defs() []llm.ToolDef {
 func (r *Registry) Call(ctx context.Context, call llm.ToolCall) (res llm.ToolResult) {
 	res = llm.ToolResult{CallID: call.ID, Name: call.Name}
 	fail := func(msg string) llm.ToolResult {
-		msg, _ = redact.Apply(clip(msg, maxErrorBytes))
+		msg, _ = redact.Apply(textx.Clip(msg, maxErrorBytes))
 		return llm.ToolResult{CallID: call.ID, Name: call.Name, Content: msg, IsError: true}
 	}
 	// A bug in one tool must not take down the run. The panic value is not
@@ -363,7 +364,7 @@ func decode(args json.RawMessage, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(args))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("invalid arguments (%s); send one JSON object with only the fields in the tool schema and the documented types", clip(err.Error(), 150))
+		return fmt.Errorf("invalid arguments (%s); send one JSON object with only the fields in the tool schema and the documented types", textx.Clip(err.Error(), 150))
 	}
 	if dec.More() {
 		return errors.New("invalid arguments (extra data after the JSON object); send exactly one JSON object")
@@ -371,28 +372,17 @@ func decode(args json.RawMessage, v any) error {
 	return nil
 }
 
-// clip cuts s to at most n bytes on a rune boundary.
-func clip(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-	return s[:n] + "..."
-}
-
 // quote renders a model-supplied value for an error message: bounded and
 // with control characters escaped so it stays on one line.
-func quote(s string) string { return fmt.Sprintf("%q", clip(s, maxEcho)) }
+func quote(s string) string { return fmt.Sprintf("%q", textx.Clip(s, maxEcho)) }
 
 // pathError rewrites a walk.Resolve error so it cannot echo a long path.
 func pathError(p string, err error) error {
 	msg := err.Error()
 	if len(p) > maxEcho {
-		msg = clip(strings.ReplaceAll(msg, fmt.Sprintf("%q", p), quote(p)), 200)
+		msg = textx.Clip(strings.ReplaceAll(msg, fmt.Sprintf("%q", p), quote(p)), 200)
 	}
-	return fmt.Errorf("%s; pass a path relative to the target root, such as src/app.py", clip(msg, 400))
+	return fmt.Errorf("%s; pass a path relative to the target root, such as src/app.py", textx.Clip(msg, 400))
 }
 
 // reason reduces an OS error to its cause. The full text names host paths,
@@ -402,7 +392,7 @@ func reason(err error) string {
 	if errors.As(err, &pe) {
 		return pe.Err.Error()
 	}
-	return clip(err.Error(), 200)
+	return textx.Clip(err.Error(), 200)
 }
 
 // schema builds a JSON Schema object for tool arguments. props is the body

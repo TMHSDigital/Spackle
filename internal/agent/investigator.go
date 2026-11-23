@@ -11,6 +11,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/seed"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // Investigation is the result of investigating one intent.
@@ -47,7 +48,7 @@ func Investigate(ctx context.Context, r *Runner, parent int64, root string, seal
 	var views []leadView
 	for _, l := range leads {
 		if containsStr(intent.LeadIDs, l.ID) {
-			views = append(views, leadView{l.ID, l.Source, l.RuleID, l.Title, l.File, l.Line, clip(l.Snippet, 200), clip(l.Detail, 300)})
+			views = append(views, leadView{l.ID, l.Source, l.RuleID, l.Title, l.File, l.Line, textx.Clip(l.Snippet, 200), textx.Clip(l.Detail, 300)})
 		}
 	}
 	brief := map[string]any{"title": intent.Title, "question": intent.Hypothesis, "start_with_files": intent.Files}
@@ -78,7 +79,7 @@ func Investigate(ctx context.Context, r *Runner, parent int64, root string, seal
 		problem := ""
 		switch out.Stopped {
 		case StopRefusal:
-			inv.Rejected = "the model provider declined this investigation: " + clip(out.Note, 200)
+			inv.Rejected = "the model provider declined this investigation: " + textx.Clip(out.Note, 200)
 			return inv, r.reject(parent, intent, inv.Rejected)
 		case StopTruncated:
 			problem = "the answer was cut off before the JSON was complete"
@@ -92,7 +93,7 @@ func Investigate(ctx context.Context, r *Runner, parent int64, root string, seal
 		if problem == "" {
 			switch strings.ToLower(strings.TrimSpace(reply.Verdict)) {
 			case "no_finding":
-				inv.NoFinding = clip(strings.TrimSpace(reply.Reason), 1000)
+				inv.NoFinding = textx.Clip(strings.TrimSpace(reply.Reason), 1000)
 				if inv.NoFinding == "" {
 					inv.NoFinding = "The investigator concluded this is not a flaw and gave no reason."
 				}
@@ -113,7 +114,7 @@ func Investigate(ctx context.Context, r *Runner, parent int64, root string, seal
 			}
 		}
 		if attempt >= 2 {
-			inv.Rejected = "the draft was rejected after one correction: " + clip(problem, 600)
+			inv.Rejected = "the draft was rejected after one correction: " + textx.Clip(problem, 600)
 			return inv, r.reject(parent, intent, inv.Rejected)
 		}
 		// Send the problems back once, so it cannot loop. This is a new
@@ -121,8 +122,8 @@ func Investigate(ctx context.Context, r *Runner, parent int64, root string, seal
 		// tools and the same turn limit as the first attempt: the model may
 		// read the files again, so a retry can cost as much as the
 		// investigation did.
-		retry := "Your previous answer could not be used:\n" + clip(problem, 1200) +
-			"\n\nYour previous answer was:\n" + sealer.Wrap("previous answer", clip(out.Text, 6000)) +
+		retry := "Your previous answer could not be used:\n" + textx.Clip(problem, 1200) +
+			"\n\nYour previous answer was:\n" + sealer.Wrap("previous answer", textx.Clip(out.Text, 6000)) +
 			"\n\nRe-read the files if you need to, fix those problems, and reply again in the required JSON format. " +
 			"If you can no longer support the finding, reply with verdict no_finding.\n\nThe original brief:\n" +
 			sealer.Wrap("investigation brief", string(raw))

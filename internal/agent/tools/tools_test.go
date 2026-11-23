@@ -17,6 +17,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/redact"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -175,7 +176,7 @@ func TestReadFile(t *testing.T) {
 			body := sealed(t, call(r, "read_file", tc.args))
 			for _, w := range tc.want {
 				if !strings.Contains(body, w) {
-					t.Errorf("lacks %q:\n%s", w, clip(body, 600))
+					t.Errorf("lacks %q:\n%s", w, textx.Clip(body, 600))
 				}
 			}
 			for _, n := range tc.not {
@@ -249,7 +250,7 @@ func TestListDir(t *testing.T) {
 		t.Errorf("capped listing shows %d entries, want 500", n)
 	}
 	if !strings.Contains(body, "[510 entries in many/]") || !strings.Contains(body, "[10 more entries not shown") {
-		t.Errorf("capped listing lacks its counts:\n%s", clip(body, 200))
+		t.Errorf("capped listing lacks its counts:\n%s", textx.Clip(body, 200))
 	}
 
 	refused(t, call(r, "list_dir", map[string]any{"path": "README.md"}), "is a file")
@@ -319,12 +320,12 @@ func TestGrep(t *testing.T) {
 			body := sealed(t, call(r, "grep", tc.args))
 			for _, w := range tc.want {
 				if !strings.Contains(body, w) {
-					t.Errorf("lacks %q:\n%s", w, clip(body, 800))
+					t.Errorf("lacks %q:\n%s", w, textx.Clip(body, 800))
 				}
 			}
 			for _, n := range tc.not {
 				if strings.Contains(body, n) {
-					t.Errorf("contains %q:\n%s", n, clip(body, 800))
+					t.Errorf("contains %q:\n%s", n, textx.Clip(body, 800))
 				}
 			}
 		})
@@ -493,7 +494,7 @@ func TestFindSymbolCap(t *testing.T) {
 		t.Errorf("shows %d definitions, want 50", n)
 	}
 	if !strings.Contains(body, "[5 more definitions not shown") {
-		t.Errorf("no count of the rest:\n%s", clip(body, 300))
+		t.Errorf("no count of the rest:\n%s", textx.Clip(body, 300))
 	}
 }
 
@@ -538,7 +539,7 @@ func TestFindReferences(t *testing.T) {
 		t.Errorf("shows %d references, want 100", n)
 	}
 	if !strings.Contains(body, "[30 more references not shown") {
-		t.Errorf("no count of the rest:\n%s", clip(body, 300))
+		t.Errorf("no count of the rest:\n%s", textx.Clip(body, 300))
 	}
 	if strings.Contains(body, "def busy") {
 		t.Errorf("the definition line is listed as a reference")
@@ -1019,7 +1020,7 @@ func TestErrorsDoNotEchoLongInput(t *testing.T) {
 				}
 				sawError++
 				if strings.Contains(res.Content, run) || len(res.Content) > maxErrorBytes+100 {
-					t.Errorf("%s %s: error echoes too much input (%d bytes): %s", tool, f, len(res.Content), clip(res.Content, 300))
+					t.Errorf("%s %s: error echoes too much input (%d bytes): %s", tool, f, len(res.Content), textx.Clip(res.Content, 300))
 				}
 			}
 		}
@@ -1033,7 +1034,7 @@ func TestErrorsDoNotEchoLongInput(t *testing.T) {
 		r.Call(context.Background(), llm.ToolCall{ID: "c1", Name: "grep", Args: json.RawMessage(long)}),
 	} {
 		if !res.IsError || strings.Contains(res.Content, run) {
-			t.Errorf("error echoes too much input: %s", clip(res.Content, 300))
+			t.Errorf("error echoes too much input: %s", textx.Clip(res.Content, 300))
 		}
 	}
 }
@@ -1370,7 +1371,7 @@ func TestRandomArgsNeverPanic(t *testing.T) {
 				t.Errorf("%s leaked outside content on args %q", name, in)
 			}
 			if !res.IsError && (!strings.HasPrefix(res.Content, openMarker) || !strings.HasSuffix(res.Content, closeMarker) || strings.Count(res.Content, nonce) != 2) {
-				t.Errorf("%s returned a success that is not one envelope for args %q:\n%s", name, in, clip(res.Content, 300))
+				t.Errorf("%s returned a success that is not one envelope for args %q:\n%s", name, in, textx.Clip(res.Content, 300))
 			}
 		}
 	}
@@ -1419,7 +1420,7 @@ func TestInjectionCorpus(t *testing.T) {
 	}
 	body := sealed(t, call(r, "grep", map[string]any{"pattern": "(?i)ignore|untrusted|budget|false positive|no findings", "path": "corpus", "max_results": 200}))
 	if !strings.Contains(body, "corpus/01-ignore-instructions.txt:") {
-		t.Errorf("the corpus search found nothing:\n%s", clip(body, 400))
+		t.Errorf("the corpus search found nothing:\n%s", textx.Clip(body, 400))
 	}
 	// Whatever the corpus says, the tool set is unchanged.
 	if got := r.Names(); strings.Join(got, ",") != strings.Join(names, ",") {

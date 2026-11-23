@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A running-target assessment that uses up the scope's `max_requests` now ends with outcome `budget-exhausted`, and the report lists the findings that were not assessed. It used to end as `completed`, and a finding could be dismissed by a model that had been refused the requests it asked for.
 - `spackle verify` no longer marks a finding fixed when its proof prints the marker and then exits with an error. The flaw was still observed, so the outcome is inconclusive and the finding keeps its status. The scan, the fixer and verify now judge a proof run by one rule.
 - The map cache is used again on the second and later scans of a clean repository. The default state directory `.spackle`, untracked inside the target, used to make the work tree count as changed, so the cache was written once and never read.
+- Long model output, proof output and error text are no longer cut in the middle of a multi-byte character, which left a replacement character in the ledger and the reports.
 
 ## [0.1.0] - 2026-11-22
 

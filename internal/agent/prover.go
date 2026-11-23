@@ -18,6 +18,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -224,7 +225,7 @@ func Prove(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer
 			return res, nil
 		}
 		if !reply.CanProve {
-			res.Reason = "A proof could not be run in the sandbox: " + clip(strings.TrimSpace(reply.Reason), 400)
+			res.Reason = "A proof could not be run in the sandbox: " + textx.Clip(strings.TrimSpace(reply.Reason), 400)
 			return res, nil
 		}
 		files, cmd, verr := validatePoC(box.Root, language, reply)
@@ -242,8 +243,8 @@ func Prove(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer
 			return res, rerr
 		}
 		output, _ := redact.Apply(strings.TrimSpace(run.Stdout + "\n" + run.Stderr))
-		res.Output = clip(output, 4000)
-		res.PoC = &PoC{Files: files, Command: cmd, Marker: marker, Language: language, Image: image, Explanation: clip(reply.Explanation, 800)}
+		res.Output = textx.Clip(output, 4000)
+		res.PoC = &PoC{Files: files, Command: cmd, Marker: marker, Language: language, Image: image, Explanation: textx.Clip(reply.Explanation, 800)}
 		if JudgeProof(run, marker) == ProofSucceeded {
 			res.Demonstrated = true
 			res.Reason = ""
@@ -261,7 +262,7 @@ func Prove(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer
 			return res, nil
 		}
 		user = "Your proof ran but did not demonstrate the flaw. " + res.Reason + " Its output was:\n" +
-			sealer.Wrap("proof output", clip(output, 3000)) +
+			sealer.Wrap("proof output", textx.Clip(output, 3000)) +
 			"\n\nIf the proof was wrong, fix it and reply again in the same JSON format. If the output shows the flaw is not actually present, reply with can_prove false and say so.\n\n" +
 			sealer.Wrap("finding to demonstrate", string(raw))
 	}

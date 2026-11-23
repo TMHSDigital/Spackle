@@ -9,6 +9,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // Review verdicts.
@@ -70,7 +71,7 @@ func ReviewFinding(ctx context.Context, r *Runner, parent int64, sealer *envelop
 		//nolint:nilerr // the parse failure is reported in the verdict's reason
 		return Review{Verdict: ReviewUncertain, Reason: "The reviewer's answer could not be parsed (" + err.Error() + "), so the finding was neither confirmed nor refuted."}, nil
 	}
-	rev := Review{Reason: clip(strings.TrimSpace(reply.Reason), 1200)}
+	rev := Review{Reason: textx.Clip(strings.TrimSpace(reply.Reason), 1200)}
 	switch strings.ToLower(strings.TrimSpace(reply.Verdict)) {
 	case ReviewConfirmed:
 		rev.Verdict = ReviewConfirmed
@@ -171,7 +172,7 @@ func Correlate(ctx context.Context, r *Runner, parent int64, sealer *envelope.Se
 				ids = append(ids, id)
 			}
 		}
-		narrative := clip(strings.TrimSpace(ch.Narrative), 800)
+		narrative := textx.Clip(strings.TrimSpace(ch.Narrative), 800)
 		if len(ids) < 2 || narrative == "" {
 			continue
 		}

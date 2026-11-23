@@ -7,6 +7,7 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/redact"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -105,10 +106,10 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 		}
 		line, found := locateQuote(fl, quote, s.Line)
 		if !found {
-			add("flow step %d: the quote %q does not appear in %s. Quote the whole line exactly as the tools show it; a fragment of a few characters is not accepted", i+1, clip(quote, 120), s.File)
+			add("flow step %d: the quote %q does not appear in %s. Quote the whole line exactly as the tools show it; a fragment of a few characters is not accepted", i+1, textx.Clip(quote, 120), s.File)
 			continue
 		}
-		note := clip(s.Note, 400)
+		note := textx.Clip(s.Note, 400)
 		if s.Line >= 1 && (line-s.Line > 3 || s.Line-line > 3) {
 			// The model's line number was wrong. Say so, so a reader knows
 			// the number was corrected by matching the quote.
@@ -120,13 +121,13 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 		default:
 			role = "propagation"
 		}
-		flow = append(flow, finding.FlowStep{Role: role, File: s.File, Line: line, Quote: clip(quote, 400), Note: note})
+		flow = append(flow, finding.FlowStep{Role: role, File: s.File, Line: line, Quote: textx.Clip(quote, 400), Note: note})
 	}
 	if len(d.Flow) == 0 {
 		add("flow is empty: include at least the sink, quoted from the file")
 	}
 
-	sev, serr := finding.SeverityFromVector(d.Vector, clip(d.SeverityReasoning, 800))
+	sev, serr := finding.SeverityFromVector(d.Vector, textx.Clip(d.SeverityReasoning, 800))
 	if serr != nil {
 		// Weaker models often produce a CVSS 3 shaped vector. That alone
 		// should not discard a finding whose evidence checks out, so fall
@@ -154,13 +155,13 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 		return finding.Finding{}, errors.Join(errs...)
 	}
 
-	loc := finding.Location{File: d.File, StartLine: d.StartLine, EndLine: d.EndLine, Symbol: clip(d.Symbol, 120)}
+	loc := finding.Location{File: d.File, StartLine: d.StartLine, EndLine: d.EndLine, Symbol: textx.Clip(d.Symbol, 120)}
 	info := finding.Info(d.Class)
 	f := finding.Finding{
-		ID: finding.MakeID(d.Class, loc), Title: clip(strings.TrimSpace(d.Title), 200),
+		ID: finding.MakeID(d.Class, loc), Title: textx.Clip(strings.TrimSpace(d.Title), 200),
 		Surface: surfaceFor(d.Class), Class: d.Class,
 		CWE: cleanCWE(d.CWE), OWASP: info.OWASP, Location: loc, Severity: sev,
-		Flaw: finding.Flaw{Description: clip(strings.TrimSpace(d.Description), 2000), Flow: flow},
+		Flaw: finding.Flaw{Description: textx.Clip(strings.TrimSpace(d.Description), 2000), Flow: flow},
 		Exploitation: finding.Exploitation{
 			Preconditions: clipAll(d.Preconditions, 8, 400),
 			Steps:         clipAll(d.AttackSteps, 12, 600),
@@ -172,10 +173,10 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 		},
 		BlastRadius: finding.BlastRadius{Gains: clipAll(d.Gains, 8, 400), Exposed: clipAll(d.Exposed, 8, 400)},
 		Remediation: finding.Remediation{
-			Summary: clip(strings.TrimSpace(d.FixSummary), 1200), Why: clip(d.FixWhy, 1200),
+			Summary: textx.Clip(strings.TrimSpace(d.FixSummary), 1200), Why: textx.Clip(d.FixWhy, 1200),
 			DefenseInDepth: clipAll(d.DefenseInDepth, 6, 400), Verification: "unverified",
 		},
-		Confidence: finding.Confidence{Level: level, Reason: clip(strings.TrimSpace(d.ConfidenceReason), 800)},
+		Confidence: finding.Confidence{Level: level, Reason: textx.Clip(strings.TrimSpace(d.ConfidenceReason), 800)},
 		Origin:     origin,
 		Status:     finding.StatusOpen,
 	}
@@ -322,7 +323,7 @@ func clipAll(in []string, maxItems, maxLen int) []string {
 	var out []string
 	for _, s := range in {
 		if s = strings.TrimSpace(s); s != "" {
-			out = append(out, clip(s, maxLen))
+			out = append(out, textx.Clip(s, maxLen))
 		}
 	}
 	return capSlice(out, maxItems)

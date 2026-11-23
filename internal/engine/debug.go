@@ -26,6 +26,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/target"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
@@ -122,10 +123,10 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 	// A leading dash is refused on top of the pattern so the name can never
 	// be read as an option by the test runner.
 	if test != "" && (!debugTestName.MatchString(test) || strings.HasPrefix(test, "-")) {
-		return Result{}, fmt.Errorf("%w: the test name %q is not usable. A test name is 1 to 200 characters from letters, digits and _ . / : [ ] -, and does not start with a dash. Pass the name of one test, for example --test TestParseHeader", ErrRefused, clipText(test, 80))
+		return Result{}, fmt.Errorf("%w: the test name %q is not usable. A test name is 1 to 200 characters from letters, digits and _ . / : [ ] -, and does not start with a dash. Pass the name of one test, for example --test TestParseHeader", ErrRefused, textx.Clip(test, 80))
 	}
 	if strings.HasPrefix(opts.Good, "-") {
-		return Result{}, fmt.Errorf("%w: --good %q is not a revision. Pass a commit hash, tag or branch that is known to be good", ErrRefused, clipText(opts.Good, 80))
+		return Result{}, fmt.Errorf("%w: --good %q is not a revision. Pass a commit hash, tag or branch that is known to be good", ErrRefused, textx.Clip(opts.Good, 80))
 	}
 	if len(issue) > maxIssueBytes {
 		issue = issue[:maxIssueBytes]
@@ -374,7 +375,7 @@ func (d *debugRun) run(ctx context.Context, purpose string, cmd []string, files 
 
 func sandboxOutput(res sandbox.Result, limit int) string {
 	out, _ := redact.Apply(strings.TrimSpace(res.Stdout + "\n" + res.Stderr))
-	return clipText(out, limit)
+	return textx.Clip(out, limit)
 }
 
 func sandboxResult(res sandbox.Result) string {
@@ -504,7 +505,7 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 		return "", nil, ctx.Err()
 	default:
 		// A provider failure should not discard a reproduced failure.
-		diag.Reason = "the diagnosis step failed: " + clipText(derr.Error(), 300)
+		diag.Reason = "the diagnosis step failed: " + textx.Clip(derr.Error(), 300)
 	}
 
 	f := d.finding(rep, bisect, diag, wantFix)
@@ -559,7 +560,7 @@ func (d *debugRun) reproduce(ctx context.Context, reproCmd []string, prover *age
 		if ctx.Err() != nil {
 			return reproduction{}, ctx.Err()
 		}
-		proof.Reason = "The reproduction step failed: " + clipText(err.Error(), 300)
+		proof.Reason = "The reproduction step failed: " + textx.Clip(err.Error(), 300)
 	}
 	rep := reproduction{reproduced: proof.Demonstrated, output: proof.Output, isolation: proof.Isolation, reason: proof.Reason, attempts: proof.Attempts, result: "exit code 0"}
 	if proof.PoC != nil {
@@ -582,7 +583,7 @@ func (d *debugRun) bisect(ctx context.Context, rep reproduction) (string, error)
 	}
 	list, err := gitx.RevList(ctx, d.root, d.good, "HEAD")
 	if err != nil {
-		return "", d.note("Bisect was skipped: git could not list the commits from %s to HEAD (%s). Check that --good names a commit that HEAD descends from.", d.good, clipText(err.Error(), 200))
+		return "", d.note("Bisect was skipped: git could not list the commits from %s to HEAD (%s). Check that --good names a commit that HEAD descends from.", d.good, textx.Clip(err.Error(), 200))
 	}
 	if len(list) == 0 {
 		return "", d.note("Bisect was skipped: there are no commits between %s and HEAD.", d.good)
@@ -594,7 +595,7 @@ func (d *debugRun) bisect(ctx context.Context, rep reproduction) (string, error)
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return "", d.note("Bisect stopped early (%s), so the first bad commit was not found.", clipText(perr.Error(), 300))
+		return "", d.note("Bisect stopped early (%s), so the first bad commit was not found.", textx.Clip(perr.Error(), 300))
 	}
 	// The failure was reproduced in the working tree, which may hold
 	// uncommitted changes. The search below takes HEAD as bad without
@@ -690,7 +691,7 @@ func (d *debugRun) logEntry(ctx context.Context, hash string) string {
 		short, _, _ := strings.Cut(line, " ")
 		if len(short) >= 4 && strings.HasPrefix(hash, short) {
 			entry, _ := redact.Apply(line)
-			return clipText(entry, 200)
+			return textx.Clip(entry, 200)
 		}
 	}
 	return ""
@@ -706,7 +707,7 @@ func (d *debugRun) failureText(rep reproduction, bisect string) string {
 	} else {
 		fmt.Fprintf(&b, "Issue as reported:\n%s\n\n", d.issue)
 		for _, name := range rep.poc.SortedFiles() {
-			fmt.Fprintf(&b, "Reproduction script %s:\n%s\n", name, clipText(rep.poc.Files[name], 6000))
+			fmt.Fprintf(&b, "Reproduction script %s:\n%s\n", name, textx.Clip(rep.poc.Files[name], 6000))
 		}
 		b.WriteString("The script prints a marker only when it observes the problem, and it printed it.\n")
 	}
@@ -812,7 +813,7 @@ func (d *debugRun) notReproduced(rep reproduction) finding.Finding {
 	return finding.Finding{
 		ID: finding.MakeID("bug", loc), Title: "Reported issue was not reproduced", Surface: finding.SurfaceDebug, Class: "bug",
 		Location: loc, Severity: debugSeverity,
-		Flaw: finding.Flaw{Description: fmt.Sprintf("The reported issue could not be reproduced in the sandbox in %d attempt(s). %s The location is only where the project's source starts, not a diagnosis. Issue as reported: %s", rep.attempts, reason, clipText(issue, 1200))},
+		Flaw: finding.Flaw{Description: fmt.Sprintf("The reported issue could not be reproduced in the sandbox in %d attempt(s). %s The location is only where the project's source starts, not a diagnosis. Issue as reported: %s", rep.attempts, reason, textx.Clip(issue, 1200))},
 		Proof: finding.Proof{
 			Status: finding.ProofNotRun, Command: strings.Join(rep.command, " "), Result: rep.output, Artifacts: d.evidence,
 			Reason: "No reproduction showed the problem. " + reason,

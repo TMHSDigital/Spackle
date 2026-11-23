@@ -18,6 +18,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/report"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // VerifyOptions configure a verify run.
@@ -148,7 +149,7 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 			if errors.Is(rerr, context.Canceled) || errors.Is(rerr, context.DeadlineExceeded) {
 				return outcomes, rerr
 			}
-			note = "The proof could not be run: " + clipText(rerr.Error(), 200)
+			note = "The proof could not be run: " + textx.Clip(rerr.Error(), 200)
 			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
 			continue
 		}
@@ -182,7 +183,7 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		if reproduces {
 			out.Note = "The proof still succeeds against the current code."
 			f.Status = finding.StatusOpen
-			f.Proof.Result = clipText(output, 4000)
+			f.Proof.Result = textx.Clip(output, 4000)
 			if f.Remediation.Patch != "" {
 				f.Remediation.Verification = "not applied: the proof still succeeds against the current code, so the patch has not been merged or does not hold there"
 			}

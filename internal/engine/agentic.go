@@ -17,6 +17,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/mapper"
 	"github.com/TMHSDigital/spackle/internal/seed"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // maxIntents bounds how many investigations one run plans, whatever the
@@ -169,7 +170,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		default:
 			note := "The planner returned no usable plan, so investigations were planned directly from scanner leads."
 			if perr != nil {
-				note = "The planner failed (" + clipText(perr.Error(), 200) + "), so investigations were planned directly from scanner leads."
+				note = "The planner failed (" + textx.Clip(perr.Error(), 200) + "), so investigations were planned directly from scanner leads."
 			}
 			if _, err := r.led.Append(mapSeq, ledger.TypeNote, note); err != nil {
 				return nil, nil, "", err
@@ -261,7 +262,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			}
 			// A provider failure on one investigation should not discard
 			// the rest of the run. Record it and move on.
-			reason := "the investigation failed: " + clipText(ierr.Error(), 300)
+			reason := "the investigation failed: " + textx.Clip(ierr.Error(), 300)
 			if _, err := r.led.Append(intentSeq[it.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: it.ID + " " + it.Title, Reason: reason}); err != nil {
 				return nil, nil, "", err
 			}
@@ -306,7 +307,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 				default:
 					// One failed proof or fix step must not end the run.
 					// The finding stays as it was traced.
-					if _, err := r.led.Append(vseq, ledger.TypeReject, ledger.Reject{Stage: "prover", Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + clipText(perr.Error(), 300)}); err != nil {
+					if _, err := r.led.Append(vseq, ledger.TypeReject, ledger.Reject{Stage: "prover", Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + textx.Clip(perr.Error(), 300)}); err != nil {
 						return nil, nil, "", err
 					}
 				}
@@ -362,7 +363,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			f.Status = finding.StatusDismissed
 			f.DismissReason = "Investigated and not confirmed: " + strings.TrimPrefix(state, "dismissed:")
 		case strings.HasPrefix(state, "incomplete:"):
-			f = FromLead(l, "The investigation of this lead did not produce a usable result ("+clipText(strings.TrimPrefix(state, "incomplete:"), 200)+"), so it is reported as an unconfirmed lead.")
+			f = FromLead(l, "The investigation of this lead did not produce a usable result ("+textx.Clip(strings.TrimPrefix(state, "incomplete:"), 200)+"), so it is reported as an unconfirmed lead.")
 		default:
 			f = FromLead(l, "This lead was not selected for investigation in this run, so it is reported as an unconfirmed lead.")
 		}
@@ -430,11 +431,4 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		}
 	}
 	return findings, parent, outcome, nil
-}
-
-func clipText(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }

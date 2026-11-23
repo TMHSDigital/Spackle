@@ -11,6 +11,7 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/llm"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 const (
@@ -62,7 +63,7 @@ func gitError(err error) error {
 	if errors.Is(err, gitx.ErrNotRepo) {
 		return errors.New("history is unavailable: the target is not a git repository; continue with read_file and grep")
 	}
-	return fmt.Errorf("git failed (%s); check the arguments, or continue without history", clip(err.Error(), 200))
+	return fmt.Errorf("git failed (%s); check the arguments, or continue without history", textx.Clip(err.Error(), 200))
 }
 
 func gitReady() error {

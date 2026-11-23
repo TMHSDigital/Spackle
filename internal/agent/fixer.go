@@ -16,6 +16,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/redact"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -168,12 +169,12 @@ func Fix(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer, 
 		if problem == "" {
 			var reply fixerReply
 			_ = decodeReply(out.Text, &reply)
-			res.Files, res.Patch, res.Why = files, patch, clip(strings.TrimSpace(reply.Why), 800)
+			res.Files, res.Patch, res.Why = files, patch, textx.Clip(strings.TrimSpace(reply.Why), 800)
 			res.Verified, res.Verification, res.Reason = verified, verification, ""
 			return res, nil
 		}
-		res.Reason = fmt.Sprintf("No patch passed verification in %d attempt(s). Last problem: %s", attempt, clip(problem, 400))
-		user = "Your previous patch was rejected: " + clip(problem, 1500) +
+		res.Reason = fmt.Sprintf("No patch passed verification in %d attempt(s). Last problem: %s", attempt, textx.Clip(problem, 400))
+		user = "Your previous patch was rejected: " + textx.Clip(problem, 1500) +
 			"\n\nWrite a different patch and reply again in the same JSON format.\n\n" + base
 	}
 	return res, nil
@@ -216,7 +217,7 @@ func verifyFix(ctx context.Context, box *Box, in FixInput, replyText string) (pr
 		}
 		if run.ExitCode != 0 || run.TimedOut {
 			out, _ := redact.Apply(strings.TrimSpace(run.Stdout + "\n" + run.Stderr))
-			return "the patched code does not compile or parse:\n" + clip(out, 1200), nil, "", "", false, nil
+			return "the patched code does not compile or parse:\n" + textx.Clip(out, 1200), nil, "", "", false, nil
 		}
 		checked = append(checked, "the changed files compile")
 	}
@@ -261,7 +262,7 @@ func verifyFix(ctx context.Context, box *Box, in FixInput, replyText string) (pr
 		}
 		if run.ExitCode != 0 || run.TimedOut {
 			out, _ := redact.Apply(strings.TrimSpace(run.Stdout + "\n" + run.Stderr))
-			return "the project's tests passed before the patch and fail after it:\n" + clip(out, 1500), nil, "", "", false, nil
+			return "the project's tests passed before the patch and fail after it:\n" + textx.Clip(out, 1500), nil, "", "", false, nil
 		}
 		checked = append(checked, "the test suite still passes")
 	case len(in.TestCmd) > 0:

@@ -129,6 +129,7 @@ go test ./internal/report -update
 | `sandbox` | Runs untrusted code in a locked-down container through the `docker` or `podman` command line |
 | `seed` | Lead producers: built-in rules for code, secrets, Dockerfile, Kubernetes, Terraform, and CI workflows, and external scanner adapters |
 | `target` | Classifies a target as a local path, git URL, or running URL |
+| `textx` | The one rune-safe helper that clips a string before it goes into a ledger event, a prompt or an error message |
 | `version` | Build metadata set by the linker |
 | `walk` | The safe file listing and path resolution every stage uses to read the target |
 

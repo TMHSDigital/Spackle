@@ -10,6 +10,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/diffx"
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/redact"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // debugFrame is the role framing for debug mode. It replaces roleFrame
@@ -137,7 +138,7 @@ func Reproduce(ctx context.Context, r *Runner, parent int64, sealer *envelope.Se
 			return res, nil
 		}
 		if !reply.CanReproduce {
-			res.Reason = "The issue could not be reproduced in the sandbox: " + clip(strings.TrimSpace(reply.Reason), 400)
+			res.Reason = "The issue could not be reproduced in the sandbox: " + textx.Clip(strings.TrimSpace(reply.Reason), 400)
 			return res, nil
 		}
 		files, cmd, verr := validatePoC(box.Root, language, proverReply{Files: reply.Files, Command: reply.Command})
@@ -154,8 +155,8 @@ func Reproduce(ctx context.Context, r *Runner, parent int64, sealer *envelope.Se
 			return res, rerr
 		}
 		output, _ := redact.Apply(strings.TrimSpace(run.Stdout + "\n" + run.Stderr))
-		res.Output = clip(output, 4000)
-		res.PoC = &PoC{Files: files, Command: cmd, Marker: marker, Language: language, Image: image, Explanation: clip(reply.Explanation, 800)}
+		res.Output = textx.Clip(output, 4000)
+		res.PoC = &PoC{Files: files, Command: cmd, Marker: marker, Language: language, Image: image, Explanation: textx.Clip(reply.Explanation, 800)}
 		printed := strings.Contains(run.Stdout+run.Stderr, marker)
 		if JudgeProof(run, marker) == ProofSucceeded {
 			res.Demonstrated = true
@@ -174,7 +175,7 @@ func Reproduce(ctx context.Context, r *Runner, parent int64, sealer *envelope.Se
 			return res, nil
 		}
 		user = "Your reproduction ran but did not show the problem. " + res.Reason + " Its output was:\n" +
-			sealer.Wrap("reproduction output", clip(output, 3000)) +
+			sealer.Wrap("reproduction output", textx.Clip(output, 3000)) +
 			"\n\nIf the script was wrong, fix it and reply again in the same JSON format. If the output shows the code behaves correctly, reply with can_reproduce false and say so.\n\n" + base
 	}
 	return res, nil
@@ -221,10 +222,10 @@ type diagnoseReply struct {
 // absorb copies the parts of a reply that describe the root cause into the
 // diagnosis, checking every file and quote against the target first.
 func (d *Diagnosis) absorb(root string, reply diagnoseReply) {
-	d.Title = clip(strings.TrimSpace(reply.Title), 200)
-	d.RootCause = clip(strings.TrimSpace(reply.RootCause), 2000)
-	d.FixSummary = clip(strings.TrimSpace(reply.FixSummary), 1200)
-	d.Why = clip(strings.TrimSpace(reply.Why), 800)
+	d.Title = textx.Clip(strings.TrimSpace(reply.Title), 200)
+	d.RootCause = textx.Clip(strings.TrimSpace(reply.RootCause), 2000)
+	d.FixSummary = textx.Clip(strings.TrimSpace(reply.FixSummary), 1200)
+	d.Why = textx.Clip(strings.TrimSpace(reply.Why), 800)
 	d.File, d.Line, d.Quotes = "", 0, nil
 
 	cache := map[string][]string{}
@@ -272,7 +273,7 @@ func (d *Diagnosis) absorb(root string, reply diagnoseReply) {
 		default:
 			role = "propagation"
 		}
-		d.Quotes = append(d.Quotes, DraftStep{Role: role, File: q.File, Line: line, Quote: clip(quote, 400), Note: clip(strings.TrimSpace(q.Note), 400)})
+		d.Quotes = append(d.Quotes, DraftStep{Role: role, File: q.File, Line: line, Quote: textx.Clip(quote, 400), Note: textx.Clip(strings.TrimSpace(q.Note), 400)})
 	}
 }
 
@@ -318,9 +319,9 @@ func Diagnose(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sea
 		if !wantFix || res.RootCause == "" {
 			what = "usable diagnosis was produced"
 		}
-		res.Reason = fmt.Sprintf("No %s in %d attempt(s). Last problem: %s", what, attempt, clip(problem, 400))
+		res.Reason = fmt.Sprintf("No %s in %d attempt(s). Last problem: %s", what, attempt, textx.Clip(problem, 400))
 		// The problem can quote sandbox output, which is target content.
-		user = "Your previous answer was rejected for the reason below.\n" + sealer.Wrap("rejection details", clip(problem, 1500)) +
+		user = "Your previous answer was rejected for the reason below.\n" + sealer.Wrap("rejection details", textx.Clip(problem, 1500)) +
 			"\n\nCorrect that and reply again in the same JSON format.\n\n" + base
 	}
 	return res, nil

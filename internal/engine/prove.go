@@ -20,6 +20,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/mapper"
 	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -60,9 +61,9 @@ func (l *lab) openPR(ctx context.Context, branch string, fixed []finding.Finding
 	if len(fixed) == 1 {
 		title = "fix: " + fixed[0].Title
 	}
-	url, err := open(ctx, gitx.PRRequest{Dir: l.worktree, Branch: branch, Title: clipText(title, 120), Body: body.String()})
+	url, err := open(ctx, gitx.PRRequest{Dir: l.worktree, Branch: branch, Title: textx.Clip(title, 120), Body: body.String()})
 	if err != nil {
-		return "The pull request was not opened: " + clipText(err.Error(), 300)
+		return "The pull request was not opened: " + textx.Clip(err.Error(), 300)
 	}
 	return "Draft pull request opened: " + url
 }
@@ -204,7 +205,7 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 		if ctx.Err() != nil {
 			return f, ctx.Err()
 		}
-		f.Proof.Reason = "Traced by reading the code. The proof step failed: " + clipText(perr.Error(), 200)
+		f.Proof.Reason = "Traced by reading the code. The proof step failed: " + textx.Clip(perr.Error(), 200)
 		perr = nil
 	}
 	if proof.PoC != nil {
@@ -265,7 +266,7 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 		if ctx.Err() != nil {
 			return f, ctx.Err()
 		}
-		f.Remediation.Verification = "no patch: the fix step failed (" + clipText(ferr.Error(), 200) + ")"
+		f.Remediation.Verification = "no patch: the fix step failed (" + textx.Clip(ferr.Error(), 200) + ")"
 		return f, nil
 	}
 	switch {
@@ -377,7 +378,7 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 		dirty, derr := gitx.Dirty(ctx, l.root, names...)
 		switch {
 		case derr != nil:
-			skipped = append(skipped, fmt.Sprintf("%s could not be compared with the last commit: %s", fx.id, clipText(derr.Error(), 200)))
+			skipped = append(skipped, fmt.Sprintf("%s could not be compared with the last commit: %s", fx.id, textx.Clip(derr.Error(), 200)))
 		case dirty:
 			skipped = append(skipped, fmt.Sprintf("%s changes %s, which has uncommitted changes in your working tree; commit or stash them and scan again to get this fix on a branch", fx.id, strings.Join(names, ", ")))
 		default:
@@ -395,7 +396,7 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 		return "", "The fix branch could not be created: " + err.Error()
 	}
 	if err := gitx.AddWorktree(ctx, top, wt, branch); err != nil {
-		return "", "The fix branch could not be created (" + clipText(err.Error(), 200) + "), so fixes were written as patch files only."
+		return "", "The fix branch could not be created (" + textx.Clip(err.Error(), 200) + "), so fixes were written as patch files only."
 	}
 	touched := map[string]string{}
 	committed := 0

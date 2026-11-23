@@ -18,6 +18,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 const (
@@ -151,7 +152,7 @@ func (m debugModel) provider() *llm.Fake {
 				reply["files"] = map[string]string{"calc.py": m.fix}
 			}
 		default:
-			return resp, fmt.Errorf("unexpected stage: %s", clipText(req.System, 200))
+			return resp, fmt.Errorf("unexpected stage: %s", textx.Clip(req.System, 200))
 		}
 		b, _ := json.Marshal(reply)
 		resp.Text = string(b)

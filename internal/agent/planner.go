@@ -12,6 +12,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/mapper"
 	"github.com/TMHSDigital/spackle/internal/seed"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // Intent is one planned investigation.
@@ -52,7 +53,7 @@ func Plan(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer,
 		}
 	}
 	for _, l := range capSlice(leads, 150) {
-		in.Leads = append(in.Leads, planLead{ID: l.ID, Source: l.Source, Class: l.Class, Title: l.Title, File: l.File, Line: l.Line, Snippet: clip(l.Snippet, 160)})
+		in.Leads = append(in.Leads, planLead{ID: l.ID, Source: l.Source, Class: l.Class, Title: l.Title, File: l.File, Line: l.Line, Snippet: textx.Clip(l.Snippet, 160)})
 	}
 	raw, err := json.MarshalIndent(in, "", " ")
 	if err != nil {
@@ -84,8 +85,8 @@ func validateIntents(in []Intent, m mapper.Map, leads []seed.Lead, limit int, so
 	}
 	var out []Intent
 	for _, it := range in {
-		it.Title = clip(strings.TrimSpace(it.Title), 160)
-		it.Hypothesis = clip(strings.TrimSpace(it.Hypothesis), 600)
+		it.Title = textx.Clip(strings.TrimSpace(it.Title), 160)
+		it.Hypothesis = textx.Clip(strings.TrimSpace(it.Hypothesis), 600)
 		if it.Title == "" && it.Hypothesis == "" {
 			continue
 		}

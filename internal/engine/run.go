@@ -21,6 +21,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
+	"github.com/TMHSDigital/spackle/internal/textx"
 	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
@@ -350,7 +351,7 @@ func firstSentence(s string) string {
 			break
 		}
 	}
-	return clipText(s, 160)
+	return textx.Clip(s, 160)
 }
 
 // deterministic reports each lead as a plausible finding. It is the whole

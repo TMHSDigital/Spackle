@@ -9,6 +9,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // EndpointReview is an investigator's assessment of one running-target
@@ -86,7 +87,7 @@ func InvestigateEndpoint(ctx context.Context, r *Runner, parent int64, sealer *e
 	if err != nil {
 		return rev, err
 	}
-	user := "Assess this observation.\n\n" + sealer.Wrap("observation", string(raw)) + "\n\n" + sealer.Wrap("recorded exchanges", clip(exchanges, 12000))
+	user := "Assess this observation.\n\n" + sealer.Wrap("observation", string(raw)) + "\n\n" + sealer.Wrap("recorded exchanges", textx.Clip(exchanges, 12000))
 	out, err := r.Run(ctx, parent, endpointSystem(sealer), user, reg)
 	if err != nil {
 		return rev, err
@@ -102,7 +103,7 @@ func InvestigateEndpoint(ctx context.Context, r *Runner, parent int64, sealer *e
 	}
 	switch strings.ToLower(strings.TrimSpace(reply.Verdict)) {
 	case "not_confirmed":
-		rev.Reason = clip(strings.TrimSpace(reply.Reason), 1000)
+		rev.Reason = textx.Clip(strings.TrimSpace(reply.Reason), 1000)
 		if rev.Reason == "" {
 			rev.Rejected = "the model said the observation was not confirmed but gave no reason"
 		}
@@ -113,18 +114,18 @@ func InvestigateEndpoint(ctx context.Context, r *Runner, parent int64, sealer *e
 		return rev, nil
 	}
 	rev.Confirmed = true
-	rev.Reason = clip(strings.TrimSpace(reply.Reason), 1000)
+	rev.Reason = textx.Clip(strings.TrimSpace(reply.Reason), 1000)
 
 	g := f
 	if t := strings.TrimSpace(reply.Title); t != "" {
-		g.Title = clip(t, 200)
+		g.Title = textx.Clip(t, 200)
 	}
 	if d := strings.TrimSpace(reply.Description); d != "" {
-		g.Flaw.Description = clip(d, 2000)
+		g.Flaw.Description = textx.Clip(d, 2000)
 	}
 	// The score is computed from the vector. An invalid vector leaves the
 	// severity the probe assigned.
-	if sev, serr := finding.SeverityFromVector(reply.Vector, clip(reply.SeverityReasoning, 800)); serr == nil {
+	if sev, serr := finding.SeverityFromVector(reply.Vector, textx.Clip(reply.SeverityReasoning, 800)); serr == nil {
 		g.Severity = sev
 	}
 	g.Exploitation = finding.Exploitation{
@@ -135,9 +136,9 @@ func InvestigateEndpoint(ctx context.Context, r *Runner, parent int64, sealer *e
 	g.BlastRadius.Gains = clipAll(reply.Gains, 8, 400)
 	g.BlastRadius.Exposed = clipAll(reply.Exposed, 8, 400)
 	if s := strings.TrimSpace(reply.FixSummary); s != "" {
-		g.Remediation.Summary = clip(s, 1200)
+		g.Remediation.Summary = textx.Clip(s, 1200)
 	}
-	g.Remediation.Why = clip(reply.FixWhy, 1200)
+	g.Remediation.Why = textx.Clip(reply.FixWhy, 1200)
 	g.Remediation.DefenseInDepth = clipAll(reply.DefenseInDepth, 6, 400)
 	// Keep only evidence that was really recorded.
 	for _, id := range reply.Evidence {
@@ -150,7 +151,7 @@ func InvestigateEndpoint(ctx context.Context, r *Runner, parent int64, sealer *e
 	g.Origin = append(g.Origin, "investigator:endpoint")
 	if verr := g.Validate(); verr != nil {
 		rev.Confirmed = false
-		rev.Rejected = "the assessment produced an invalid finding: " + clip(verr.Error(), 300)
+		rev.Rejected = "the assessment produced an invalid finding: " + textx.Clip(verr.Error(), 300)
 		return rev, nil
 	}
 	rev.Finding = g
