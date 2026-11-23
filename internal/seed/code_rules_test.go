@@ -299,12 +299,12 @@ func TestCodeRulesMatchAndSkip(t *testing.T) {
 				t.Fatalf("rule %s needs at least one matching and one safe snippet in ruleCases", r.ID)
 			}
 			for _, src := range c.match {
-				if got := matchRules([]*Rule{&r}, "f", src); len(got) == 0 {
+				if got := matchRules([]*Rule{&r}, r.Langs[0], "f", src); len(got) == 0 {
 					t.Errorf("should match: %s", src)
 				}
 			}
 			for _, src := range c.safe {
-				if got := matchRules([]*Rule{&r}, "f", src); len(got) != 0 {
+				if got := matchRules([]*Rule{&r}, r.Langs[0], "f", src); len(got) != 0 {
 					t.Errorf("should not match: %s", src)
 				}
 			}
@@ -449,6 +449,53 @@ func TestSeederSets(t *testing.T) {
 	for _, s := range Builtin() {
 		if ok, _ := s.Available(); !ok {
 			t.Errorf("built-in seeder %s must always be available", s.Name())
+		}
+	}
+}
+
+// Comment handling depends on the language, and Exclude and Require see
+// only the code part of a line.
+func TestCodeRulesCommentHandling(t *testing.T) {
+	byID := map[string]*Rule{}
+	for i := range codeRules {
+		byID[codeRules[i].ID] = &codeRules[i]
+	}
+	cases := []struct {
+		rule, lang, src string
+		want            bool
+	}{
+		// A statement that starts with * or # is code, not a comment.
+		{"go-tls-skip-verify", "go", "\t*cfg = tls.Config{InsecureSkipVerify: true}", true},
+		{"go-file-from-request", "go", "\t*out, err = os.ReadFile(r.URL.Query().Get(\"f\"))", true},
+		{"js-math-random-secret", "javascript", "  #token = Math.random().toString(36)", true},
+		{"js-child-process-exec", "javascript", "  #run(cmd) { return exec(\"sh \" + cmd) }", true},
+		// A word in a trailing comment does not hide the lead.
+		{"py-yaml-load", "python", "cfg = yaml.unsafe_load(f)  # SafeLoader is too strict", true},
+		{"py-tls-verify-false", "python", "r = requests.get(url, verify=False)  # jwt.decode( elsewhere", true},
+		{"py-flask-debug", "python", "app.run(host='127.0.0.1', debug=True)  # not 0.0.0.0", true},
+		// A trailing comment does not turn a harmless literal into a lead.
+		{"js-inner-html", "javascript", "el.innerHTML = '';  // reset", false},
+		// Comments themselves never match, in each language's own syntax.
+		{"go-tls-skip-verify", "go", "// cfg := tls.Config{InsecureSkipVerify: true}", false},
+		{"go-tls-skip-verify", "go", "/*\n * cfg := tls.Config{InsecureSkipVerify: true}\n */", false},
+		{"go-tls-skip-verify", "go", "x := 1 // tls.Config{InsecureSkipVerify: true}", false},
+		{"py-tls-verify-false", "python", "# r = requests.get(url, verify=False)", false},
+		// A comment marker inside a string literal is not a comment.
+		{"js-child-process-exec", "javascript", "exec(\"curl http://\" + host + \"/x\")", true},
+		// A block comment ends where it ends: the code after it is seen.
+		{"go-tls-skip-verify", "go", "/* note */ cfg := tls.Config{InsecureSkipVerify: true}", true},
+		// "/*" inside a regular expression literal does not start a comment.
+		{"js-child-process-exec", "javascript", "const re = /\\/*$/\nexec(\"sh \" + cmd)", true},
+	}
+	for _, c := range cases {
+		r, ok := byID[c.rule]
+		if !ok {
+			t.Errorf("unknown rule %s", c.rule)
+			continue
+		}
+		got := len(matchRules([]*Rule{r}, c.lang, "f", c.src)) > 0
+		if got != c.want {
+			t.Errorf("%s on %q: lead=%v, want %v", c.rule, c.src, got, c.want)
 		}
 	}
 }

@@ -67,11 +67,83 @@ func isTestPath(rel string) bool {
 	return false
 }
 
-// isCommentLine reports whether a trimmed line is only a comment in Go,
-// Python, JavaScript or TypeScript.
-func isCommentLine(trimmed string) bool {
-	return strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") ||
-		strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "/*")
+// commentStyle says how a language writes comments.
+type commentStyle struct {
+	hash    bool // "#" starts a comment that runs to the end of the line
+	slashes bool // "//" does, and "/* ... */" is a block comment
+}
+
+func commentStyleOf(lang string) commentStyle {
+	switch lang {
+	case "python", "ruby", "shell", "yaml", "toml", "dockerfile", "terraform":
+		return commentStyle{hash: true}
+	case "php":
+		return commentStyle{hash: true, slashes: true}
+	case "html", "xml":
+		return commentStyle{}
+	}
+	return commentStyle{slashes: true}
+}
+
+// stripComments returns the code part of each line: the line with comments
+// removed, in the comment syntax of the language. Rules are matched against
+// it, so a word in a comment can neither hide a lead nor produce one, and a
+// statement that starts with "*" (Go, Python) or "#" (a JavaScript private
+// member) is still code. Comment markers inside string literals are kept.
+// It is a line scanner, not a parser: when in doubt it keeps the text.
+func stripComments(lines []string, st commentStyle) []string {
+	out := make([]string, len(lines))
+	inBlock := false
+	for n, line := range lines {
+		var b strings.Builder
+		var quote byte
+		for i := 0; i < len(line); i++ {
+			c := line[i]
+			next := byte(0)
+			if i+1 < len(line) {
+				next = line[i+1]
+			}
+			switch {
+			case inBlock:
+				if c == '*' && next == '/' {
+					inBlock = false
+					i++
+				}
+				continue
+			case quote != 0:
+				b.WriteByte(c)
+				if c == '\\' && next != 0 {
+					b.WriteByte(next)
+					i++
+				} else if c == quote {
+					quote = 0
+				}
+				continue
+			case c == '"' || c == '\'' || c == '`':
+				quote = c
+			case st.hash && c == '#':
+				i = len(line)
+				continue
+			case st.slashes && c == '/' && next == '/':
+				i = len(line)
+				continue
+			case st.slashes && c == '/' && next == '*' && !inRegexLiteral(line, i):
+				inBlock = true
+				i++
+				continue
+			}
+			b.WriteByte(c)
+		}
+		out[n] = b.String()
+	}
+	return out
+}
+
+// inRegexLiteral guesses whether the "/*" at i sits inside a regular
+// expression literal such as /\/*$/ or /[/*]/, where it is not a comment.
+// Reading it as one would hide every following line up to the next "*/".
+func inRegexLiteral(line string, i int) bool {
+	return i > 0 && (line[i-1] == '\\' || line[i-1] == '[')
 }
 
 func (s codeSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
@@ -99,30 +171,31 @@ func (s codeSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lea
 			}
 			continue
 		}
-		leads = append(leads, matchRules(rules, f.Rel, text)...)
+		leads = append(leads, matchRules(rules, f.Lang, f.Rel, text)...)
 	}
 	return leads, firstErr
 }
 
-func matchRules(rules []*Rule, rel, text string) []Lead {
+func matchRules(rules []*Rule, lang, rel, text string) []Lead {
 	var leads []Lead
 	lines := strings.Split(text, "\n")
+	code := stripComments(lines, commentStyleOf(lang))
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || isCommentLine(trimmed) {
-			continue
+		c := strings.TrimRight(code[i], " \t")
+		if strings.TrimSpace(c) == "" {
+			continue // blank, or nothing but a comment
 		}
 		for _, r := range rules {
-			if !r.Pattern.MatchString(line) {
+			if !r.Pattern.MatchString(c) {
 				continue
 			}
-			if r.Exclude != nil && r.Exclude.MatchString(line) {
+			if r.Exclude != nil && r.Exclude.MatchString(c) {
 				continue
 			}
-			if r.Require != nil && !r.Require.MatchString(line) {
+			if r.Require != nil && !r.Require.MatchString(c) {
 				continue
 			}
-			if r.Near != nil && !nearMatch(r.Near, lines, i, r.NearLines) {
+			if r.Near != nil && !nearMatch(r.Near, code, i, r.NearLines) {
 				continue
 			}
 			l := Lead{
@@ -147,10 +220,11 @@ func matchRules(rules []*Rule, rel, text string) []Lead {
 	return leads
 }
 
-func nearMatch(re *regexp.Regexp, lines []string, i, window int) bool {
-	lo, hi := max(i-window, 0), min(i+window, len(lines)-1)
+// nearMatch looks for re in the code part of the lines around i.
+func nearMatch(re *regexp.Regexp, code []string, i, window int) bool {
+	lo, hi := max(i-window, 0), min(i+window, len(code)-1)
 	for j := lo; j <= hi; j++ {
-		if t := strings.TrimSpace(lines[j]); !isCommentLine(t) && re.MatchString(lines[j]) {
+		if re.MatchString(code[j]) {
 			return true
 		}
 	}
