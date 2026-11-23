@@ -150,11 +150,12 @@ func TestVerifyFixRejections(t *testing.T) {
 			want:    "the proof of concept still succeeds against the patched code", runs: "fix-compile,fix-verify",
 		},
 		{
-			// The marker alone decides: a proof that prints it has shown the
-			// flaw even when it then exits non-zero.
+			// A proof that prints the marker has still observed the flaw's
+			// effect, even when it then exits non-zero: the patch is
+			// rejected, and the message says what happened.
 			name:    "proof prints the marker on stderr and exits non-zero",
 			results: map[string]sandbox.Result{"proof": {ExitCode: 1, Stderr: "boom " + fixMarker}},
-			want:    "the proof of concept still succeeds against the patched code", runs: "fix-compile,fix-verify",
+			want:    "the proof of concept printed its marker and then exited with code 1 against the patched code: the flaw's effect was still observed", runs: "fix-compile,fix-verify",
 		},
 		{
 			name:    "proof times out against the patch",

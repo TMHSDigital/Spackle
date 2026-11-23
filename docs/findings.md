@@ -219,7 +219,7 @@ Debug mode uses one more class, `bug`, for a functional failure.
 
 ## Verifying a fix
 
-`spackle verify <run-id>` re-runs the stored proof of concept of every finding the scan demonstrated against the code as it is now. A proof that ran during the scan and did not show the flaw is skipped, and its finding is left as it is. The run id may be a unique prefix, or `latest`. Use it after you apply a patch or merge the fix branch, or after you fix a finding by hand.
+`spackle verify <run-id>` re-runs the stored proof of concept of every finding the scan demonstrated against the code as it is now. A proof that ran during the scan and did not show the flaw is skipped, and its finding is left as it is. A proof succeeds when it prints its marker and exits with code 0. One that times out, is killed, or prints its marker and then fails is inconclusive: the finding keeps its status. The run id may be a unique prefix, or `latest`. Use it after you apply a patch or merge the fix branch, or after you fix a finding by hand.
 
 - **What it needs.** A container runtime: proofs run only in the sandbox, and without one the command refuses instead of guessing. The run must have stored proofs, which a scan keeps for each finding it demonstrated.
 - **Which runs.** Runs of a local directory only. A run of a git URL scanned a clone, and a run of a running target has no code to re-run a proof against; both are refused.

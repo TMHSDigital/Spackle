@@ -234,14 +234,20 @@ func verifyFix(ctx context.Context, box *Box, in FixInput, replyText string) (pr
 		if rerr != nil {
 			return "", nil, "", "", false, rerr
 		}
-		if run.Inconclusive() {
+		switch JudgeProof(run, in.PoC.Marker) {
+		case ProofInconclusive:
+			if !run.Inconclusive() {
+				// The marker was printed, so the flaw's effect was still
+				// observed, although the proof then failed.
+				return "the proof of concept " + InconclusiveWhy(run) + " against the patched code: the flaw's effect was still observed, so the flaw is still there", nil, "", "", false, nil
+			}
 			// A proof that hangs or is killed shows nothing either way.
 			// Counting it as "no longer succeeds" would accept a patch
 			// that merely breaks the program.
 			return "the proof of concept timed out or was killed against the patched code, so it does not show that the flaw is closed. The patch must leave the program running normally", nil, "", "", false, nil
-		}
-		if strings.Contains(run.Stdout+run.Stderr, in.PoC.Marker) {
+		case ProofSucceeded:
 			return "the proof of concept still succeeds against the patched code, so the flaw is still there", nil, "", "", false, nil
+		case ProofNotShown:
 		}
 		proofClosed = true
 		checked = append(checked, "the proof of concept no longer succeeds")

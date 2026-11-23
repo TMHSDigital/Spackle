@@ -828,7 +828,9 @@ func TestVerifyOutcomeNeedsTheMarkerAndACleanExit(t *testing.T) {
 		{"marker on stderr and exit 0", func(spec sandbox.Spec) (sandbox.Result, error) {
 			return sandbox.Result{Stderr: spec.Files[gatePoCRel]}, nil
 		}, true, false, finding.StatusOpen, "still-reproduces", "The proof still succeeds"},
-		{"marker but exit 1", withMarker(sandbox.Result{ExitCode: 1}), false, false, finding.StatusFixed, "no-longer-reproduces", "The proof no longer succeeds against the current code."},
+		// The marker without a clean exit is not the proof succeeding, and
+		// it is not a fix either: the effect was still observed.
+		{"marker but exit 1", withMarker(sandbox.Result{ExitCode: 1}), true, true, finding.StatusOpen, "inconclusive", "it printed its marker and then exited with code 1, which shows neither"},
 		{"exit 0 without the marker", func(sandbox.Spec) (sandbox.Result, error) {
 			return sandbox.Result{Stdout: "ok"}, nil
 		}, false, false, finding.StatusFixed, "no-longer-reproduces", "The proof no longer succeeds"},

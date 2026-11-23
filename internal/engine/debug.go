@@ -421,7 +421,10 @@ func noTestMatched(cmd []string, res sandbox.Result) bool {
 
 // stillFails reports whether a run of the reproduction shows the failure.
 // For a test that is a non-zero exit or a timeout. For an issue script it is
-// the marker, which the script prints only when it observed the problem.
+// the marker, which the script prints only when it observed the problem:
+// any sight of it counts, whatever the exit code, so this is deliberately
+// looser than agent.JudgeProof. The callers that must not take a hung or
+// killed script for an answer check Inconclusive first.
 func (d *debugRun) stillFails(rep reproduction, res sandbox.Result) bool {
 	if rep.poc != nil {
 		return !res.TimedOut && strings.Contains(res.Stdout+res.Stderr, rep.poc.Marker)
@@ -657,7 +660,7 @@ func (d *debugRun) probe(ctx context.Context, rep reproduction, rev string) (bad
 		return false, err
 	}
 	if rep.poc != nil && res.Inconclusive() {
-		return false, fmt.Errorf("the reproduction script %s at commit %s, which shows neither that the failure is there nor that it is not", inconclusiveWhy(res), shortRev(rev))
+		return false, fmt.Errorf("the reproduction script %s at commit %s, which shows neither that the failure is there nor that it is not", agent.InconclusiveWhy(res), shortRev(rev))
 	}
 	bad = d.stillFails(rep, res)
 	verdict := "does not show the failure"
@@ -742,7 +745,7 @@ func (d *debugRun) check(rep reproduction) agent.Check {
 			return "", "", false, rerr
 		}
 		if rep.poc != nil && res.Inconclusive() {
-			return "the reproduction script " + inconclusiveWhy(res) + " against the patched code, so it does not show that the cause is gone. The patch must leave the program running normally", "", false, nil
+			return "the reproduction script " + agent.InconclusiveWhy(res) + " against the patched code, so it does not show that the cause is gone. The patch must leave the program running normally", "", false, nil
 		}
 		if d.stillFails(rep, res) {
 			if rep.poc != nil {

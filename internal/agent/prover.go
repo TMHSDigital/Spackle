@@ -244,7 +244,7 @@ func Prove(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer
 		output, _ := redact.Apply(strings.TrimSpace(run.Stdout + "\n" + run.Stderr))
 		res.Output = clip(output, 4000)
 		res.PoC = &PoC{Files: files, Command: cmd, Marker: marker, Language: language, Image: image, Explanation: clip(reply.Explanation, 800)}
-		if !run.TimedOut && run.ExitCode == 0 && strings.Contains(run.Stdout+run.Stderr, marker) {
+		if JudgeProof(run, marker) == ProofSucceeded {
 			res.Demonstrated = true
 			res.Reason = ""
 			return res, nil

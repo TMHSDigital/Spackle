@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Standard input redirected from the null device (`< /dev/null`, `< NUL`) is no longer taken for a terminal. `scan`, `bench` and `runs prune` now say that there is no terminal to confirm on and to pass `--yes`, instead of showing a prompt nobody can answer.
 - Runs started in the same second now sort in the order they were started, so `latest`, `spackle runs` and `spackle runs prune --keep` no longer pick the older of two such runs. A run id keeps its form: after the timestamp come a two-digit sequence number and four random hex digits, where there used to be six random digits.
 - A running-target assessment that uses up the scope's `max_requests` now ends with outcome `budget-exhausted`, and the report lists the findings that were not assessed. It used to end as `completed`, and a finding could be dismissed by a model that had been refused the requests it asked for.
+- `spackle verify` no longer marks a finding fixed when its proof prints the marker and then exits with an error. The flaw was still observed, so the outcome is inconclusive and the finding keeps its status. The scan, the fixer and verify now judge a proof run by one rule.
 
 ## [0.1.0] - 2026-11-22
 

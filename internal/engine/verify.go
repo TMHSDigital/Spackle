@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TMHSDigital/spackle/internal/agent"
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
@@ -158,17 +159,23 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		if aerr != nil {
 			return outcomes, aerr
 		}
-		if res.Inconclusive() {
+		verdict := agent.JudgeProof(res, j.man.Marker)
+		if verdict == agent.ProofInconclusive {
 			// A proof that hangs or is killed shows nothing either way:
 			// keep the finding as it is and say so.
-			note := fmt.Sprintf("The proof could not be verified: it %s before it finished, so the finding keeps its status (%s). Raise the [sandbox] timeout or memory limit and run verify again.", inconclusiveWhy(res), j.f.Status)
+			note := fmt.Sprintf("The proof could not be verified: it %s before it finished, so the finding keeps its status (%s). Raise the [sandbox] timeout or memory limit and run verify again.", agent.InconclusiveWhy(res), j.f.Status)
+			if !res.Inconclusive() {
+				// The marker was printed and the proof then failed. That
+				// is not the proof succeeding, and it is not a fix.
+				note = fmt.Sprintf("The proof could not be verified: it %s, which shows neither that the flaw is still there nor that it is gone, so the finding keeps its status (%s). Read the proof's output to see what failed.", agent.InconclusiveWhy(res), j.f.Status)
+			}
 			if _, err := led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: j.f.ID, Stage: "verify", Outcome: "inconclusive", Reason: note}); err != nil {
 				return outcomes, err
 			}
 			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
 			continue
 		}
-		reproduces := res.ExitCode == 0 && strings.Contains(res.Stdout+res.Stderr, j.man.Marker)
+		reproduces := verdict == agent.ProofSucceeded
 		f := j.f
 		out := VerifyOutcome{FindingID: f.ID, Title: f.Title, Reproduces: reproduces}
 		output, _ := redact.Apply(strings.TrimSpace(res.Stdout + "\n" + res.Stderr))
@@ -207,11 +214,4 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		return outcomes, err
 	}
 	return outcomes, WriteArtifacts(opts.RunDir, updated)
-}
-
-func inconclusiveWhy(res sandbox.Result) string {
-	if res.TimedOut {
-		return "timed out"
-	}
-	return "was killed (exit code 137, usually the memory limit)"
 }
