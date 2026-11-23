@@ -14,6 +14,9 @@ type RunStart struct {
 	// TargetPath is the absolute directory that was scanned, for a path
 	// target. Verify re-runs proofs against it, wherever it is run from.
 	TargetPath string `json:"target_path,omitempty"`
+	// RepoPrefix is the scanned directory's path from the top of its git
+	// work tree, with forward slashes ("" at the top or outside git).
+	RepoPrefix string `json:"repo_prefix,omitempty"`
 	Commit     string `json:"commit,omitempty"`
 	Mode       string `json:"mode"` // deterministic|agentic
 	Provider   string `json:"provider,omitempty"`

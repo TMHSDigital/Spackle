@@ -1078,3 +1078,18 @@ func TestLoadIncompleteRun(t *testing.T) {
 		t.Error("loading a directory with no ledger did not fail")
 	}
 }
+
+func TestSARIFPathsAreRelativeToTheRepositoryRoot(t *testing.T) {
+	run := fixtureRun()
+	run.RepoPrefix = "services/api"
+	var buf bytes.Buffer
+	if err := Render("sarif", run, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `"uri": "services/api/app/routes/orders.py"`) {
+		t.Fatalf("a scan of a repository subdirectory must emit URIs from the repository root:\n%s", buf.String())
+	}
+	if loc := sarifLocate(finding.Location{File: "a.go"}, ""); loc.PhysicalLocation.ArtifactLocation.URI != "a.go" {
+		t.Fatalf("with no prefix the path must be unchanged: %+v", loc.PhysicalLocation)
+	}
+}

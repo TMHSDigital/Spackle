@@ -24,7 +24,11 @@ type Run struct {
 	TargetKind string
 	// TargetPath is the absolute directory a path target was scanned in.
 	// It is empty for runs stored before it was recorded.
-	TargetPath  string
+	TargetPath string
+	// RepoPrefix is the scanned directory's path from the top of its git
+	// work tree ("" at the top). Finding paths are relative to the scanned
+	// directory; SARIF needs them relative to the repository.
+	RepoPrefix  string
 	Commit      string
 	Mode        string // deterministic|agentic
 	Provider    string
@@ -144,6 +148,7 @@ func Load(runDir string) (Run, error) {
 			if !sawStart {
 				run.ID, run.Version, run.Command = d.RunID, d.Version, d.Command
 				run.Target, run.TargetKind, run.Commit, run.TargetPath = d.Target, d.TargetKind, d.Commit, d.TargetPath
+				run.RepoPrefix = d.RepoPrefix
 				run.Mode, run.Provider, run.Model, run.Offline = d.Mode, d.Provider, d.Model, d.Offline
 				run.Scope, run.ScopeSource, run.Isolation = d.Scope, d.ScopeSource, d.Isolation
 				run.StartedAt = ev.TS

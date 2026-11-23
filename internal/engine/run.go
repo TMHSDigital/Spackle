@@ -148,13 +148,14 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		r.lab = r.newLab(root, m.Tests, rt, why)
 	}
 
-	commit := ""
+	commit, repoPrefix := "", ""
 	if gitx.HasTracked(ctx, root) {
 		commit, _ = gitx.HeadSHA(ctx, root)
+		repoPrefix, _ = gitx.Prefix(ctx, root)
 	}
 	start := ledger.RunStart{
 		RunID: runID, Version: version.Version, Command: "scan",
-		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit,
+		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit, RepoPrefix: repoPrefix,
 		Mode: "deterministic", Offline: r.cfg.Offline,
 		Isolation: "not used: no proof of concept was run",
 	}

@@ -117,7 +117,7 @@ func renderSARIF(run Run, w io.Writer) error {
 			RuleIndex: index[f.Class],
 			Level:     sarifLevel(f.Severity.Label),
 			Message:   sarifText{Text: sarifMessage(f)},
-			Locations: []sarifLocation{sarifLocate(f.Location)},
+			Locations: []sarifLocation{sarifLocate(f.Location, run.RepoPrefix)},
 			// One key only, so map order cannot affect the output.
 			PartialFingerprints: map[string]string{"spackle/v1": f.ID},
 			Properties: sarifResultProps{
@@ -241,11 +241,17 @@ func sarifMessage(f finding.Finding) string {
 
 // sarifLocate gives a file finding a physical location relative to the
 // source root, and an endpoint finding a logical location. A finding with no
-// file gets no physical location at all.
-func sarifLocate(l finding.Location) sarifLocation {
+// file gets no physical location at all. Code scanning resolves a relative
+// URI against the repository root, so when a subdirectory of a repository
+// was scanned, its path from the root (prefix) is put in front.
+func sarifLocate(l finding.Location, prefix string) sarifLocation {
 	var loc sarifLocation
 	if l.File != "" {
-		phys := &sarifPhysical{ArtifactLocation: sarifArtifact{URI: sarifURI(l.File), URIBaseID: sarifSrcRoot}}
+		file := l.File
+		if prefix = strings.Trim(prefix, "/"); prefix != "" {
+			file = prefix + "/" + file
+		}
+		phys := &sarifPhysical{ArtifactLocation: sarifArtifact{URI: sarifURI(file), URIBaseID: sarifSrcRoot}}
 		if l.StartLine > 0 {
 			phys.Region = &sarifRegion{StartLine: l.StartLine, EndLine: max(l.StartLine, l.EndLine)}
 		}

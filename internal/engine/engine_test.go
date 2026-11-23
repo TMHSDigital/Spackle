@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -399,5 +400,35 @@ func TestScanConfigExcludesPathsAndDisablesRules(t *testing.T) {
 		if !strings.Contains(notes, want) {
 			t.Errorf("notes lack %q: %s", want, notes)
 		}
+	}
+}
+
+func TestRunRecordsThePathFromTheRepositoryRoot(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	// The repository is the parent of the scanned directory.
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"add", "-A"}, {"commit", "-q", "-m", "init"}} {
+		full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false"}, args...)
+		cmd := exec.Command("git", full...)
+		cmd.Dir = filepath.Dir(o.Target)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.RepoPrefix != "my app" {
+		t.Fatalf("repo prefix = %q, want %q", res.Run.RepoPrefix, "my app")
+	}
+	var buf bytes.Buffer
+	if err := report.Render("sarif", res.Run, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `"uri": "my%20app/app.py"`) {
+		t.Fatalf("SARIF does not place the finding from the repository root: %s", buf.String())
 	}
 }
