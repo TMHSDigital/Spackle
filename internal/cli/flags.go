@@ -39,24 +39,73 @@ type listFlag []string
 func (l *listFlag) String() string     { return strings.Join(*l, ",") }
 func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }
 
-func (g *globalFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&g.configPath, "config", "", "`file` to read instead of ./spackle.toml")
-	fs.StringVar(&g.provider, "provider", "", "model `provider`: anthropic, openai, openai-compatible or ollama")
-	fs.StringVar(&g.model, "model", "", "model `name` for the provider")
-	fs.StringVar(&g.baseURL, "base-url", "", "endpoint `url` for the openai-compatible and ollama providers")
-	fs.IntVar(&g.budgetTokens, "budget-tokens", 0, "hard cap on total model `tokens` for the run")
-	fs.Float64Var(&g.budgetUSD, "budget-usd", 0, "hard cap on model spend in `USD` for the run")
-	fs.IntVar(&g.maxFindings, "max-findings", 0, "report at most `n` findings, highest severity first")
-	fs.BoolVar(&g.offline, "offline", false, "refuse any connection that would leave this machine")
-	fs.BoolVar(&g.fix, "fix", false, "write and verify fixes (the default)")
-	fs.BoolVar(&g.noFix, "no-fix", false, "find and explain only; do not write fixes")
-	fs.BoolVar(&g.pr, "pr", false, "push the fix branch and open a pull request")
-	fs.StringVar(&g.authorize, "authorize", "", "scope `file` that authorizes a live target")
-	fs.StringVar(&g.format, "format", "", "report `formats`, comma separated: terminal, markdown, html, json, sarif")
-	fs.StringVar(&g.out, "out", "", "`directory` to write reports into")
-	fs.BoolVar(&g.yes, "yes", false, "do not prompt; authorization and budgets must come from flags or config")
-	fs.Var(&g.exclude, "exclude", "`glob` of paths not to scan, relative to the target; may be repeated")
-	fs.StringVar(&g.failOn, "fail-on", "", "lowest `severity` that makes the command exit 1: critical, high, medium, low or never")
+// flagGroup names a set of related flags. A command registers only the
+// groups it reads, so a flag that would be ignored is refused as unknown
+// (exit 2) instead of being accepted and doing nothing.
+type flagGroup uint
+
+const (
+	flagsConfig  flagGroup = 1 << iota // --config
+	flagsModel                         // --provider, --model, --base-url
+	flagsBudget                        // --budget-tokens, --budget-usd, --max-findings
+	flagsOffline                       // --offline
+	flagsFix                           // --fix, --no-fix
+	flagsPR                            // --pr
+	flagsScope                         // --authorize
+	flagsOutput                        // --format, --out
+	flagsYes                           // --yes
+	flagsFailOn                        // --fail-on
+	flagsExclude                       // --exclude
+
+	flagsAll = flagsConfig | flagsModel | flagsBudget | flagsOffline | flagsFix | flagsPR |
+		flagsScope | flagsOutput | flagsYes | flagsFailOn | flagsExclude
+)
+
+// register adds every shared flag. It is for commands that run a scan.
+func (g *globalFlags) register(fs *flag.FlagSet) { g.registerGroups(fs, flagsAll) }
+
+// registerGroups adds the flags of the given groups.
+func (g *globalFlags) registerGroups(fs *flag.FlagSet, groups flagGroup) {
+	has := func(group flagGroup) bool { return groups&group != 0 }
+	if has(flagsConfig) {
+		fs.StringVar(&g.configPath, "config", "", "`file` to read instead of ./spackle.toml")
+	}
+	if has(flagsModel) {
+		fs.StringVar(&g.provider, "provider", "", "model `provider`: anthropic, openai, openai-compatible or ollama")
+		fs.StringVar(&g.model, "model", "", "model `name` for the provider")
+		fs.StringVar(&g.baseURL, "base-url", "", "endpoint `url` for the openai-compatible and ollama providers")
+	}
+	if has(flagsBudget) {
+		fs.IntVar(&g.budgetTokens, "budget-tokens", 0, "hard cap on total model `tokens` for the run")
+		fs.Float64Var(&g.budgetUSD, "budget-usd", 0, "hard cap on model spend in `USD` for the run")
+		fs.IntVar(&g.maxFindings, "max-findings", 0, "report at most `n` findings, highest severity first")
+	}
+	if has(flagsOffline) {
+		fs.BoolVar(&g.offline, "offline", false, "refuse any connection that would leave this machine")
+	}
+	if has(flagsFix) {
+		fs.BoolVar(&g.fix, "fix", false, "write and verify fixes (the default)")
+		fs.BoolVar(&g.noFix, "no-fix", false, "find and explain only; do not write fixes")
+	}
+	if has(flagsPR) {
+		fs.BoolVar(&g.pr, "pr", false, "push the fix branch and open a pull request")
+	}
+	if has(flagsScope) {
+		fs.StringVar(&g.authorize, "authorize", "", "scope `file` that authorizes a live target")
+	}
+	if has(flagsOutput) {
+		fs.StringVar(&g.format, "format", "", "report `formats`, comma separated: terminal, markdown, html, json, sarif")
+		fs.StringVar(&g.out, "out", "", "`directory` to write reports into")
+	}
+	if has(flagsYes) {
+		fs.BoolVar(&g.yes, "yes", false, "do not prompt; authorization and budgets must come from flags or config")
+	}
+	if has(flagsExclude) {
+		fs.Var(&g.exclude, "exclude", "`glob` of paths not to scan, relative to the target; may be repeated")
+	}
+	if has(flagsFailOn) {
+		fs.StringVar(&g.failOn, "fail-on", "", "lowest `severity` that makes the command exit 1: critical, high, medium, low or never")
+	}
 }
 
 // load reads the config file and applies the flags on top of it.

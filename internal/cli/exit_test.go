@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/TMHSDigital/spackle/internal/config"
@@ -106,6 +108,40 @@ func TestExitForLooksAtEveryFinding(t *testing.T) {
 	for _, c := range cases {
 		if got := exitFor(cfg, report.Run{Findings: c.findings}); got != c.want {
 			t.Errorf("%s: exit %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// A flag a command would ignore is not registered for it, so it is refused
+// as unknown instead of being accepted and doing nothing.
+func TestCommandsRefuseFlagsTheyDoNotRead(t *testing.T) {
+	cases := [][]string{
+		{"report", "latest", "--fail-on", "low"},
+		{"report", "latest", "--max-findings", "5"},
+		{"report", "latest", "--provider", "ollama"},
+		{"verify", "latest", "--pr"},
+		{"verify", "latest", "--fail-on", "low"},
+		{"doctor", "--fix"},
+		{"doctor", "--authorize", "scope.toml"},
+		{"debug", ".", "--test", "TestX", "--authorize", "scope.toml"},
+		{"debug", ".", "--test", "TestX", "--pr"},
+		{"debug", ".", "--test", "TestX", "--fail-on", "low"},
+	}
+	for _, args := range cases {
+		var stdout, stderr bytes.Buffer
+		code := Main(args, strings.NewReader(""), &stdout, &stderr)
+		if code != ExitUsage || !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Errorf("%v: exit %d, stderr %q; want exit 2 and an unknown-flag message", args, code, stderr.String())
+		}
+	}
+	// The flags a command does read are still there.
+	for _, args := range [][]string{
+		{"report", "--help"}, {"verify", "--help"}, {"doctor", "--help"}, {"debug", "--help"},
+	} {
+		var stdout, stderr bytes.Buffer
+		Main(args, strings.NewReader(""), &stdout, &stderr)
+		if !strings.Contains(stdout.String()+stderr.String(), "--config") {
+			t.Errorf("%v: help does not list --config", args)
 		}
 	}
 }

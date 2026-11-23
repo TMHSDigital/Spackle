@@ -97,6 +97,8 @@ fail_on = "high"        # critical, high, medium, low or never
 
 Flags that map onto these keys: `--provider`, `--model`, `--base-url`, `--budget-tokens`, `--budget-usd`, `--max-findings`, `--offline`, `--fix`, `--no-fix`, `--pr`, `--format`, `--out`, `--fail-on`, `--exclude` (repeatable, adds to `[scan] exclude`). `--authorize` names a scope file and `--yes` turns off every prompt. There is no flag for `state_dir`, the sandbox settings, `wall_time`, `sandbox_runs` or `max_turns`: set those in the file.
 
+Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr` and `--fail-on`. `report` takes `--config`, `--format` and `--out`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline` and the three model flags. `spackle <command> --help` lists them.
+
 ## Providers
 
 Spackle talks to each provider over plain HTTPS with no vendor SDK. Pick one provider for the run, and optionally a different one per stage.

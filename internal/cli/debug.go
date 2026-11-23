@@ -20,7 +20,7 @@ const maxIssueFile = 64 << 10
 func runDebug(env Env, args []string) int {
 	fs := newFlagSet(env, "debug", "[path] --test <name> | --issue <file|text>", "Start from a failing test or an issue description: reproduce it in the sandbox, find the\nroot cause, write a fix and verify it. With --good, bisect git history for the commit that\nintroduced the failure. Nothing runs outside the sandbox and your working tree is not changed:\nthe fix is a patch file in the run folder, and a branch in a new worktree when the files are in git.\nA model and a container runtime are both required. With no path, the current directory is used.")
 	var g globalFlags
-	g.register(fs)
+	g.registerGroups(fs, flagsAll&^(flagsScope|flagsPR|flagsFailOn))
 	test := fs.String("test", "", "`name` of the failing test to debug")
 	issue := fs.String("issue", "", "issue description: a `file` to read, or the text itself")
 	good := fs.String("good", "", "`revision` known to be good; enables bisect up to HEAD")

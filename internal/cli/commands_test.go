@@ -154,7 +154,7 @@ func TestVerifyUsageErrors(t *testing.T) {
 		{"unknown run id", []string{"verify", "nosuchid", "--config", cfg}, `run "nosuchid" not found`},
 		{"two run ids", []string{"verify", "a", "b", "--config", cfg}, "expected one run id, got 2"},
 		{"no runs stored", []string{"verify", "latest", "--config", emptyState}, "no runs found"},
-		{"fix and no-fix", []string{"verify", "--config", cfg, "--fix", "--no-fix"}, "--fix and --no-fix"},
+		{"a flag verify does not read", []string{"verify", "--config", cfg, "--fix"}, "flag provided but not defined: -fix"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

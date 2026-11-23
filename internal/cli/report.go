@@ -10,7 +10,7 @@ import (
 func runReport(env Env, args []string) int {
 	fs := newFlagSet(env, "report", "<run-id>", "Render a stored run in any format.\nThe report is rebuilt from the run's ledger alone, so it is the same every time.\nThe run id may be a unique prefix, or \"latest\".")
 	var g globalFlags
-	g.register(fs)
+	g.registerGroups(fs, flagsConfig|flagsOutput)
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
 		return flagExit(err)

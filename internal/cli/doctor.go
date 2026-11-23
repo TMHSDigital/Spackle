@@ -25,7 +25,7 @@ type check struct {
 func runDoctor(env Env, args []string) int {
 	fs := newFlagSet(env, "doctor", "", "Check the sandbox runtime, scanners and model configuration.\nMissing optional tools are reported but do not fail the check.")
 	var g globalFlags
-	g.register(fs)
+	g.registerGroups(fs, flagsConfig|flagsModel|flagsOffline)
 	if _, err := parseInterleaved(fs, args); err != nil {
 		return flagExit(err)
 	}
