@@ -3,6 +3,10 @@ name: tool-versions
 # golangci-lint and GoReleaser are pinned in .github/tool-versions.env.
 # Dependabot does not read that file, so this job compares each pin with the
 # tool's latest release once a week and fails when one is behind.
+#
+# It also checks the default sandbox images, which are string literals in
+# internal/config/config.go and so are invisible to Dependabot too: the job
+# fails when one of them is within 60 days of its end of life.
 
 on:
   schedule:
@@ -12,6 +16,7 @@ on:
     paths:
       - .github/tool-versions.env
       - .github/workflows/tool-versions.yml
+      - internal/config/config.go
 
 permissions: read-all
 
@@ -40,3 +45,33 @@ jobs:
           check GOLANGCI_LINT_VERSION golangci/golangci-lint "${GOLANGCI_LINT_VERSION}"
           check GORELEASER_VERSION goreleaser/goreleaser "${GORELEASER_VERSION}"
           exit "${behind}"
+      - name: Default sandbox images are not near end of life
+        run: |
+          set -euo pipefail
+          # End-of-life dates of the default sandbox images, from each
+          # project's release schedule. Add a line when a default changes.
+          eol() {
+            case "$1" in
+              golang:1.27) echo 2027-08-15 ;;       # until Go 1.29 is released
+              python:3.13-slim) echo 2029-10-31 ;;
+              node:22-slim) echo 2027-04-30 ;;
+              *) echo unknown ;;
+            esac
+          }
+          images="$(sed -n '/Images: map\[string\]string{/,/},/p' internal/config/config.go | grep -o '"[a-z]*: *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' | sort -u)"
+          test -n "${images}" || { echo "::error::no default sandbox images were found in internal/config/config.go"; exit 1; }
+          limit="$(date -u -d '+60 days' +%Y-%m-%d)"
+          bad=0
+          for image in ${images}; do
+            end="$(eol "${image}")"
+            if [ "${end}" = unknown ]; then
+              echo "::error file=internal/config/config.go::default sandbox image ${image} has no end-of-life date in this workflow. Add one."
+              bad=1
+            elif [[ "${end}" < "${limit}" ]]; then
+              echo "::error file=internal/config/config.go::default sandbox image ${image} reaches end of life on ${end}. Move the default to a supported release."
+              bad=1
+            else
+              echo "${image} is supported until ${end}."
+            fi
+          done
+          exit "${bad}"

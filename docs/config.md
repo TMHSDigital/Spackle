@@ -425,6 +425,7 @@ Things to know:
 - With no network, a proof can use only the language's standard library and what is already in your repository. Nothing can be installed.
 - `network = "scope"` gives the container the runtime's ordinary bridge network. Spackle does not filter that traffic to your scope: only the container runtime's own networking applies. Leave it at `none` unless you have a specific reason.
 - An image that is not present is pulled on first use. `spackle doctor` shows which images are local.
+- The default images are tags, which move as the upstream projects publish patches. For runs that must be repeatable, set `[sandbox.images]` to digests (`python:3.13-slim@sha256:...`). The defaults are built into each release, so an old release keeps its old defaults: set your own images there too once a default is past its end of life.
 
 ## Scan coverage
 
