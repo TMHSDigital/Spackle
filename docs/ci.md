@@ -58,8 +58,9 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `base-url` | empty | Endpoint for the `openai-compatible` provider |
 | `budget-usd` | `2` | Hard cap on model spend for the run, in USD. Used only when `provider` is set |
 | `fix` | `false` | Write and verify fixes. Off by default in CI; findings are still reported |
-| `args` | empty | Extra arguments passed to `spackle scan`, split on spaces |
+| `args` | empty | Extra arguments passed to `spackle scan`, split on spaces and line breaks, so the value may span several lines. One argument cannot contain a space, and a value with a quote character is refused with exit code 2 |
 | `github-token` | the workflow token | Used to download the release and verify its provenance |
+| `spackle-dir` | empty | Directory that already holds a `spackle` binary. When set, no release is downloaded or verified. Meant for testing a build from source |
 
 ### Outputs
 
@@ -67,6 +68,7 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | :--- | :--- |
 | `sarif` | Path of the SARIF report |
 | `exit-code` | Exit code of the scan: 0, 1, 2 or 3 (see [Exit codes](#exit-codes)) |
+| `has-sarif` | `true` when the scan wrote a SARIF report |
 
 Give the step an `id` to read them:
 

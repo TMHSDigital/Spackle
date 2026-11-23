@@ -21,7 +21,7 @@ inputs:
     required: false
     default: high
   upload-sarif:
-    description: Upload the SARIF report to GitHub code scanning. Needs "security-events: write".
+    description: 'Upload the SARIF report to GitHub code scanning. Needs "security-events: write".'
     required: false
     default: 'true'
   provider:
@@ -45,7 +45,16 @@ inputs:
     required: false
     default: 'false'
   args:
-    description: Extra arguments passed to "spackle scan".
+    description: >-
+      Extra arguments passed to "spackle scan". The value is split on spaces and line
+      breaks, so it may span several lines, but one argument cannot contain a space and
+      quotes are not interpreted: a value with a quote character is refused.
+    required: false
+    default: ''
+  spackle-dir:
+    description: >-
+      Directory that already holds a spackle binary. When set, no release is downloaded
+      or verified and that binary is used. Meant for testing a build from source.
     required: false
     default: ''
   github-token:
@@ -60,12 +69,23 @@ outputs:
   exit-code:
     description: Exit code of the scan (0 no findings at or above fail-on, 1 findings, 2 usage, 3 failure).
     value: ${{ steps.scan.outputs.exit-code }}
+  has-sarif:
+    description: '"true" when the scan wrote a SARIF report.'
+    value: ${{ steps.scan.outputs.has-sarif }}
 
 runs:
   using: composite
   steps:
+    - name: Use the given Spackle binary
+      if: ${{ inputs.spackle-dir != '' }}
+      shell: bash
+      env:
+        SPACKLE_DIR: ${{ inputs.spackle-dir }}
+      run: echo "${SPACKLE_DIR}" >> "${GITHUB_PATH}"
+
     - name: Install Spackle
       id: install
+      if: ${{ inputs.spackle-dir == '' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -128,8 +148,17 @@ runs:
         fi
         if [ "${SPACKLE_FIX}" = "true" ]; then args+=(--fix); else args+=(--no-fix); fi
         if [ -n "${SPACKLE_ARGS}" ]; then
-          read -r -a extra <<< "${SPACKLE_ARGS}"
-          args+=("${extra[@]}")
+          # The value is split on whitespace, line breaks included. Quotes
+          # would not group words, so a quoted value is refused instead of
+          # being passed on in pieces.
+          case "${SPACKLE_ARGS}" in
+            *\"*|*\'*)
+              echo "::error::The args input is split on spaces and line breaks and cannot contain quotes. Put a value with a space in spackle.toml instead."
+              echo "exit-code=2" >> "${GITHUB_OUTPUT}"
+              exit 0 ;;
+          esac
+          read -r -d '' -a extra <<< "${SPACKLE_ARGS}" || true
+          if [ "${#extra[@]}" -gt 0 ]; then args+=("${extra[@]}"); fi
         fi
         spackle "${args[@]}"
         code=$?

@@ -1,0 +1,123 @@
+name: action
+
+# Runs the composite action in this repository (action.yml) the way a consumer
+# would, with a binary built from the checkout, so a renamed flag, a changed
+# report name or a broken script fails here and not in someone else's workflow.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - action.yml
+      - internal/cli/**
+      - .goreleaser.yaml
+      - .github/workflows/action.yml
+  pull_request:
+    paths:
+      - action.yml
+      - internal/cli/**
+      - .goreleaser.yaml
+      - .github/workflows/action.yml
+
+permissions: read-all
+
+concurrency:
+  group: action-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: scan the demo app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: '1.27'
+      - name: Build spackle from the checkout
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/spackle-bin"
+          go build -trimpath -o "${RUNNER_TEMP}/spackle-bin/" ./cmd/spackle
+
+      # Each run of the action is allowed to fail: the assertions below read
+      # its exit-code output instead.
+      - name: Default threshold
+        id: default
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+      - name: Check the SARIF report of the default run
+        shell: bash
+        env:
+          SARIF: ${{ steps.default.outputs.sarif }}
+          HAS_SARIF: ${{ steps.default.outputs.has-sarif }}
+        run: |
+          test "${HAS_SARIF}" = "true" || { echo "::error::has-sarif is '${HAS_SARIF}', want true"; exit 1; }
+          jq -e '.runs[0].results | length > 0' "${SARIF}" > /dev/null || { echo "::error::the SARIF report does not parse or has no results"; exit 1; }
+      - name: fail-on never
+        id: never
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          fail-on: never
+      - name: Arguments on several lines
+        id: multiline
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          args: |
+            --max-findings 5
+            --fail-on never
+      - name: Arguments with quotes are refused
+        id: quoted
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          args: --config "my dir/spackle.toml"
+      - name: An unknown flag is a usage error
+        id: badflag
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          args: --no-such-flag
+      - name: Assert the exit codes
+        shell: bash
+        env:
+          DEFAULT: ${{ steps.default.outputs.exit-code }}
+          NEVER: ${{ steps.never.outputs.exit-code }}
+          MULTILINE: ${{ steps.multiline.outputs.exit-code }}
+          QUOTED: ${{ steps.quoted.outputs.exit-code }}
+          BADFLAG: ${{ steps.badflag.outputs.exit-code }}
+        run: |
+          fail=0
+          check() {
+            if [ "$2" != "$3" ]; then echo "::error::$1: exit-code is '$2', want $3"; fail=1; else echo "$1: exit-code $2"; fi
+          }
+          check "default threshold" "${DEFAULT}" 1
+          check "fail-on never" "${NEVER}" 0
+          # The second line of args must be applied too: it turns the failure off.
+          check "arguments on several lines" "${MULTILINE}" 0
+          check "quoted arguments" "${QUOTED}" 2
+          check "unknown flag" "${BADFLAG}" 2
+          exit "${fail}"

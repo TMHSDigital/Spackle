@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - A `[scan]` configuration table: `exclude` (also `--exclude`, repeatable) keeps paths out of the scan, `include` reads a directory that is skipped by default, and `disable_rules` drops the leads of a rule. The report lists what was excluded.
+- Action input `spackle-dir`, to run the Action with an existing binary instead of a downloaded release, and output `has-sarif`.
 
 ### Changed
 
@@ -38,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A sandbox run that times out while the source is still being copied is now reported as a setup failure instead of a timed-out proof.
 - Large inputs can no longer exhaust memory or stall a run: the diff of a fix is computed in a bounded table (a very large rewrite is shown as one block), a fix may only patch a regular file within the 1 MiB source limit, a Dockerfile instruction with many continuation lines is parsed in linear time, and over-long quotes in a draft are refused before the file is searched.
 - Release pipeline: the container image is built only after the release tests pass, a prerelease tag no longer moves the `latest` image tag, and the image reports the same version, commit and build date as the release archives.
+- The GitHub Action could not be loaded: `action.yml` was not valid YAML (an unquoted colon in an input description). It now parses, and a new workflow runs the Action against the demo app on Linux, macOS and Windows.
+- The Action `args` input now accepts several lines. It used to read only the first line and drop the rest silently. A value with quotes, which would have been split into pieces, is refused with a clear message.
 
 ## [0.1.0] - 2026-11-22
 
