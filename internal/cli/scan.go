@@ -100,13 +100,16 @@ func confirmer(env Env, yes bool) func(engine.Estimate) bool {
 	}
 }
 
-func isTerminal(r io.Reader) bool {
+// isTerminal reports whether r is a terminal somebody can answer a prompt
+// on. The null device is a character device too and is not one. It is a
+// variable only so tests can stand in for a terminal.
+var isTerminal = func(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
 		return false
 	}
 	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return err == nil && st.Mode()&os.ModeCharDevice != 0 && !isNullDevice(f, st)
 }
 
 // emit writes the requested report formats. The terminal format goes to

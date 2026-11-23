@@ -65,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A provider response with a success status and a body that cannot be decoded (an HTML page from a proxy, or a response over the size limit) is no longer requested again. It used to be sent up to three times, each of which a hosted provider could charge for.
 - `spackle verify` no longer marks a finding fixed when its proof never succeeded during the scan. It re-runs only the proofs of findings the scan demonstrated and says which findings it skipped.
 - A run that is cancelled or reaches its deadline while a provider request is in flight is reported as stopped. It used to be reported as a failed request with a hint to check the network.
+- Standard input redirected from the null device (`< /dev/null`, `< NUL`) is no longer taken for a terminal. `scan`, `bench` and `runs prune` now say that there is no terminal to confirm on and to pass `--yes`, instead of showing a prompt nobody can answer.
 
 ## [0.1.0] - 2026-11-22
 

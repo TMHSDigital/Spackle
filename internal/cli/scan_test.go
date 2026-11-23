@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -480,17 +481,13 @@ func TestConfirmer(t *testing.T) {
 		}
 	})
 
-	// The null device is a character device, so it stands in for a terminal
-	// where nobody types: the prompt is shown and no answer is a "no".
+	// At a terminal where nobody types, the prompt is shown and no answer
+	// is a "no".
 	t.Run("no answer at the prompt is a no", func(t *testing.T) {
-		null, err := os.Open(os.DevNull)
-		if err != nil {
-			t.Skipf("the null device cannot be opened: %v", err)
-		}
-		defer func() { _ = null.Close() }()
-		if !isTerminal(null) {
-			t.Skip("the null device is not a character device on this system")
-		}
+		old := isTerminal
+		t.Cleanup(func() { isTerminal = old })
+		isTerminal = func(io.Reader) bool { return true }
+		null := strings.NewReader("")
 		var errb bytes.Buffer
 		confirm := confirmer(Env{Stdin: null, Stderr: &errb}, false)
 		if confirm(paid) {
@@ -520,5 +517,15 @@ func TestIsTerminal(t *testing.T) {
 	defer func() { _ = f.Close() }()
 	if isTerminal(f) {
 		t.Error("a regular file was taken for a terminal")
+	}
+
+	// The null device is a character device, and nobody can answer on it.
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("the null device cannot be opened: %v", err)
+	}
+	defer func() { _ = null.Close() }()
+	if isTerminal(null) {
+		t.Error("the null device was taken for a terminal")
 	}
 }
