@@ -371,7 +371,8 @@
     }
   ],
   "notes": [
-    "Live testing was limited to passive checks by the scope file."
+    "Live testing was limited to passive checks by the scope file.",
+    "A file in the target is named invoice‮fdp.exe."
   ],
   "coverage": {
     "map": {

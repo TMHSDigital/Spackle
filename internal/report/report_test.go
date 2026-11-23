@@ -257,7 +257,12 @@ func fixtureRun() Run {
 			{Stage: "investigator", Intent: "I3 Check the export job for path traversal", Reason: "the investigation failed: the provider returned HTTP 500."},
 			{Stage: "seed", Intent: "L-9f2c", Reason: "location has neither a file nor an endpoint"},
 		},
-		Notes: []string{"Live testing was limited to passive checks by the scope file."},
+		Notes: []string{
+			"Live testing was limited to passive checks by the scope file.",
+			// A right-to-left override, as a hostile file name would carry.
+			// Every text format must show it escaped, never raw.
+			"A file in the target is named invoice" + string(rune(0x202e)) + "fdp.exe.",
+		},
 		Usage: Usage{
 			ModelCalls: 40, InputTokens: 182400, OutputTokens: 21950,
 			Estimated: true, CostKnown: false, SandboxRuns: 3, Leads: 9,
@@ -1131,5 +1136,21 @@ func TestRejectedWorkIsListedInEveryFormat(t *testing.T) {
 	}
 	if got := rejectLine(ledger.Reject{Stage: "investigator", Intent: "I1 x", Reason: "bad draft."}); got != "Investigation not completed: I1 x (bad draft)." {
 		t.Errorf("rejectLine = %q", got)
+	}
+}
+
+// The HTML report escapes control and bidirectional characters exactly as
+// the terminal and Markdown reports do.
+func TestHTMLCleansControlAndBidiCharacters(t *testing.T) {
+	for _, run := range []Run{hostileRun(), fixtureRun()} {
+		out := string(render(t, "html", run))
+		for _, r := range out {
+			if (r < 0x20 && r != '\n' && r != '\t') || (r >= 0x7f && r <= 0x9f) || r == 0x202e {
+				t.Fatalf("the HTML report holds the raw character %U", r)
+			}
+		}
+	}
+	if out := string(render(t, "html", fixtureRun())); !strings.Contains(out, `invoice\u`+"202efdp.exe") {
+		t.Error("the right-to-left override in the fixture is not shown escaped")
 	}
 }

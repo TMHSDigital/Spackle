@@ -12,7 +12,7 @@ import (
 // trusted HTML, so target content cannot add markup.
 func renderHTML(run Run, w io.Writer) error {
 	var buf bytes.Buffer
-	if err := htmlTemplate.Execute(&buf, buildDoc(run, normalizeNewlines)); err != nil {
+	if err := htmlTemplate.Execute(&buf, buildDoc(run, cleanControl)); err != nil {
 		return err
 	}
 	_, err := w.Write(buf.Bytes())

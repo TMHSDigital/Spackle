@@ -410,6 +410,7 @@ Generate reset tokens from the operating system's random source.
 - Investigation not completed: I3 Check the export job for path traversal (the investigation failed: the provider returned HTTP 500).
 - Lead dropped at validation: L-9f2c (location has neither a file nor an endpoint).
 - Note: Live testing was limited to passive checks by the scope file.
+- Note: A file in the target is named invoice\\u202efdp.exe.
 
 ## Coverage
 

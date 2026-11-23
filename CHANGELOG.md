@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A fix to a file that exists but is empty is now written as a modification. It used to be written as a file creation, which `git apply` refuses.
 - A GitLab repository in a subgroup (`https://gitlab.com/group/subgroup/project`) is now recognized as a git URL instead of a running application, and the refusal for an unrecognized address on a code hosting site says to use the clone URL ending in `.git`.
 - `spackle doctor` now uses the same container runtime detection as a scan, so it no longer reports a daemonless Podman as not answering while scans run proofs in it. It also checks the TypeScript sandbox image.
+- The HTML report now shows control characters and bidirectional overrides as visible escapes, like the terminal and Markdown reports. They used to reach the page raw, so a quoted line could display in a different order than its bytes.
 
 ## [0.1.0] - 2026-11-22
 
