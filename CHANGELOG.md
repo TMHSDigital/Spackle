@@ -64,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The clone of a git URL target is removed when no run comes of it (the run is refused, not confirmed, or a dry run). It used to stay under the state directory with nothing referring to it.
 - A provider response with a success status and a body that cannot be decoded (an HTML page from a proxy, or a response over the size limit) is no longer requested again. It used to be sent up to three times, each of which a hosted provider could charge for.
 - `spackle verify` no longer marks a finding fixed when its proof never succeeded during the scan. It re-runs only the proofs of findings the scan demonstrated and says which findings it skipped.
+- A run that is cancelled or reaches its deadline while a provider request is in flight is reported as stopped. It used to be reported as a failed request with a hint to check the network.
 
 ## [0.1.0] - 2026-11-22
 

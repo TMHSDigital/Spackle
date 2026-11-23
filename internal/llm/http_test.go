@@ -203,6 +203,53 @@ func TestDoJSONStopsWhenContextIsCancelledDuringTheWait(t *testing.T) {
 	}
 }
 
+func TestDoJSONKeepsAContextErrorFromTheLastAttempt(t *testing.T) {
+	const key = "abcd1234efgh5678"
+	for _, tc := range []struct {
+		name     string
+		deadline bool
+		want     error
+	}{
+		{"cancelled", false, context.Canceled},
+		{"deadline", true, context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			noBackoff(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			calls := 0
+			// Two attempts fail, and the context ends while the last one is
+			// in flight, where no wait between attempts can catch it.
+			client := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if calls < 3 {
+					return nil, errors.New("connection reset")
+				}
+				if !tc.deadline {
+					cancel()
+				}
+				<-r.Context().Done()
+				return nil, r.Context().Err()
+			})}
+			if tc.deadline {
+				var stop context.CancelFunc
+				ctx, stop = context.WithTimeout(ctx, 200*time.Millisecond)
+				defer stop()
+			}
+			err := doJSON(ctx, client, "anthropic", http.MethodPost, "https://host.invalid/v1?api-key="+key, nil, pingRequest{Model: "m"}, &pingResponse{})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want it to match %v", err, tc.want)
+			}
+			if calls != 3 {
+				t.Fatalf("calls = %d, want the context to end during the third", calls)
+			}
+			if msg := err.Error(); strings.Contains(msg, "Check the network") || strings.Contains(msg, key) {
+				t.Fatalf("err = %v, want no network hint and no query string", err)
+			}
+		})
+	}
+}
+
 func TestDoJSONScrubsTransportErrors(t *testing.T) {
 	noBackoff(t)
 	const key = "abcd1234efgh5678"

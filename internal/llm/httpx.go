@@ -93,6 +93,12 @@ func doOnce(ctx context.Context, client *http.Client, provider, method, url stri
 		if errors.Is(err, ErrOffline) {
 			return err
 		}
+		// The run was stopped or ran out of time while the request was in
+		// flight: report that, not a network failure. The context's own
+		// error is wrapped so callers can still match it.
+		if cerr := ctx.Err(); cerr != nil {
+			return fmt.Errorf("%s request stopped: %w", provider, cerr)
+		}
 		return fmt.Errorf("%s request failed: %w. Check the network and base_url", provider, scrubURLError(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
