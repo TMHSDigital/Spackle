@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Interrupting an agentic scan (Ctrl-C) no longer discards the findings already investigated. Each finding is written to the ledger as soon as it is complete, the run ends with outcome `interrupted`, the reports are written, and the command exits 3. An interrupt during planning is no longer reported as `completed`, and one failed proof or fix step no longer ends the whole run.
 - A sandbox run that times out while the source is still being copied is now reported as a setup failure instead of a timed-out proof.
 - Large inputs can no longer exhaust memory or stall a run: the diff of a fix is computed in a bounded table (a very large rewrite is shown as one block), a fix may only patch a regular file within the 1 MiB source limit, a Dockerfile instruction with many continuation lines is parsed in linear time, and over-long quotes in a draft are refused before the file is searched.
+- Release pipeline: the container image is built only after the release tests pass, a prerelease tag no longer moves the `latest` image tag, and the image reports the same version, commit and build date as the release archives.
 
 ## [0.1.0] - 2026-11-22
 

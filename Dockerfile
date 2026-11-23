@@ -7,6 +7,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=none
+ARG DATE=unknown
 WORKDIR /src
 COPY go.mod go.su[m] ./
 RUN go mod download
@@ -15,7 +16,8 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags "-s -w \
       -X github.com/TMHSDigital/spackle/internal/version.Version=${VERSION} \
-      -X github.com/TMHSDigital/spackle/internal/version.Commit=${COMMIT}" \
+      -X github.com/TMHSDigital/spackle/internal/version.Commit=${COMMIT} \
+      -X github.com/TMHSDigital/spackle/internal/version.Date=${DATE}" \
     -o /out/spackle ./cmd/spackle
 
 # Runtime stage: distroless, static, non-root. No shell, no package manager.

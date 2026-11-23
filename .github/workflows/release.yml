@@ -46,6 +46,9 @@ jobs:
 
   image:
     name: container image
+    # The binaries job runs the tests. Nothing is pushed for a tag whose
+    # tests fail.
+    needs: binaries
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -69,12 +72,21 @@ jobs:
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
         run: |
+          # The same version, commit and date strings GoReleaser gives the
+          # archives: no leading v, a short commit, the commit time in UTC.
+          date="$(TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd)"
+          tags=(--tag "${IMAGE}:${TAG}")
+          # A prerelease tag (v1.2.3-rc1) does not move latest.
+          case "${TAG}" in
+            *-*) echo "prerelease ${TAG}: not tagging latest" ;;
+            *) tags+=(--tag "${IMAGE}:latest") ;;
+          esac
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --build-arg VERSION="${TAG}" \
-            --build-arg COMMIT="${COMMIT}" \
-            --tag "${IMAGE}:${TAG}" \
-            --tag "${IMAGE}:latest" \
+            --build-arg VERSION="${TAG#v}" \
+            --build-arg COMMIT="${COMMIT:0:7}" \
+            --build-arg DATE="${date}" \
+            "${tags[@]}" \
             --metadata-file meta.json \
             --push .
           echo "digest=$(jq -r '."containerimage.digest"' meta.json)" >> "$GITHUB_OUTPUT"
