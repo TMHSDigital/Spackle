@@ -41,9 +41,10 @@ type VerifyOutcome struct {
 	Note         string
 }
 
-// Verify re-runs every stored proof of concept of a run against the target
-// as it is now, appends the outcomes to the run's ledger, and rewrites the
-// reports. A proof that no longer succeeds marks its finding fixed. Nothing
+// Verify re-runs the stored proof of concept of every finding the scan
+// demonstrated against the target as it is now, appends the outcomes to the
+// run's ledger, and rewrites the reports. A proof that no longer succeeds
+// marks its finding fixed. A stored proof that never succeeded is skipped. Nothing
 // is executed outside the sandbox, so without a container runtime Verify
 // refuses instead of guessing.
 func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
@@ -93,6 +94,15 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		var man pocManifest
 		if json.Unmarshal(raw, &man) != nil || man.FindingID != f.ID || len(man.Command) == 0 || man.Marker == "" {
 			return nil, fmt.Errorf("the stored proof for %s is damaged: re-run the scan to produce a new one", f.ID)
+		}
+		if f.Proof.Status != finding.ProofDemonstrated {
+			// The scan also stores a proof that ran and did not show the
+			// flaw. Running it again fails the same way, which says nothing
+			// about a fix, so the finding is left as it is.
+			if opts.Progress != nil {
+				fmt.Fprintf(opts.Progress, "Skipping %s: its proof did not succeed during the scan, so re-running it cannot show a fix\n", f.ID)
+			}
+			continue
 		}
 		jobs = append(jobs, job{f, man})
 	}

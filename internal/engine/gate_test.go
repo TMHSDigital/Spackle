@@ -692,6 +692,43 @@ func TestVerifyRefusesADamagedManifest(t *testing.T) {
 	}
 }
 
+func TestVerifyLeavesAProofThatNeverSucceeded(t *testing.T) {
+	// The proof runs during the scan and does not show the flaw.
+	rt := &gateRuntime{proof: func(sandbox.Spec) (sandbox.Result, error) {
+		return sandbox.Result{ExitCode: 1, Stdout: "AssertionError"}, nil
+	}}
+	o := gateOpts(t, rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := onlyFinding(t, res)
+	if f.Proof.Status != finding.ProofFailed || f.Status != finding.StatusOpen {
+		t.Fatalf("proof=%s status=%s, want a failed proof on an open finding", f.Proof.Status, f.Status)
+	}
+	if _, err := os.Stat(filepath.Join(res.RunDir, "findings", f.ID, "poc", "poc.json")); err != nil {
+		t.Fatalf("the failed proof was not stored: %v", err)
+	}
+
+	before, events := rt.runCount(), ledgerLen(t, res.RunDir)
+	var progress strings.Builder
+	out, err := Verify(context.Background(), VerifyOptions{Config: o.Config, RunDir: res.RunDir, DetectRuntime: rt.detect(), Clock: fixedClock(), Progress: &progress})
+	if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "no stored proofs") {
+		t.Fatalf("err = %v, want a refusal: nothing was ever demonstrated", err)
+	}
+	if len(out) != 0 || rt.runCount() != before || ledgerLen(t, res.RunDir) != events {
+		t.Fatalf("a proof that never succeeded was re-run: outcomes=%+v runs=%d", out, rt.runCount()-before)
+	}
+	if !strings.Contains(progress.String(), "Skipping "+f.ID) {
+		t.Fatalf("progress = %q, want a note that the finding was skipped", progress.String())
+	}
+	if got := storedFinding(t, res.RunDir, f.ID); got.Status != finding.StatusOpen || got.Proof.Status != finding.ProofFailed {
+		t.Fatalf("status=%s proof=%s, want the finding unchanged", got.Status, got.Proof.Status)
+	}
+}
+
 func TestVerifyReportsAMissingProofFile(t *testing.T) {
 	rt := &gateRuntime{}
 	o, res, f := provenRun(t, rt)
