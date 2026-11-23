@@ -10,7 +10,7 @@ Do not open a public issue for them. Include the version or commit you ran, your
 
 ## Supported versions
 
-Spackle is pre-release. Once releases exist, fixes go into the latest release and the `main` branch. Until then, fixes go into `main`.
+Security fixes go into the `main` branch and into the next release. Only the latest release is supported: older releases do not get fixes, so upgrade to the latest one. The [releases page](https://github.com/TMHSDigital/Spackle/releases) shows which that is.
 
 ## What counts
 

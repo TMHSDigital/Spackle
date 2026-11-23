@@ -2,9 +2,9 @@
 
 ## Status
 
-Spackle is pre-release. Version 0.1.0 is in progress and no release has been published. A milestone is ticked below only when its work is merged to `main`. [CHANGELOG.md](CHANGELOG.md) records what has landed.
+Version 0.1.0 was released on 2026-11-22. It is the first release, and every milestone below is in it. Work since then is on `main` and is listed under "Unreleased" in [CHANGELOG.md](CHANGELOG.md), which records what has landed.
 
-## v0.1.0 milestones
+## v0.1.0 milestones (done)
 
 - [x] M0: public foundation
 - [x] M1: mapper, seeders, reporting

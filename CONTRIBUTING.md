@@ -115,6 +115,17 @@ go test ./internal/report -update
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes how the packages fit together. The design document is in `docs/superpowers/specs/`.
 
+## Cutting a release
+
+A release is a `v*` tag on `main`. The release workflow runs the tests, builds and signs the archives and the container image, and creates the GitHub release. Before you tag:
+
+- [ ] `make lint`, `make test` and `make build` pass on `main`, and CI is green.
+- [ ] In `CHANGELOG.md`, the "Unreleased" entries are moved under a heading for the new version with today's date, and "Unreleased" is left empty.
+- [ ] `ROADMAP.md` "Status" names the new version and its date.
+- [ ] `SECURITY.md` "Supported versions" is still true for the new release.
+- [ ] The version examples in `README.md` and `docs/ci.md` (`TMHSDigital/Spackle@vX.Y.Z`) name the new version.
+- [ ] The `go` directive in `go.mod` names a current patch release of the oldest supported Go line.
+
 ## Benchmark
 
 `make bench` (or `.\make.ps1 bench`) runs the corpus under `bench/corpus/` and writes a results file under `bench/results/`.
