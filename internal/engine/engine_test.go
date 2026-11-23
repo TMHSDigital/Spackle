@@ -211,6 +211,32 @@ func TestSameFlawFromTwoSeedersIsOneFinding(t *testing.T) {
 	}
 }
 
+func TestDifferentRulesAtOnePlaceStayApart(t *testing.T) {
+	a, b := sqlLead(), sqlLead()
+	b.RuleID, b.Title, b.Severity = "py-sql-concat", "SQL query built by concatenation", "medium"
+	o := opts(t,
+		fakeSeeder{name: "one", leads: []seed.Lead{a, b}},
+		fakeSeeder{name: "two", leads: []seed.Lead{b}},
+	)
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := res.Run.Findings
+	if len(fs) != 2 || fs[0].ID == fs[1].ID {
+		t.Fatalf("two rules of one class on one line must stay two findings: %+v", fs)
+	}
+	for _, f := range fs {
+		want := 1
+		if f.Title == b.Title {
+			want = 2 // the same rule from two seeders still merges
+		}
+		if len(f.Origin) != want {
+			t.Errorf("%s: origins = %v, want %d", f.Title, f.Origin, want)
+		}
+	}
+}
+
 func TestMaxFindingsIsRecordedAsSkipped(t *testing.T) {
 	a, b := sqlLead(), sqlLead()
 	b.Line, b.Severity, b.Class, b.RuleID = 1, "medium", "debug-enabled", "dbg"

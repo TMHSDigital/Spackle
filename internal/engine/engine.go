@@ -221,7 +221,7 @@ func FromLead(l seed.Lead, notRunReason string) finding.Finding {
 		owasp = info.OWASP
 	}
 	f := finding.Finding{
-		ID: finding.MakeID(l.Class, loc), Title: l.Title, Surface: surface, Class: l.Class,
+		ID: finding.MakeRuleID(l.Class, loc, l.RuleID), Title: l.Title, Surface: surface, Class: l.Class,
 		CWE: l.CWE, OWASP: owasp, Location: loc,
 		Severity: leadSeverity(l),
 		Flaw:     finding.Flaw{Description: l.Detail},

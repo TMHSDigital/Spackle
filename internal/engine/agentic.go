@@ -287,6 +287,12 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 
 	// Leads that did not become an investigated finding are still reported,
 	// labelled for exactly what happened to them.
+	investigated := map[string]int{}
+	for i := range findings {
+		if _, seen := investigated[findings[i].ID]; !seen {
+			investigated[findings[i].ID] = i
+		}
+	}
 	for _, l := range leads {
 		state := leadState[l.ID]
 		var f finding.Finding
@@ -306,6 +312,12 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			if _, err := r.led.Append(leadSeq[l.ID], ledger.TypeReject, ledger.Reject{Stage: "seed", Intent: l.ID, Reason: verr.Error()}); err != nil {
 				return nil, nil, "", err
 			}
+			continue
+		}
+		// An investigated finding of the same class at the same place
+		// already covers this lead: keep the lead as one of its origins.
+		if i, ok := investigated[finding.MakeID(l.Class, f.Location)]; ok {
+			findings[i].Origin = finding.UnionOrigins(findings[i].Origin, f.Origin)
 			continue
 		}
 		if _, seen := parent[f.ID]; !seen {

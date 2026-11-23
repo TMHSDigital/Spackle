@@ -180,11 +180,22 @@ type Confidence struct {
 // MakeID derives a stable finding id from what the finding is and where it
 // is, so the same flaw gets the same id on every run of the same target.
 func MakeID(class string, loc Location) string {
-	key := strings.Join([]string{
+	return MakeRuleID(class, loc, "")
+}
+
+// MakeRuleID is MakeID for a finding that comes straight from a rule hit.
+// The rule is part of the id, so two different rules of one class that fire
+// at the same place stay two findings, while the same rule reported by two
+// seeders still gets one id. An empty rule gives the same id as MakeID.
+func MakeRuleID(class string, loc Location, rule string) string {
+	parts := []string{
 		strings.ToLower(class), loc.File, fmt.Sprint(loc.StartLine),
 		strings.ToUpper(loc.Method), loc.Endpoint, loc.Parameter,
-	}, "\x00")
-	sum := sha256.Sum256([]byte(key))
+	}
+	if rule != "" {
+		parts = append(parts, rule)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "SPK-" + strings.ToUpper(hex.EncodeToString(sum[:4]))
 }
 
@@ -349,7 +360,7 @@ func Dedup(fs []Finding) []Finding {
 		if stronger(f, keep) {
 			keep, drop = f, keep
 		}
-		keep.Origin = unionSorted(keep.Origin, drop.Origin)
+		keep.Origin = UnionOrigins(keep.Origin, drop.Origin)
 		out[i] = keep
 	}
 	return out
@@ -362,7 +373,8 @@ func stronger(a, b Finding) bool {
 	return a.Severity.Score > b.Severity.Score
 }
 
-func unionSorted(a, b []string) []string {
+// UnionOrigins returns the sorted union of two origin lists.
+func UnionOrigins(a, b []string) []string {
 	set := map[string]bool{}
 	for _, s := range a {
 		set[s] = true
