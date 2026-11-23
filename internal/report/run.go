@@ -28,7 +28,10 @@ type Run struct {
 	// RepoPrefix is the scanned directory's path from the top of its git
 	// work tree ("" at the top). Finding paths are relative to the scanned
 	// directory; SARIF needs them relative to the repository.
-	RepoPrefix  string
+	RepoPrefix string
+	// Ref is the branch or tag a git URL target was scanned at, when one
+	// was asked for.
+	Ref         string
 	Commit      string
 	Mode        string // deterministic|agentic
 	Provider    string
@@ -157,7 +160,7 @@ func Load(runDir string) (Run, error) {
 			if !sawStart {
 				run.ID, run.Version, run.Command = d.RunID, d.Version, d.Command
 				run.Target, run.TargetKind, run.Commit, run.TargetPath = d.Target, d.TargetKind, d.Commit, d.TargetPath
-				run.RepoPrefix = d.RepoPrefix
+				run.RepoPrefix, run.Ref = d.RepoPrefix, d.Ref
 				run.Mode, run.Provider, run.Model, run.Offline = d.Mode, d.Provider, d.Model, d.Offline
 				run.Scope, run.ScopeSource, run.Isolation = d.Scope, d.ScopeSource, d.Isolation
 				run.StartedAt = ev.TS

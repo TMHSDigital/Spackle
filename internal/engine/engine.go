@@ -46,6 +46,9 @@ type Options struct {
 	Confirm func(Estimate) bool
 	// ProviderFactory overrides how model providers are built, for tests.
 	ProviderFactory func(config.Model) (llm.Provider, error)
+	// Ref is the branch or tag to scan for a git URL target. Empty means
+	// the remote's default branch.
+	Ref string
 	// ScopeFile is the --authorize scope file for a live target.
 	ScopeFile string
 	// Yes is true for --yes and CI: never prompt for authorization.

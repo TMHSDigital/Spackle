@@ -89,10 +89,17 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if tgt.Kind == target.KindGit && opts.Config.Offline {
 		return Result{}, fmt.Errorf("%w: %w: cloning %s would leave this machine. Clone it yourself and scan the directory, or drop --offline", ErrRefused, llm.ErrOffline, tgt.Display)
 	}
+	if opts.Ref != "" && tgt.Kind != target.KindGit {
+		return Result{}, fmt.Errorf("%w: --ref names a branch or tag of a git URL target, and %s is not one. For a directory, check out the branch yourself", ErrRefused, tgt.Display)
+	}
 	if tgt.Kind == target.KindGit {
 		root = filepath.Join(stateDir, "clones", runID)
-		say("Cloning %s", tgt.Display)
-		if err := gitx.Clone(ctx, tgt.Raw, root); err != nil {
+		if opts.Ref != "" {
+			say("Cloning %s at %s", tgt.Display, opts.Ref)
+		} else {
+			say("Cloning %s", tgt.Display)
+		}
+		if err := gitx.CloneRef(ctx, tgt.Raw, root, opts.Ref); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 	}
@@ -156,7 +163,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	}
 	start := ledger.RunStart{
 		RunID: runID, Version: version.Version, Command: "scan",
-		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit, RepoPrefix: repoPrefix,
+		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit, Ref: opts.Ref, RepoPrefix: repoPrefix,
 		Mode: "deterministic", Offline: r.cfg.Offline,
 		Isolation: "not used: no proof of concept was run",
 	}

@@ -146,16 +146,32 @@ func Dirty(ctx context.Context, dir string, paths ...string) (bool, error) {
 // Clone makes a shallow clone of remote into dest. Submodules are not
 // fetched: they are separate code the operator did not name as the target.
 func Clone(ctx context.Context, remote, dest string) error {
+	return CloneRef(ctx, remote, dest, "")
+}
+
+// CloneRef is Clone for a named branch or tag instead of the remote's
+// default branch. An empty ref means the default branch.
+func CloneRef(ctx context.Context, remote, dest, ref string) error {
 	if !Available() {
 		return errors.New("git is not installed: install git to scan a repository URL, or clone it yourself and pass the directory")
 	}
 	if strings.HasPrefix(remote, "-") {
 		return fmt.Errorf("refusing git remote %q: it starts with a dash", remote)
 	}
+	if strings.HasPrefix(ref, "-") || strings.ContainsAny(ref, " \t\n") {
+		return fmt.Errorf("refusing git ref %q: a branch or tag name cannot start with a dash or contain spaces", ref)
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	_, err := run(ctx, "", "clone", "--depth", "1", "--no-tags", "--single-branch", "--", remote, dest)
+	args := []string{"clone", "--depth", "1", "--no-tags", "--single-branch"}
+	if ref != "" {
+		args = append(args, "--branch", ref)
+	}
+	_, err := run(ctx, "", append(args, "--", remote, dest)...)
 	if err != nil {
+		if ref != "" {
+			return fmt.Errorf("clone %s at %s: %w. Check the URL, that the branch or tag exists, and your access; a commit hash is not accepted here", remote, ref, err)
+		}
 		return fmt.Errorf("clone %s: %w. Check the URL and your access, or clone it yourself and pass the directory", remote, err)
 	}
 	return nil

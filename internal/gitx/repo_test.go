@@ -241,3 +241,35 @@ func TestTopLevelAndPrefixOutsideARepository(t *testing.T) {
 		t.Errorf("Prefix = %q, %v; want ErrNotRepo", prefix, err)
 	}
 }
+
+// A named branch or tag is cloned instead of the default branch, and a ref
+// that could be read as an option is refused.
+func TestCloneRef(t *testing.T) {
+	src := newRepo(t)
+	ctx := context.Background()
+	mainHead := git(t, src, "rev-parse", "HEAD")
+	git(t, src, "checkout", "-q", "-b", "release")
+	writeFile(t, src, "a.txt", "release\n")
+	releaseHead := commit(t, src, "on release")
+	git(t, src, "tag", "v1.0.0")
+	bare := newBare(t)
+	git(t, src, "push", "-q", bare, "main", "release", "v1.0.0")
+
+	for ref, want := range map[string]string{"": mainHead, "release": releaseHead, "v1.0.0": releaseHead} {
+		dest := filepath.Join(t.TempDir(), "clone")
+		if err := CloneRef(ctx, fileURL(bare), dest, ref); err != nil {
+			t.Fatalf("ref %q: %v", ref, err)
+		}
+		if got := git(t, dest, "rev-parse", "HEAD"); got != want {
+			t.Errorf("ref %q: HEAD = %s, want %s", ref, got, want)
+		}
+	}
+	for _, bad := range []string{"--upload-pack=x", "a b"} {
+		if err := CloneRef(ctx, fileURL(bare), filepath.Join(t.TempDir(), "c"), bad); err == nil || !strings.Contains(err.Error(), "refusing git ref") {
+			t.Errorf("ref %q: err = %v", bad, err)
+		}
+	}
+	if err := CloneRef(ctx, fileURL(bare), filepath.Join(t.TempDir(), "c"), "no-such-branch"); err == nil || !strings.Contains(err.Error(), "branch or tag exists") {
+		t.Errorf("a missing ref: err = %v", err)
+	}
+}

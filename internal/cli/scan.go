@@ -21,6 +21,7 @@ func runScan(env Env, args []string) int {
 	fs := newFlagSet(env, "scan", "[path|url]", "Find, demonstrate, explain and fix flaws in a target.\nThe target is a directory, a git URL, or the URL of an application you run.\nWith no target, the current directory is scanned.")
 	var g globalFlags
 	g.register(fs)
+	ref := fs.String("ref", "", "`branch or tag` to scan, for a git URL target (default: the remote's default branch)")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
 		return flagExit(err)
@@ -43,7 +44,7 @@ func runScan(env Env, args []string) int {
 	defer stop()
 
 	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
-		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin,
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)

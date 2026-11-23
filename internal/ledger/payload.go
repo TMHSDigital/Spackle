@@ -18,10 +18,13 @@ type RunStart struct {
 	// work tree, with forward slashes ("" at the top or outside git).
 	RepoPrefix string `json:"repo_prefix,omitempty"`
 	Commit     string `json:"commit,omitempty"`
-	Mode       string `json:"mode"` // deterministic|agentic
-	Provider   string `json:"provider,omitempty"`
-	Model      string `json:"model,omitempty"`
-	Offline    bool   `json:"offline,omitempty"`
+	// Ref is the branch or tag that was asked for with --ref, for a git
+	// URL target. Commit is what it resolved to.
+	Ref      string `json:"ref,omitempty"`
+	Mode     string `json:"mode"` // deterministic|agentic
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Offline  bool   `json:"offline,omitempty"`
 	// Scope is the authorized scope for a live target, as confirmed.
 	Scope string `json:"scope,omitempty"`
 	// ScopeSource says how authorization was given: scope-file, config or interactive.

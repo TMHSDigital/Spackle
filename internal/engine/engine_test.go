@@ -432,3 +432,11 @@ func TestRunRecordsThePathFromTheRepositoryRoot(t *testing.T) {
 		t.Fatalf("SARIF does not place the finding from the repository root: %s", buf.String())
 	}
 }
+
+func TestRefIsRefusedForADirectoryTarget(t *testing.T) {
+	o := opts(t, fakeSeeder{name: "fake"})
+	o.Ref = "release"
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--ref names a branch or tag of a git URL") {
+		t.Fatalf("err = %v", err)
+	}
+}
