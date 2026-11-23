@@ -533,3 +533,17 @@ func TestQuoteCheckUsesTheRedactedViewAndRefusesFragments(t *testing.T) {
 		t.Error("most of a long line was refused")
 	}
 }
+
+func TestOverLongQuotesAreRefusedBeforeSearching(t *testing.T) {
+	lines := []string{"def f(x):", "    return run_query(x, limit=10)", ""}
+	if _, ok := locateQuote(lines, strings.Repeat("return run_query(x, limit=10) ", 200), 2); ok {
+		t.Error("a quote far longer than any line was accepted")
+	}
+	if _, ok := locateQuote(lines, strings.Repeat("x\n", maxQuoteLines+1), 1); ok {
+		t.Error("a quote with too many lines was accepted")
+	}
+	// A two-line quote still matches across the line break.
+	if line, ok := locateQuote(lines, "def f(x):\n    return run_query(x, limit=10)", 1); !ok || line != 1 {
+		t.Errorf("a two-line quote was refused (line %d, ok %v)", line, ok)
+	}
+}

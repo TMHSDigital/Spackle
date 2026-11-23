@@ -79,19 +79,24 @@ func parseDockerfile(text string) []dockerInstr {
 			continue
 		}
 		start, raw := i, lines[i]
-		joined := trimmed
-		for strings.HasSuffix(joined, `\`) && i+1 < len(lines) {
+		// Continuation lines are collected in a builder and the backslash
+		// is tested on each physical line, so a long instruction costs
+		// time in proportion to its length, not to its length squared.
+		var b strings.Builder
+		continued := strings.HasSuffix(trimmed, `\`)
+		b.WriteString(strings.TrimSuffix(trimmed, `\`))
+		for continued && i+1 < len(lines) {
 			i++
 			next := strings.TrimSpace(lines[i])
-			joined = strings.TrimSuffix(joined, `\`)
 			if strings.HasPrefix(next, "#") {
 				// Comment lines inside a continuation are dropped by Docker.
-				joined += `\`
 				continue
 			}
-			joined += " " + next
+			continued = strings.HasSuffix(next, `\`)
+			b.WriteString(" ")
+			b.WriteString(strings.TrimSuffix(next, `\`))
 		}
-		joined = strings.TrimSuffix(joined, `\`)
+		joined := b.String()
 		name, args := joined, ""
 		if j := strings.IndexAny(joined, " \t"); j >= 0 {
 			name, args = joined[:j], joined[j+1:]

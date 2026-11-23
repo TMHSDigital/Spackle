@@ -213,6 +213,13 @@ func readLines(root, rel string) ([]string, error) {
 // check would prove nothing.
 const minQuote = 12
 
+// maxQuoteLen and maxQuoteLines bound a quote. A stored quote is clipped to
+// 400 characters anyway.
+const (
+	maxQuoteLen   = 4000
+	maxQuoteLines = 40
+)
+
 func nonSpace(s string) int { return len(strings.ReplaceAll(squash(s), " ", "")) }
 
 // coversEnough reports whether quote is a meaningful part of the text it
@@ -240,15 +247,35 @@ func locateQuote(lines []string, quote string, hint int) (int, bool) {
 		return 0, false
 	}
 	span := strings.Count(strings.TrimSpace(quote), "\n") + 1
+	// A quote is a line or a few. Anything longer is not a quote, and
+	// searching a large file for it would cost time for nothing.
+	if len(want) > maxQuoteLen || span > maxQuoteLines {
+		return 0, false
+	}
+	// Squash each line once, not once per candidate position.
+	sq := make([]string, len(lines))
+	for i, l := range lines {
+		sq[i] = squash(l)
+	}
 	match := func(i int) bool { // i is a 0-based start line
 		if i < 0 || i >= len(lines) {
 			return false
 		}
-		end := i + span
-		if end > len(lines) {
-			end = len(lines)
+		got := sq[i]
+		if span > 1 {
+			end := min(i+span, len(lines))
+			var b strings.Builder
+			for _, s := range sq[i:end] {
+				if s == "" {
+					continue
+				}
+				if b.Len() > 0 {
+					b.WriteByte(' ')
+				}
+				b.WriteString(s)
+			}
+			got = b.String()
 		}
-		got := squash(strings.Join(lines[i:end], " "))
 		return strings.Contains(got, want) && coversEnough(want, got)
 	}
 	if hint >= 1 {

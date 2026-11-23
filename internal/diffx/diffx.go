@@ -122,9 +122,15 @@ type op struct {
 	ai, bi int // index into a for equal and delete; into b for equal and insert
 }
 
+// maxLCSCells bounds the longest-common-subsequence table. The table holds
+// four bytes per cell, so this is 32 MiB. It is enough for a rewrite of a
+// few thousand lines on each side; beyond it the changed region is emitted
+// as one block, which is still a correct diff, only not a minimal one.
+const maxLCSCells = 8 << 20
+
 // diffLines computes an edit script with a longest-common-subsequence
-// table, after trimming the common prefix and suffix. Source files handled
-// here are capped at 1 MiB by the file walker, so the table stays small.
+// table, after trimming the common prefix and suffix. The table is bounded
+// by maxLCSCells whatever the size of the inputs.
 func diffLines(a, b []string) []op {
 	prefix := 0
 	for prefix < len(a) && prefix < len(b) && a[prefix] == b[prefix] {
@@ -142,6 +148,19 @@ func diffLines(a, b []string) []op {
 	}
 
 	n, m := len(am), len(bm)
+	if int64(n+1)*int64(m+1) > maxLCSCells {
+		// Too large to align line by line: replace the whole middle.
+		for i := 0; i < n; i++ {
+			ops = append(ops, op{opDelete, prefix + i, 0})
+		}
+		for j := 0; j < m; j++ {
+			ops = append(ops, op{opInsert, 0, prefix + j})
+		}
+		for k := 0; k < suffix; k++ {
+			ops = append(ops, op{opEqual, len(a) - suffix + k, len(b) - suffix + k})
+		}
+		return ops
+	}
 	// lcs[i][j] is the LCS length of am[i:] and bm[j:].
 	lcs := make([][]int32, n+1)
 	for i := range lcs {

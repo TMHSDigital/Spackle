@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/finding"
 )
@@ -484,4 +485,31 @@ func TestWorkflowChecks(t *testing.T) {
 	checkInfra(t, infraRun(t, "docs/ci.yml", wfBad), nil)
 	// A workflow that does not parse is skipped.
 	checkInfra(t, infraRun(t, ".github/workflows/bad.yml", "on: push\njobs: [unterminated\n"), nil)
+}
+
+// Joining continuation lines keeps its meaning and stays linear.
+func TestDockerfileContinuationJoining(t *testing.T) {
+	text := "RUN apt-get update \\\n    # a comment inside the instruction\n    && apt-get install -y curl \\\n    && rm -rf /var/lib/apt/lists/*\nUSER app\n"
+	got := parseDockerfile(text)
+	if len(got) != 2 || got[0].name != "RUN" || got[0].line != 1 || got[1].name != "USER" || got[1].line != 5 {
+		t.Fatalf("instructions = %+v", got)
+	}
+	if want := "apt-get update  && apt-get install -y curl  && rm -rf /var/lib/apt/lists/*"; got[0].args != want {
+		t.Fatalf("args = %q, want %q", got[0].args, want)
+	}
+	// 20,000 continuation lines: quadratic joining would take minutes.
+	var b strings.Builder
+	b.WriteString("RUN true \\\n")
+	for i := 0; i < 20000; i++ {
+		b.WriteString("  && echo step \\\n")
+	}
+	b.WriteString("  && true\n")
+	start := time.Now()
+	long := parseDockerfile(b.String())
+	if len(long) != 1 || !strings.HasSuffix(long[0].args, "&& true") {
+		t.Fatalf("long instruction parsed into %d instructions", len(long))
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("parsing took %s", d)
+	}
 }

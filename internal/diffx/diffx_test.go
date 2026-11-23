@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -101,5 +102,31 @@ func TestPatchesApplyWithGit(t *testing.T) {
 				t.Fatalf("after apply:\n%q\nwant:\n%q\npatch:\n%s", got, tc[1], patch)
 			}
 		})
+	}
+}
+
+// A change too large to align line by line is emitted as one block instead
+// of allocating a table in proportion to the product of the two sizes.
+func TestLargeRewriteIsBoundedAndStillCorrect(t *testing.T) {
+	var before, after strings.Builder
+	before.WriteString("head\n")
+	after.WriteString("head\n")
+	for i := 0; i < 6000; i++ {
+		before.WriteString("old line " + strconv.Itoa(i) + "\n")
+		after.WriteString("new line " + strconv.Itoa(i) + "\n")
+	}
+	before.WriteString("tail\n")
+	after.WriteString("tail\n")
+	a, b := strings.Split(before.String(), "\n"), strings.Split(after.String(), "\n")
+	if int64(len(a))*int64(len(b)) <= maxLCSCells {
+		t.Fatal("the test input is not large enough to pass the table bound")
+	}
+	patch := Unified("big.txt", before.String(), after.String())
+	added, removed := Stat(patch)
+	if added != 6000 || removed != 6000 {
+		t.Fatalf("added %d removed %d, want 6000 and 6000", added, removed)
+	}
+	if strings.Contains(patch, "-head") || strings.Contains(patch, "-tail") || strings.Contains(patch, "+head") || strings.Contains(patch, "+tail") {
+		t.Fatal("the unchanged first and last lines were reported as changed")
 	}
 }

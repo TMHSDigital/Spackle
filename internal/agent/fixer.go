@@ -114,6 +114,13 @@ func loadOriginals(root string, files map[string]string) (clean, originals map[s
 		if len(content) > walk.MaxFileSize {
 			return nil, nil, fmt.Errorf("file %q is larger than the %d byte limit", name, walk.MaxFileSize)
 		}
+		// The original is diffed line by line, so it gets the same bound
+		// as every other source file Spackle reads.
+		if st, serr := os.Stat(abs); serr != nil || !st.Mode().IsRegular() {
+			return nil, nil, fmt.Errorf("file %q is not a regular file", name)
+		} else if st.Size() > walk.MaxFileSize {
+			return nil, nil, fmt.Errorf("file %q is larger than the %d byte limit, so it cannot be patched here", name, walk.MaxFileSize)
+		}
 		raw, oerr := os.ReadFile(abs) //nolint:gosec // abs comes from walk.Resolve
 		if oerr != nil {
 			return nil, nil, fmt.Errorf("file %q cannot be read", name)
