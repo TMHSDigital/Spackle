@@ -17,6 +17,19 @@ const contextLines = 3
 // returns "" when the contents are equal. The diff is accepted by
 // "git apply".
 func Unified(path, before, after string) string {
+	return unified(path, before, after, false)
+}
+
+// UnifiedEdit is Unified for a file that exists before and after the
+// change. Unified reads an empty side as "no file", so an edit to an
+// existing empty file would come out as a file creation, which a patch tool
+// refuses because the file is already there. UnifiedEdit always writes a
+// modification.
+func UnifiedEdit(path, before, after string) string {
+	return unified(path, before, after, true)
+}
+
+func unified(path, before, after string, edit bool) string {
 	if before == after {
 		return ""
 	}
@@ -30,6 +43,8 @@ func Unified(path, before, after string) string {
 	var out strings.Builder
 	fmt.Fprintf(&out, "diff --git a/%s b/%s\n", path, path)
 	switch {
+	case edit:
+		fmt.Fprintf(&out, "--- a/%s\n+++ b/%s\n", path, path)
 	case before == "":
 		out.WriteString("new file mode 100644\n")
 		fmt.Fprintf(&out, "--- /dev/null\n+++ b/%s\n", path)

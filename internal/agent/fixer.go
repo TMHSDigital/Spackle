@@ -221,7 +221,7 @@ func verifyFix(ctx context.Context, box *Box, in FixInput, replyText string) (pr
 	sort.Strings(names)
 	var diff strings.Builder
 	for _, n := range names {
-		diff.WriteString(diffx.Unified(n, originals[n], files[n]))
+		diff.WriteString(diffx.UnifiedEdit(n, originals[n], files[n]))
 	}
 	patch = diff.String()
 	added, removed := diffx.Stat(patch)

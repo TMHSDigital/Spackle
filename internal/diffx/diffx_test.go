@@ -130,3 +130,46 @@ func TestLargeRewriteIsBoundedAndStillCorrect(t *testing.T) {
 		t.Fatal("the unchanged first and last lines were reported as changed")
 	}
 }
+
+// A fix to a file that exists but is empty is a modification. Written as a
+// file creation, git refuses it because the file is already there.
+func TestEditOfAnEmptyFileIsAModificationThatApplies(t *testing.T) {
+	patch := UnifiedEdit("pkg/__init__.py", "", "X = 1\n")
+	if strings.Contains(patch, "new file mode") || strings.Contains(patch, "/dev/null") || !strings.Contains(patch, "--- a/pkg/__init__.py") {
+		t.Fatalf("not a modification patch:\n%s", patch)
+	}
+	emptied := UnifiedEdit("conf.ini", "a = 1\n", "")
+	if strings.Contains(emptied, "deleted file mode") || strings.Contains(emptied, "/dev/null") {
+		t.Fatalf("emptying a file was written as a deletion:\n%s", emptied)
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"pkg/__init__.py": "", "conf.ini": "a = 1\n"} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	patchFile := filepath.Join(t.TempDir(), "fix.patch")
+	if err := os.WriteFile(patchFile, []byte(patch+emptied), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "apply", "--whitespace=nowarn", patchFile)
+	cmd.Dir = dir
+	// Keep git from treating the temp directory as part of an outer repository.
+	cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+filepath.Dir(dir))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git apply refused the patch: %v\n%s\n%s", err, out, patch+emptied)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "pkg", "__init__.py"))
+	if string(got) != "X = 1\n" {
+		t.Fatalf("pkg/__init__.py = %q", got)
+	}
+	if st, err := os.Stat(filepath.Join(dir, "conf.ini")); err != nil || st.Size() != 0 {
+		t.Fatalf("conf.ini should exist and be empty: %v", err)
+	}
+}

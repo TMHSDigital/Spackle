@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Action `args` input now accepts several lines. It used to read only the first line and drop the rest silently. A value with quotes, which would have been split into pieces, is refused with a clear message.
 - The GitHub Action no longer stops at the scan step when the scan finds something. The step ran under `bash -e`, so a scan that exited 1 ended it before the SARIF upload and left the `exit-code` and `sarif` outputs empty.
 - Scanner results that an external scanner adapter could not classify are no longer dropped without a word: the seeder line in the report now says how many were skipped and why.
+- A fix to a file that exists but is empty is now written as a modification. It used to be written as a file creation, which `git apply` refuses.
 
 ## [0.1.0] - 2026-11-22
 

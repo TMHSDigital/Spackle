@@ -351,7 +351,7 @@ func (d *Diagnosis) consider(ctx context.Context, root, text string, wantFix boo
 	sort.Strings(names)
 	var diff strings.Builder
 	for _, n := range names {
-		diff.WriteString(diffx.Unified(n, originals[n], files[n]))
+		diff.WriteString(diffx.UnifiedEdit(n, originals[n], files[n]))
 	}
 	patch := diff.String()
 	if added, removed := diffx.Stat(patch); added+removed > 400 {
