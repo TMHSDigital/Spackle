@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -189,8 +190,8 @@ func validateRelPath(kind, p string) error {
 		return bad("is absolute")
 	case strings.HasPrefix(p, "-"):
 		return bad("starts with a dash and could be read as an option")
-	case strings.Contains(p, ".."):
-		return bad("contains \"..\" and could leave the work directory")
+	case slices.Contains(strings.Split(p, "/"), ".."):
+		return bad("has a \"..\" segment and could leave the work directory")
 	case strings.Contains(p, `\`):
 		return bad("contains a backslash")
 	case strings.Contains(p, ":"):

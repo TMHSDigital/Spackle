@@ -199,6 +199,17 @@ func MakeRuleID(class string, loc Location, rule string) string {
 	return "SPK-" + strings.ToUpper(hex.EncodeToString(sum[:4]))
 }
 
+// hasParentSegment reports whether a forward-slash path has a ".." segment.
+// A name that merely contains two dots ("[...slug]", "v1..v2.md") does not.
+func hasParentSegment(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate checks that a finding is complete enough to report. It returns
 // every problem at once so a rejected draft can be explained in one message.
 func (f *Finding) Validate() error {
@@ -223,7 +234,7 @@ func (f *Finding) Validate() error {
 		add("location has neither a file nor an endpoint")
 	}
 	if f.Location.File != "" {
-		if strings.Contains(f.Location.File, `\`) || strings.HasPrefix(f.Location.File, "/") || strings.Contains(f.Location.File, "..") {
+		if strings.Contains(f.Location.File, `\`) || strings.HasPrefix(f.Location.File, "/") || hasParentSegment(f.Location.File) {
 			add("location file %q must be a forward-slash path relative to the target root", f.Location.File)
 		}
 		if f.Location.StartLine < 0 || (f.Location.EndLine != 0 && f.Location.EndLine < f.Location.StartLine) {

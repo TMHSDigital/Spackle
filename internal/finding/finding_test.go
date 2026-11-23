@@ -74,6 +74,7 @@ func TestValidateRejections(t *testing.T) {
 		"absolute path":        {func(f *Finding) { f.Location.File = "/etc/passwd" }, "relative to the target root"},
 		"backslash path":       {func(f *Finding) { f.Location.File = `app\db.py` }, "relative to the target root"},
 		"parent path":          {func(f *Finding) { f.Location.File = "../x.py" }, "relative to the target root"},
+		"parent segment":       {func(f *Finding) { f.Location.File = "a/../../x.py" }, "relative to the target root"},
 		"unknown confidence":   {func(f *Finding) { f.Confidence.Level = "certain" }, "confidence"},
 		"no confidence reason": {func(f *Finding) { f.Confidence.Reason = " " }, "confidence has no reason"},
 		"demonstrated without artifact": {func(f *Finding) {
@@ -168,5 +169,15 @@ func TestDedupKeepsStrongerAndMergesOrigins(t *testing.T) {
 	out := Dedup([]Finding{weak, strong})
 	if len(out) != 1 || out[0].Confidence.Level != ConfidenceHigh || strings.Join(out[0].Origin, ",") != "builtin,semgrep" {
 		t.Fatalf("%+v", out)
+	}
+}
+
+func TestValidateAcceptsDotsInsideAFileName(t *testing.T) {
+	for _, name := range []string{"pages/api/auth/[...nextauth].js", "app/[...slug]/page.tsx", "docs/v1..v2.md"} {
+		f := valid()
+		f.Location.File = name
+		if err := f.Validate(); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
