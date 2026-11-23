@@ -22,7 +22,7 @@ Do not describe a feature as shipped unless the code and tests for it are on `ma
 | Remove build output | `make clean` | `.\make.ps1 clean` |
 | Lint, test, then build | `make all` | `.\make.ps1 all` |
 
-Run `lint`, `test`, and `build` before you call a change done. CI runs the same three on Linux, macOS, and Windows with no API key and no container runtime.
+Run `lint`, `test`, and `build` before you call a change done. CI builds and tests on Linux, macOS, and Windows with no API key and no container runtime, and it checks more than these three: the tests run with the race detector (`make test-race`), `go mod verify` and `go mod tidy -diff` must be clean, the linters run on Linux only, and a separate Linux job runs the sandbox integration tests with `SPACKLE_REQUIRE_RUNTIME=1` so they cannot pass by skipping. [CONTRIBUTING.md](CONTRIBUTING.md) has the commands.
 
 `lint` runs `go vet` and `golangci-lint` v2. The linter must be built with a Go version at least as new as the one in use. A linter binary built with an older Go fails to load the code: rebuild it with the current toolchain instead of skipping the lint step.
 
