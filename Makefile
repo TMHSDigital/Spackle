@@ -12,7 +12,7 @@ endif
 
 export CGO_ENABLED := 0
 
-.PHONY: all build test test-race lint fmt tidy bench clean help
+.PHONY: all build test test-short test-race lint fmt tidy bench clean help
 
 all: lint test build
 
@@ -21,6 +21,11 @@ build:
 
 test:
 	go test -shuffle=on ./...
+
+# The fast loop: leaves out the tests that start containers, the full
+# benchmark corpus run and the installed-scanner checks.
+test-short:
+	go test -short -shuffle=on ./...
 
 # The race detector needs cgo, so this target turns it back on.
 test-race:
@@ -46,6 +51,7 @@ clean:
 help:
 	@echo "build      Build the spackle binary"
 	@echo "test       Run unit tests"
+	@echo "test-short Run unit tests without the slow ones (containers, full corpus)"
 	@echo "test-race  Run unit tests with the race detector (needs cgo)"
 	@echo "lint       go vet and golangci-lint"
 	@echo "fmt        gofmt -s"

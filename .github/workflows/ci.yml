@@ -36,6 +36,23 @@ jobs:
           CGO_ENABLED: '0'
       - name: Test with the race detector
         run: go test -race -shuffle=on ./...
+      # One cell of the matrix also measures coverage and puts the figure in
+      # the job summary, so a package that loses its tests is visible.
+      - name: Coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.27'
+        shell: bash
+        run: |
+          go test -short -coverprofile=coverage.out -coverpkg=./internal/... ./... > /dev/null
+          {
+            echo "## Test coverage"
+            echo
+            echo "Statement coverage of \`./internal/...\` from \`go test -short\` (container tests are not included)."
+            echo
+            echo '```'
+            go tool cover -func=coverage.out | tail -n 1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out | tail -n 1
 
   lint:
     runs-on: ubuntu-latest

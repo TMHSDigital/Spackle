@@ -8,7 +8,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('all', 'build', 'test', 'test-race', 'lint', 'fmt', 'tidy', 'bench', 'clean', 'help')]
+    [ValidateSet('all', 'build', 'test', 'test-short', 'test-race', 'lint', 'fmt', 'tidy', 'bench', 'clean', 'help')]
     [string]$Target = 'help'
 )
 
@@ -43,6 +43,11 @@ function Invoke-Test {
     Invoke-Checked 'go' @('test', '-shuffle=on', './...')
 }
 
+function Invoke-TestShort {
+    $env:CGO_ENABLED = '0'
+    Invoke-Checked 'go' @('test', '-short', '-shuffle=on', './...')
+}
+
 function Invoke-TestRace {
     # The race detector needs cgo and a C compiler on PATH.
     $env:CGO_ENABLED = '1'
@@ -58,6 +63,7 @@ switch ($Target) {
     'all' { Invoke-Lint; Invoke-Test; Invoke-Build }
     'build' { Invoke-Build }
     'test' { Invoke-Test }
+    'test-short' { Invoke-TestShort }
     'test-race' { Invoke-TestRace }
     'lint' { Invoke-Lint }
     'fmt' { Invoke-Checked 'gofmt' @('-s', '-w', 'cmd', 'internal') }
@@ -76,6 +82,7 @@ switch ($Target) {
         @(
             'build      Build spackle.exe'
             'test       Run unit tests'
+            'test-short Run unit tests without the slow ones (containers, full corpus)'
             'test-race  Run unit tests with the race detector (needs cgo)'
             'lint       go vet and golangci-lint'
             'fmt        gofmt -s'

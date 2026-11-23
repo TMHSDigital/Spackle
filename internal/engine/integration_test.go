@@ -53,6 +53,9 @@ print("MARKER")
 // against a read-only copy of the target, and the fix is accepted only
 // because the same proof then fails.
 func TestIntegrationRealSandboxProofAndFix(t *testing.T) {
+	if testing.Short() && os.Getenv("SPACKLE_REQUIRE_RUNTIME") != "1" {
+		t.Skip("skipped in short mode: this test starts a container")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	rt, err := sandbox.Detect(ctx, "auto")

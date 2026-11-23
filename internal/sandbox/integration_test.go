@@ -20,6 +20,12 @@ import (
 // skipping everything.
 func integrationRuntime(t *testing.T) (Runtime, context.Context) {
 	t.Helper()
+	// go test -short is the fast loop: it leaves out the tests that start
+	// containers. SPACKLE_REQUIRE_RUNTIME=1 (the CI sandbox job) wins, so
+	// that job cannot pass by skipping.
+	if testing.Short() && os.Getenv("SPACKLE_REQUIRE_RUNTIME") != "1" {
+		t.Skip("skipped in short mode: this test starts a container")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	t.Cleanup(cancel)
 	unavailable := func(msg string, err error) {
