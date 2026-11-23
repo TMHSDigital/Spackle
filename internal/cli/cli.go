@@ -45,7 +45,7 @@ func commands() []command {
 		{"debug", "[path] --test <name> | --issue <file|text>", "Reproduce a failure, find the root cause, fix and verify", runDebug},
 		{"verify", "<run-id>", "Re-run stored proofs against the current target", runVerify},
 		{"report", "<run-id>", "Render a stored run in any format", runReport},
-		{"runs", "[prune]", "List stored runs, or delete old ones", runRuns},
+		{"runs", "[prune|compare]", "List stored runs, delete old ones, or compare two", runRuns},
 		{"doctor", "", "Check the sandbox runtime, scanners and model configuration", runDoctor},
 		{"mcp", "", "Serve Spackle tools over MCP on stdin and stdout", runMCP},
 		{"version", "", "Print version information", runVersion},

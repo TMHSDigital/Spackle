@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spackle scan --dry-run` shows what a scan would read, each seeder and its lead count, the leads by class, the number of investigations that would be planned and the cost estimate. It calls no model and stores no run.
 - SARIF reports now carry the traced data flow of a finding as `codeFlows`, readable rule names, descriptions and remediation help from the class table, and the verification text and fix branch of a finding that has a patch.
 - `spackle runs` lists the stored runs, and `spackle runs prune --keep <n>` or `--older-than <age>` deletes old runs with their clones and fix worktrees after listing them.
+- `spackle runs compare <older> <newer>` lists the findings that are new, gone, or present in both of two stored runs.
 
 ### Changed
 

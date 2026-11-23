@@ -131,3 +131,63 @@ func TestRunsPrune(t *testing.T) {
 		t.Fatalf("a bad age exited %d", code)
 	}
 }
+
+func TestRunsCompare(t *testing.T) {
+	cfg, state := runsFixture(t, 0)
+	target := filepath.Join(filepath.Dir(cfg), "app")
+	scan := func() {
+		t.Helper()
+		var out, errb bytes.Buffer
+		if code := Main([]string{"scan", target, "--config", cfg, "--fail-on", "never"}, strings.NewReader(""), &out, &errb); code != ExitOK {
+			t.Fatalf("scan exited %d: %s", code, errb.String())
+		}
+	}
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(target, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Older run: one flaw in a.py. Newer run: that flaw is gone, another
+	// stays, and a new one appears in c.py.
+	write("a.py", "import subprocess\n\ndef run(cmd):\n    return subprocess.run(\"sh -c \" + cmd, shell=True)\n")
+	write("b.py", "import hashlib\n\ndef digest(pw):\n    return hashlib.md5(pw.encode()).hexdigest()\n")
+	scan()
+	write("a.py", "def run(cmd):\n    return None\n")
+	write("c.py", "import yaml\n\ndef load(f):\n    return yaml.load(f)\n")
+	scan()
+	names := runsIn(t, state)
+	if len(names) != 2 {
+		t.Fatalf("runs = %v", names)
+	}
+	var out, errb bytes.Buffer
+	if code := Main([]string{"runs", "compare", names[0], names[1], "--config", cfg, "--format", "json"}, strings.NewReader(""), &out, &errb); code != ExitOK {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	var got struct {
+		Older, Newer string
+		New          []struct{ Location string }
+		Gone         []struct{ Location string }
+		StillPresent []struct{ Location string } `json:"still_present"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+	where := func(rows []struct{ Location string }) string {
+		var files []string
+		for _, r := range rows {
+			files = append(files, strings.SplitN(r.Location, ":", 2)[0])
+		}
+		return strings.Join(files, ",")
+	}
+	if got.Older != names[0] || got.Newer != names[1] || where(got.New) != "c.py" || where(got.Gone) != "a.py" || where(got.StillPresent) != "b.py" {
+		t.Fatalf("new=%q gone=%q still=%q\n%s", where(got.New), where(got.Gone), where(got.StillPresent), out.String())
+	}
+	out.Reset()
+	if code := Main([]string{"runs", "compare", names[0], "latest", "--config", cfg}, strings.NewReader(""), &out, &errb); code != ExitOK || !strings.Contains(out.String(), "New: 1") || !strings.Contains(out.String(), "Gone: 1") || !strings.Contains(out.String(), "Still present: 1") {
+		t.Fatalf("exit %d: %s", code, out.String())
+	}
+	if code := Main([]string{"runs", "compare", names[0], "--config", cfg}, strings.NewReader(""), &out, &errb); code != ExitUsage {
+		t.Fatalf("one run id exited %d", code)
+	}
+}

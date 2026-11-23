@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/engine"
+	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/report"
 )
 
@@ -35,7 +36,10 @@ func runRuns(env Env, args []string) int {
 	if len(args) > 0 && args[0] == "prune" {
 		return runRunsPrune(env, args[1:])
 	}
-	fs := newFlagSet(env, "runs", "[prune]", "List the runs stored in the state directory, newest first.\n\"spackle runs prune\" deletes old runs with their clones and fix worktrees: see \"spackle runs prune --help\".")
+	if len(args) > 0 && args[0] == "compare" {
+		return runRunsCompare(env, args[1:])
+	}
+	fs := newFlagSet(env, "runs", "[prune|compare]", "List the runs stored in the state directory, newest first.\n\"spackle runs prune\" deletes old runs with their clones and fix worktrees: see \"spackle runs prune --help\".\n\"spackle runs compare <older> <newer>\" lists the findings that are new, gone, or in both.")
 	var g globalFlags
 	g.registerGroups(fs, flagsConfig)
 	format := fs.String("format", "text", "output `format`: text or json")
@@ -238,5 +242,129 @@ func runRunsPrune(env Env, args []string) int {
 		return ExitError
 	}
 	fmt.Fprintf(env.Stdout, "Deleted %d run(s). A fix branch (spackle/<run-id>) stays in your repository; \"git worktree prune\" there clears the record of a deleted worktree.\n", len(doomed))
+	return ExitOK
+}
+
+// comparedFinding is one finding in a comparison of two runs.
+type comparedFinding struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Severity string `json:"severity"`
+	Location string `json:"location"`
+	Status   string `json:"status"`
+	// Change says what differs from the older run, for a finding in both.
+	Change string `json:"change,omitempty"`
+}
+
+// runComparison joins two runs on finding id.
+type runComparison struct {
+	Older        string            `json:"older"`
+	Newer        string            `json:"newer"`
+	New          []comparedFinding `json:"new"`
+	Gone         []comparedFinding `json:"gone"`
+	StillPresent []comparedFinding `json:"still_present"`
+}
+
+// compareRuns reports which findings are only in the newer run, only in the
+// older run, or in both. Dismissed findings are left out on both sides. A
+// finding id is made from the class, the place and, for a rule finding, the
+// rule, so code that moved to another line shows as one gone and one new.
+func compareRuns(older, newer report.Run) runComparison {
+	row := func(f finding.Finding) comparedFinding {
+		return comparedFinding{ID: f.ID, Title: f.Title, Severity: f.Severity.Label, Location: f.Location.String(), Status: f.Status}
+	}
+	before := map[string]finding.Finding{}
+	for _, f := range older.Active() {
+		before[f.ID] = f
+	}
+	c := runComparison{Older: older.ID, Newer: newer.ID, New: []comparedFinding{}, Gone: []comparedFinding{}, StillPresent: []comparedFinding{}}
+	seen := map[string]bool{}
+	for _, f := range newer.Active() {
+		seen[f.ID] = true
+		old, ok := before[f.ID]
+		if !ok {
+			c.New = append(c.New, row(f))
+			continue
+		}
+		r := row(f)
+		var changes []string
+		if old.Status != f.Status {
+			changes = append(changes, "status "+old.Status+" to "+f.Status)
+		}
+		if old.Severity.Label != f.Severity.Label {
+			changes = append(changes, "severity "+old.Severity.Label+" to "+f.Severity.Label)
+		}
+		r.Change = strings.Join(changes, ", ")
+		c.StillPresent = append(c.StillPresent, r)
+	}
+	for _, f := range older.Active() {
+		if !seen[f.ID] {
+			c.Gone = append(c.Gone, row(f))
+		}
+	}
+	return c
+}
+
+func runRunsCompare(env Env, args []string) int {
+	fs := newFlagSet(env, "runs compare", "<older-run-id> <newer-run-id>", "Compare the findings of two stored runs: new in the newer run, gone from it, and in both.\nA run id may be a unique prefix, or \"latest\". Findings are matched by id, which includes the\nline, so code that moved shows as one finding gone and one new.")
+	var g globalFlags
+	g.registerGroups(fs, flagsConfig)
+	format := fs.String("format", "text", "output `format`: text or json")
+	pos, err := parseInterleaved(fs, args)
+	if err != nil {
+		return flagExit(err)
+	}
+	if len(pos) != 2 {
+		fmt.Fprintf(env.Stderr, "spackle runs compare: expected two run ids (older, then newer), got %d.\n", len(pos))
+		return ExitUsage
+	}
+	if *format != "text" && *format != "json" {
+		fmt.Fprintf(env.Stderr, "spackle runs compare: unknown format %q: choose text or json\n", *format)
+		return ExitUsage
+	}
+	cfg, err := g.load()
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "spackle runs compare: %v\n", err)
+		return ExitUsage
+	}
+	var loaded [2]report.Run
+	for i, id := range pos {
+		dir, rerr := engine.ResolveRun(cfg.StateDir, id)
+		if rerr != nil {
+			fmt.Fprintf(env.Stderr, "spackle runs compare: %v\n", rerr)
+			return ExitUsage
+		}
+		if loaded[i], rerr = report.Load(dir); rerr != nil {
+			fmt.Fprintf(env.Stderr, "spackle runs compare: %v\n", rerr)
+			return ExitError
+		}
+	}
+	c := compareRuns(loaded[0], loaded[1])
+	if *format == "json" {
+		enc := json.NewEncoder(env.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(c); err != nil {
+			fmt.Fprintf(env.Stderr, "spackle runs compare: %v\n", err)
+			return ExitError
+		}
+		return ExitOK
+	}
+	fmt.Fprintf(env.Stdout, "Comparing %s (older) with %s (newer).\n", c.Older, c.Newer)
+	if loaded[0].Target != loaded[1].Target {
+		fmt.Fprintf(env.Stdout, "The runs scanned different targets (%s and %s), so most findings will not match.\n", loaded[0].Target, loaded[1].Target)
+	}
+	for _, group := range []struct {
+		label string
+		rows  []comparedFinding
+	}{{"New", c.New}, {"Gone", c.Gone}, {"Still present", c.StillPresent}} {
+		fmt.Fprintf(env.Stdout, "\n%s: %d\n", group.label, len(group.rows))
+		for _, r := range group.rows {
+			line := fmt.Sprintf("  %s  %-8s %s (%s)", r.ID, r.Severity, r.Title, r.Location)
+			if r.Change != "" {
+				line += "  [" + r.Change + "]"
+			}
+			fmt.Fprintln(env.Stdout, line)
+		}
+	}
 	return ExitOK
 }
