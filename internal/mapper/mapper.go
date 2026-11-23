@@ -96,10 +96,13 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 	}
 
 	// The cache is only valid for an exact commit with no local changes.
+	// The state directory, which holds the cache itself, is untracked
+	// inside the target by default and is never read by the walk, so it
+	// does not count as a change.
 	commit := ""
 	if sha, err := gitx.HeadSHA(ctx, root); err == nil {
 		if top, terr := gitx.TopLevel(ctx, root); terr == nil && sameDir(top, root) {
-			if clean, cerr := gitx.IsClean(ctx, root); cerr == nil && clean {
+			if clean, cerr := gitx.IsCleanExcept(ctx, root, stateDirName); cerr == nil && clean {
 				commit = sha
 			}
 		}
@@ -425,6 +428,10 @@ func chooseHarness(m *Map, files []walk.File) {
 		}
 	}
 }
+
+// stateDirName is the default state directory. The walk prunes a directory
+// of this name wherever it is, so nothing in it is part of the map.
+const stateDirName = ".spackle"
 
 // cacheVersion changes whenever the Map shape or the detection rules
 // change, so an old cache entry is never trusted.

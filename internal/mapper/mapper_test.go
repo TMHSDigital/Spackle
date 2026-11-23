@@ -202,6 +202,23 @@ func TestCacheIsKeyedByCleanCommit(t *testing.T) {
 		t.Fatalf("cached build: entries %d vs %d, files %d, err %v", len(second.Entry), len(first.Entry), len(second.Files), err)
 	}
 
+	// The default state directory sits untracked inside the target. The
+	// walk never reads it, so it must not make the tree count as changed:
+	// the second scan has to find the entry the first one wrote there.
+	inTarget := filepath.Join(root, ".spackle", "cache")
+	for i := 1; i <= 2; i++ {
+		m, err := Build(context.Background(), root, Options{CacheDir: inTarget})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Commit != first.Commit {
+			t.Fatalf("build %d with the cache inside the target: commit = %q, want %s (the tree is clean apart from .spackle)", i, m.Commit, first.Commit)
+		}
+	}
+	if entries, _ := os.ReadDir(inTarget); len(entries) != 1 {
+		t.Fatalf("cache inside the target = %v, want one entry", entries)
+	}
+
 	// A dirty tree must not use or write the cache: the commit no longer
 	// describes what is on disk.
 	write(t, root, "new.py", "@app.route('/new')\ndef n(): pass\n")

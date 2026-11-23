@@ -133,6 +133,14 @@ func IsClean(ctx context.Context, dir string) (bool, error) {
 	return out == "", err
 }
 
+// IsCleanExcept reports whether the work tree has no uncommitted changes
+// outside the named top-level directory. dir must be the top of the work
+// tree.
+func IsCleanExcept(ctx context.Context, dir, except string) (bool, error) {
+	out, err := run(ctx, dir, "status", "--porcelain", "--", ".", ":(exclude)"+except)
+	return strings.TrimSpace(out) == "", err
+}
+
 // Dirty reports whether any of the given paths (relative to dir) differs
 // from HEAD: modified, staged, deleted or untracked.
 func Dirty(ctx context.Context, dir string, paths ...string) (bool, error) {
