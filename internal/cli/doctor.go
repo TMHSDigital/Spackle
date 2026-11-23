@@ -2,13 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/version"
 )
@@ -93,39 +94,35 @@ func doctorChecks(ctx context.Context, cfg config.Config) []check {
 	return out
 }
 
+// detectRuntime finds the container runtime. It is the sandbox package's
+// own detection, so doctor and a scan cannot disagree about whether proofs
+// can run. Tests replace it.
+var detectRuntime = sandbox.Detect
+
 func runtimeChecks(ctx context.Context, cfg config.Config) []check {
 	if cfg.Sandbox.Runtime == "none" {
 		return []check{{"Sandbox", "runtime", "warn", "disabled in config: proofs and fixes will not be run"}}
 	}
-	candidates := []string{"docker", "podman"}
-	if cfg.Sandbox.Runtime != "auto" {
-		candidates = []string{cfg.Sandbox.Runtime}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	rt, err := detectRuntime(cctx, cfg.Sandbox.Runtime)
+	if err != nil {
+		status := "warn"
+		if errors.Is(err, sandbox.ErrNoRuntime) {
+			status = "missing"
+		}
+		return []check{{"Sandbox", "runtime", status, err.Error() + ". Findings are still reported"}}
 	}
-	for _, name := range candidates {
-		if _, err := exec.LookPath(name); err != nil {
-			continue
+	checks := []check{{"Sandbox", rt.Name(), "ok", "engine is answering, default network: none"}}
+	for _, lang := range []string{"go", "python", "javascript", "typescript"} {
+		img := cfg.Sandbox.Images[lang]
+		if rt.ImagePresent(cctx, img) {
+			checks = append(checks, check{"Sandbox", "image " + lang, "ok", img})
+		} else {
+			checks = append(checks, check{"Sandbox", "image " + lang, "missing", img + " is not pulled; it is fetched on first use, or run: " + rt.Name() + " pull " + img})
 		}
-		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		out, err := exec.CommandContext(cctx, name, "version", "--format", "{{.Server.Version}}").Output() //nolint:gosec // fixed program names, argument vector
-		cancel()
-		if err != nil {
-			return []check{{"Sandbox", name, "warn", "installed but the engine is not answering: start it (for example Docker Desktop) to run proofs"}}
-		}
-		checks := []check{{"Sandbox", name, "ok", "engine " + strings.TrimSpace(string(out)) + ", default network: none"}}
-		for _, lang := range []string{"go", "python", "javascript"} {
-			img := cfg.Sandbox.Images[lang]
-			ictx, icancel := context.WithTimeout(ctx, 10*time.Second)
-			ierr := exec.CommandContext(ictx, name, "image", "inspect", "--format", "{{.Id}}", img).Run() //nolint:gosec // fixed program, image name from config
-			icancel()
-			if ierr != nil {
-				checks = append(checks, check{"Sandbox", "image " + lang, "missing", img + " is not pulled; it is fetched on first use, or run: " + name + " pull " + img})
-			} else {
-				checks = append(checks, check{"Sandbox", "image " + lang, "ok", img})
-			}
-		}
-		return checks
 	}
-	return []check{{"Sandbox", "runtime", "missing", "no Docker or Podman found: findings are still reported, but nothing is demonstrated or fix-verified"}}
+	return checks
 }
 
 // modelChecks validates the configured provider. The live round-trip is
