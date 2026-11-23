@@ -45,7 +45,7 @@ Each is computed over the totals for the run, exactly as below. A ratio with a z
 
 Notes on two of them:
 
-- **Verified-fix rate is verified fixes divided by true positives.** The denominator is every true positive, not only the ones Spackle tried to fix. A true positive counts as a verified fix when its finding has status `fixed` and its verification record starts with `verified`, which means the proof of concept that demonstrated it stopped working against the patched code. A patch that was written but not verified does not count. A deterministic run never attempts a fix, so the table shows `n/a` there, not 0%.
+- **Verified-fix rate is verified fixes divided by true positives.** The denominator is every true positive, not only the ones Spackle tried to fix. A true positive counts as a verified fix when its finding has status `patch-available` or `fixed` and its verification record starts with `verified`, which means the proof of concept that demonstrated it stopped working against the patched code. A patch that was written but not verified does not count. A deterministic run never attempts a fix, so the table shows `n/a` there, not 0%.
 - **Cost per finding includes everything the run spent**, on false positives and decoys too, so noise makes it worse. The table shows `n/a` for a deterministic run or a run with no true positives, and `unknown` when any call used a model whose price Spackle does not know. A number is never guessed.
 
 The file also breaks the totals down by language and by difficulty.

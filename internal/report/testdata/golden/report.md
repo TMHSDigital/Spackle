@@ -19,7 +19,7 @@
 - **Outcome:** budget-exhausted
 - **Spackle version:** 0.1.0
 
-**Counts:** 3 open, 1 fixed, 1 dismissed. By severity, open and fixed: 1 critical, 1 high, 1 medium, 1 low, 0 none. Demonstrated by a proof of concept: 1.
+**Counts:** 3 open, 0 with a patch available, 1 fixed, 1 dismissed. By severity, all but dismissed: 1 critical, 1 high, 1 medium, 1 low, 0 none. Demonstrated by a proof of concept: 1.
 
 ## Findings summary
 

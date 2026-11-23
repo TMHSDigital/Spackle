@@ -455,7 +455,7 @@ Every excluded path is listed in the report as "Not read", and the report notes 
 
 Fixing needs a model and a container runtime. The fixer returns whole files, at most three per finding, and only files that already exist. Spackle computes the unified diff. A patch is rejected when the changed files no longer compile or parse, when the project's tests passed before and fail after, when it changes more than 400 lines, when it touches a test or proof file, or when the proof of concept still succeeds against the patched code.
 
-A finding is marked `fixed` only when a proof of concept that demonstrated it stops working against the patched code. When there was no proof to re-run, a patch that passes the other checks is still offered, labelled `unverified`, and the finding stays `open`.
+A finding is marked `patch-available` only when a proof of concept that demonstrated it stops working against the patched code. The patch is not applied to your code, so the finding still counts toward `fail_on` until you merge it; `spackle verify` marks it `fixed` once the proof no longer succeeds against the code itself. When there was no proof to re-run, a patch that passes the other checks is still offered, labelled `unverified`, and the finding stays `open`.
 
 Your working tree, index and current branch are never changed. Each patch is written to `findings/<id>/fix.patch` in the run directory. When the fixed files are tracked by git, the patches are also committed to a new branch `spackle/<run-id>` in a separate worktree under `<state_dir>/worktrees/`. `--pr` pushes that branch and opens a draft pull request through the GitHub CLI (`gh`), which must be installed and signed in.
 

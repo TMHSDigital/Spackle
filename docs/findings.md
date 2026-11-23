@@ -42,7 +42,7 @@ Field names are the JSON names. Fields marked optional are left out when empty.
 | `remediation` | object | The fix |
 | `confidence` | object | The label and its reason |
 | `origin` | string list, optional | What contributed: `builtin-code:py-sql-fstring-var`, `investigator:<intent id>` and so on |
-| `status` | string | `open`, `dismissed` or `fixed` |
+| `status` | string | `open`, `patch-available`, `fixed` or `dismissed` |
 | `dismiss_reason` | string, optional | Required when `status` is `dismissed` |
 
 ### `location`
@@ -168,7 +168,8 @@ SQL injection is reported as `reasoned` with confidence `high`, not `demonstrate
 | :--- | :--- |
 | `open` | The default |
 | `dismissed` | The reviewer refuted the finding with a concrete reason, an investigator concluded a lead does not hold up, or a model assessed a running-target observation and did not confirm it. The reason is kept in `dismiss_reason`, in the ledger and in `review.md` |
-| `fixed` | A patch was accepted and the proof of concept that demonstrated the finding no longer succeeds against the patched code. `spackle verify` also sets it when a stored proof no longer succeeds against the current code, and sets it back to `open` when the proof succeeds again |
+| `patch-available` | A patch was accepted and the proof of concept that demonstrated the finding no longer succeeds against the patched code. The patch is on the fix branch or in `fix.patch`; the code that was scanned is unchanged, so the flaw is still there until the patch is merged. It counts toward `--fail-on` like an open finding |
+| `fixed` | `spackle verify` re-ran the stored proof against the current code and it no longer succeeds. Verify sets the status back to `open` when the proof succeeds again |
 
 A dismissal needs a reason. A reviewer that says "refuted" without one does not dismiss anything: the finding is kept and the verdict is recorded as uncertain.
 
@@ -187,7 +188,7 @@ Spackle computes the score. A model proposes a CVSS 4.0 vector and nothing else:
 
 The label is the CVSS 4.0 qualitative rating of the score, in lower case.
 
-Reports rank open findings first, then fixed, then dismissed. Within a group the order is severity label, score, confidence, then id.
+Reports rank open findings first, then those with a patch available, then fixed, then dismissed. Within a group the order is severity label, score, confidence, then id.
 
 ## How a draft becomes a finding
 

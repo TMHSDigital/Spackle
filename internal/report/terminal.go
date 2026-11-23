@@ -98,6 +98,9 @@ func Terminal(run Run, w io.Writer, color bool) error {
 		t.kv(2, p.Label, p.Value)
 	}
 	t.line("")
+	if d.PatchLine != "" {
+		t.line(d.PatchLine)
+	}
 	t.line(d.SummaryLine)
 
 	_, err := w.Write(t.buf.Bytes())

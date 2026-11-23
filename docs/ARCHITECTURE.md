@@ -125,7 +125,7 @@ Each candidate is checked in the sandbox, against a copy of the target with the 
 2. The proof of concept, when there is one, no longer succeeds.
 3. The project's own tests still pass, when they passed on the unmodified code.
 
-A candidate that fails is sent back with the reason, up to `max_attempts` times. A finding becomes `fixed` only when the proof stopped working. With no proof to re-run, a patch that passes the other checks is offered as `unverified` and the finding stays open.
+A candidate that fails is sent back with the reason, up to `max_attempts` times. A finding becomes `patch-available` only when the proof stopped working against the patched code. It becomes `fixed` when `spackle verify` shows the proof no longer succeeds against the code itself. With no proof to re-run, a patch that passes the other checks is offered as `unverified` and the finding stays open.
 
 After all investigations, accepted patches are committed to a branch `spackle/<run-id>` in a new git worktree under the state directory, and only when the fixed files are tracked by git. The working tree, the index and the current branch are never touched. `--pr` pushes the branch and opens a draft pull request through the GitHub CLI.
 

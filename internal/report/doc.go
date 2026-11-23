@@ -87,6 +87,7 @@ type doc struct {
 	Seeders     []seederRow
 	Usage       []kv
 	SummaryLine string
+	PatchLine   string
 }
 
 // builder turns a Run into a doc, cleaning every untrusted string.
@@ -120,6 +121,7 @@ func buildDoc(run Run, clean func(string) string) doc {
 		Map:         b.mapSummary(run),
 		Usage:       usageSummary(run.Usage),
 		SummaryLine: summaryLine(run),
+		PatchLine:   patchLine(run),
 	}
 	for _, f := range run.Active() {
 		d.Active = append(d.Active, b.finding(f))
@@ -265,22 +267,33 @@ func usageSummary(u Usage) []kv {
 }
 
 func countsText(c Counts) string {
-	return fmt.Sprintf("%d open, %d fixed, %d dismissed. By severity, open and fixed: %d critical, %d high, %d medium, %d low, %d none. "+
+	return fmt.Sprintf("%d open, %d with a patch available, %d fixed, %d dismissed. By severity, all but dismissed: %d critical, %d high, %d medium, %d low, %d none. "+
 		"Demonstrated by a proof of concept: %d.",
-		c.Open, c.Fixed, c.Dismissed, c.Critical, c.High, c.Medium, c.Low, c.None, c.Demonstrated)
+		c.Open, c.PatchAvailable, c.Fixed, c.Dismissed, c.Critical, c.High, c.Medium, c.Low, c.None, c.Demonstrated)
 }
 
 // summaryLine is the one-line total that ends the terminal report. The
-// finding count is the number of active (open or fixed) findings.
+// finding count is the number of active findings: every one that is not
+// dismissed.
 func summaryLine(run Run) string {
 	c := run.Count()
-	n := c.Open + c.Fixed
+	n := c.Open + c.PatchAvailable + c.Fixed
 	noun := "findings"
 	if n == 1 {
 		noun = "finding"
 	}
 	return fmt.Sprintf("Summary: %d %s (%d critical, %d high, %d medium, %d low), %d demonstrated, %d fixed, %d dismissed",
 		n, noun, c.Critical, c.High, c.Medium, c.Low, c.Demonstrated, c.Fixed, c.Dismissed)
+}
+
+// patchLine is shown above the summary line when patches were written and
+// not applied. It is separate so the summary line keeps its width.
+func patchLine(run Run) string {
+	n := run.Count().PatchAvailable
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Patches available and not applied: %d. The scanned code still has these flaws.", n)
 }
 
 func (b builder) finding(f finding.Finding) findingView {

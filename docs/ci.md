@@ -136,12 +136,12 @@ If either check fails, the step fails and Spackle is never run. Action inputs re
 
 | Code | Meaning | In the action |
 | :--- | :--- | :--- |
-| 0 | The scan ran. No open finding at or above `fail-on` | The job passes |
-| 1 | The scan ran. At least one open finding at or above `fail-on` | The job fails, after the SARIF upload |
+| 0 | The scan ran. No unresolved finding at or above `fail-on` | The job passes |
+| 1 | The scan ran. At least one unresolved finding at or above `fail-on` | The job fails, after the SARIF upload |
 | 2 | Refused before running: bad arguments, bad configuration, or missing authorization | The job fails |
 | 3 | The run itself failed | The job fails |
 
-Fixed and dismissed findings do not count toward the threshold. `fail-on: never` makes a successful scan exit 0 whatever it found.
+A finding is unresolved when its status is `open` or `patch-available`. A patch that Spackle wrote and checked is not applied to the code that was scanned, so such a finding still fails the job until the patch is merged and a later scan or `spackle verify` no longer reproduces it. Fixed and dismissed findings do not count toward the threshold. The SARIF report agrees with this rule: unresolved findings keep the level of their severity, and a fixed finding is listed at level `note`. `fail-on: never` makes a successful scan exit 0 whatever it found.
 
 ## Other CI systems
 

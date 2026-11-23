@@ -136,7 +136,7 @@ func TestIntegrationRealSandboxProofAndFix(t *testing.T) {
 	if f.Proof.Status != finding.ProofDemonstrated {
 		t.Fatalf("the proof was not demonstrated in a real container: %+v", f.Proof)
 	}
-	if f.Status != finding.StatusFixed || !strings.HasPrefix(f.Remediation.Verification, "verified: ") {
+	if f.Status != finding.StatusPatchAvailable || !strings.HasPrefix(f.Remediation.Verification, "verified: ") {
 		t.Fatalf("the fix was not verified: status=%s verification=%q", f.Status, f.Remediation.Verification)
 	}
 	if !strings.Contains(f.Proof.Isolation, "network none") {

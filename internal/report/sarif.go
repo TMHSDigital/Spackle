@@ -125,6 +125,12 @@ func renderSARIF(run Run, w io.Writer) error {
 				ProofStatus: f.Proof.Status,
 			},
 		}
+		if f.Status == finding.StatusFixed {
+			// The proof no longer succeeds against the code, and the exit
+			// code does not count this finding. Keep it visible, but not
+			// as an error or warning, so the two signals agree.
+			res.Level = "note"
+		}
 		if !f.Severity.Unscored {
 			res.Properties.SecuritySeverity = fmt.Sprintf("%.1f", f.Severity.Score)
 		}

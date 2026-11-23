@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spackle verify` re-runs proofs against the directory that was scanned, which is now recorded as an absolute path, instead of resolving the target as typed against the current directory.
 - Directories that are pruned by default are now listed in the report as "Not read". `vendor`, `dist`, `build`, `target` and `coverage` are pruned only at the target root or where a marker file shows they are dependencies or build output, so a first-party package with one of those names is scanned.
 - The sandbox no longer copies `.git`, `.spackle`, virtual environments and tool caches from the top of the target into the in-memory work directory, which makes each run faster and leaves more of the memory limit for the program. `node_modules` and `vendor` are still copied.
+- A finding with a checked patch that is not applied now has status `patch-available` instead of `fixed`, and it counts toward `--fail-on`: the exit code no longer passes while the flaw is still in the scanned code. `fixed` is kept for a finding whose proof no longer succeeds against the code itself, as `spackle verify` establishes. The JSON report counts gain `patch_available`, and SARIF lists a fixed finding at level `note`.
 
 ### Fixed
 

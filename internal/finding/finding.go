@@ -31,7 +31,12 @@ const (
 const (
 	StatusOpen      = "open"
 	StatusDismissed = "dismissed" // refuted by the reviewer; reason kept
-	StatusFixed     = "fixed"     // a verified patch exists
+	// StatusPatchAvailable means a patch was written and checked against
+	// the proof, but it is not applied: the scanned code still has the flaw.
+	StatusPatchAvailable = "patch-available"
+	// StatusFixed means the stored proof no longer succeeds against the
+	// code itself, which is what "spackle verify" establishes.
+	StatusFixed = "fixed"
 )
 
 // Surfaces.
@@ -293,7 +298,7 @@ func (f *Finding) Validate() error {
 		add("remediation summary is empty")
 	}
 	switch f.Status {
-	case StatusOpen, StatusFixed:
+	case StatusOpen, StatusPatchAvailable, StatusFixed:
 	case StatusDismissed:
 		if strings.TrimSpace(f.DismissReason) == "" {
 			add("status is dismissed but no reason is recorded")
@@ -335,7 +340,7 @@ func LabelRank(label string) int {
 func Rank(fs []Finding) []Finding {
 	out := make([]Finding, len(fs))
 	copy(out, fs)
-	statusOrder := map[string]int{StatusOpen: 0, StatusFixed: 1, StatusDismissed: 2}
+	statusOrder := map[string]int{StatusOpen: 0, StatusPatchAvailable: 1, StatusFixed: 2, StatusDismissed: 3}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if statusOrder[a.Status] != statusOrder[b.Status] {

@@ -863,7 +863,7 @@ func (d *debugRun) finding(rep reproduction, bisect string, diag agent.Diagnosis
 	case diag.Patch != "":
 		rem.Verification = diag.Verification
 		if diag.Verified {
-			status = finding.StatusFixed
+			status = finding.StatusPatchAvailable
 		}
 	case !wantFix:
 		rem.Verification = "not attempted: fixes are turned off (--no-fix), so the run stopped after the root cause"

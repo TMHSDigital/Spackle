@@ -413,6 +413,17 @@ func TestTerminalSummaryLine(t *testing.T) {
 	if got, want := lastLine(Run{}), "Summary: 0 findings (0 critical, 0 high, 0 medium, 0 low), 0 demonstrated, 0 fixed, 0 dismissed"; got != want {
 		t.Errorf("summary line\n got %q\nwant %q", got, want)
 	}
+	// A patch that was written but not applied is counted apart from fixed
+	// findings and called out above the summary line.
+	patched := fixtureRun()
+	patched.Findings[fxFixed].Status = finding.StatusPatchAvailable
+	out := string(render(t, "terminal", patched))
+	if !strings.Contains(out, "Patches available and not applied: 1.") || !strings.Contains(out, "1 demonstrated, 0 fixed, 1 dismissed") {
+		t.Errorf("a patch-available finding is not reported apart from fixed ones:\n%s", out[max(0, len(out)-400):])
+	}
+	if c := patched.Count(); c.PatchAvailable != 1 || c.Fixed != 0 {
+		t.Errorf("counts = %+v", c)
+	}
 }
 
 var sgr = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -748,7 +759,7 @@ func TestJSONEnvelope(t *testing.T) {
 		t.Error("json skipped or seeders do not round trip")
 	}
 	wantCounts := map[string]int{
-		"total": 5, "open": 3, "fixed": 1, "dismissed": 1, "demonstrated": 1,
+		"total": 5, "open": 3, "patch_available": 0, "fixed": 1, "dismissed": 1, "demonstrated": 1,
 		"critical": 1, "high": 1, "medium": 1, "low": 1, "none": 0,
 	}
 	if !reflect.DeepEqual(env.Counts, wantCounts) {

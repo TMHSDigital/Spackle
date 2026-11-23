@@ -237,7 +237,7 @@ footer { margin-top: 3rem; color: var(--dim); font-size: 0.85rem; }
 </dl>
 </div>
 
-<footer>{{.SummaryLine}}</footer>
+<footer>{{if .PatchLine}}{{.PatchLine}}<br>{{end}}{{.SummaryLine}}</footer>
 </body>
 </html>
 `

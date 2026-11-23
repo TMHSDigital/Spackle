@@ -132,7 +132,7 @@ func TestProveThenFixThenVerify(t *testing.T) {
 	if f.Proof.Command != "python spackle_poc/poc.py" || !strings.Contains(f.Proof.Result, "SPACKLE-PROOF-") || !strings.Contains(f.Proof.Isolation, "network none") {
 		t.Fatalf("proof = %+v", f.Proof)
 	}
-	if f.Status != finding.StatusFixed || !strings.HasPrefix(f.Remediation.Verification, "verified: ") || !strings.Contains(f.Remediation.Verification, "no longer succeeds") {
+	if f.Status != finding.StatusPatchAvailable || !strings.HasPrefix(f.Remediation.Verification, "verified: ") || !strings.Contains(f.Remediation.Verification, "no longer succeeds") {
 		t.Fatalf("status=%s verification=%q", f.Status, f.Remediation.Verification)
 	}
 	if !strings.Contains(f.Remediation.Patch, "+    return db.execute(\"SELECT * FROM t WHERE a = ?\", (q,))") || !strings.Contains(f.Remediation.Patch, "--- a/app.py") {
@@ -211,7 +211,7 @@ func TestNoRuntimeMeansNothingIsExecuted(t *testing.T) {
 	if f.Proof.Status != finding.ProofReasoned || !strings.Contains(f.Proof.Reason, "No container runtime") {
 		t.Fatalf("proof = %+v", f.Proof)
 	}
-	if f.Confidence.Level == finding.ConfidenceDemonstrated || f.Status == finding.StatusFixed || f.Remediation.Patch != "" {
+	if f.Confidence.Level == finding.ConfidenceDemonstrated || f.Status != finding.StatusOpen || f.Remediation.Patch != "" {
 		t.Fatalf("without a runtime nothing can be demonstrated or fixed: %+v", f)
 	}
 	if !strings.Contains(res.Run.Isolation, "no container runtime") || res.Run.Usage.SandboxRuns != 0 {

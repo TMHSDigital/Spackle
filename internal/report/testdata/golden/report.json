@@ -21,6 +21,7 @@
   "counts": {
     "total": 5,
     "open": 3,
+    "patch_available": 0,
     "fixed": 1,
     "dismissed": 1,
     "demonstrated": 1,

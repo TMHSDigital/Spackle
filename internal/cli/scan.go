@@ -139,15 +139,18 @@ func emit(env Env, cfg config.Config, run report.Run, runDir string) error {
 	return nil
 }
 
-// exitFor returns ExitFindings when an open finding is at or above the
-// configured threshold.
+// exitFor returns ExitFindings when a finding that is still in the scanned
+// code is at or above the configured threshold. That is an open finding, and
+// also one with a patch available: the patch sits on a branch or in a patch
+// file, and the code that was scanned is unchanged.
 func exitFor(cfg config.Config, run report.Run) int {
 	if cfg.Output.FailOn == "never" {
 		return ExitOK
 	}
 	threshold := finding.LabelRank(cfg.Output.FailOn)
 	for _, f := range run.Findings {
-		if f.Status == finding.StatusOpen && finding.LabelRank(f.Severity.Label) >= threshold {
+		unresolved := f.Status == finding.StatusOpen || f.Status == finding.StatusPatchAvailable
+		if unresolved && finding.LabelRank(f.Severity.Label) >= threshold {
 			return ExitFindings
 		}
 	}

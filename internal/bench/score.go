@@ -57,7 +57,7 @@ func FromFinding(f finding.Finding) Reported {
 	return Reported{
 		ID: f.ID, Class: f.Class, File: f.Location.File, Line: f.Location.StartLine,
 		Confidence: f.Confidence.Level, Status: f.Status,
-		Fixed: f.Status == finding.StatusFixed && strings.HasPrefix(f.Remediation.Verification, "verified"),
+		Fixed: (f.Status == finding.StatusFixed || f.Status == finding.StatusPatchAvailable) && strings.HasPrefix(f.Remediation.Verification, "verified"),
 	}
 }
 

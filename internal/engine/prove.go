@@ -276,7 +276,9 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 		}
 		outcome := "fix-unverified"
 		if fix.Verified {
-			f.Status = finding.StatusFixed
+			// The patch is checked but not applied: the scanned tree is
+			// never changed, so the flaw is still in the code.
+			f.Status = finding.StatusPatchAvailable
 			outcome = "fixed"
 		}
 		l.fixes = append(l.fixes, acceptedFix{id: f.ID, title: f.Title, files: fix.Files})

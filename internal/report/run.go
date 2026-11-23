@@ -70,7 +70,9 @@ type Usage struct {
 type Counts struct {
 	Critical, High, Medium, Low, None int
 	Open, Fixed, Dismissed            int
-	Demonstrated                      int
+	// PatchAvailable counts findings with a checked patch that is not applied.
+	PatchAvailable int
+	Demonstrated   int
 }
 
 // Count tallies the run's findings.
@@ -83,6 +85,8 @@ func (r Run) Count() Counts {
 			continue
 		case finding.StatusFixed:
 			c.Fixed++
+		case finding.StatusPatchAvailable:
+			c.PatchAvailable++
 		default:
 			c.Open++
 		}

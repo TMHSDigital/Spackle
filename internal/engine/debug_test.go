@@ -224,7 +224,7 @@ func TestDebugTestReproducesDiagnosesFixesAndVerifies(t *testing.T) {
 		t.Fatalf("isolation = %q", run.Isolation)
 	}
 	f := oneFinding(t, res)
-	if f.Status != finding.StatusFixed || f.Title != "add subtracts instead of adding" || f.Location.File != "calc.py" || f.Location.StartLine != 2 {
+	if f.Status != finding.StatusPatchAvailable || f.Title != "add subtracts instead of adding" || f.Location.File != "calc.py" || f.Location.StartLine != 2 {
 		t.Fatalf("status=%s title=%q location=%+v verification=%q", f.Status, f.Title, f.Location, f.Remediation.Verification)
 	}
 	if f.ID != finding.MakeID("bug", f.Location) || !strings.Contains(f.Flaw.Description, "a - b") {
@@ -382,7 +382,7 @@ func TestDebugIssueIsReproducedByScriptAndStaysInsideOneEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := oneFinding(t, res)
-	if f.Status != finding.StatusFixed || f.Proof.Kind != "script" || f.Proof.Command != "python "+reproFile || !markerRe.MatchString(f.Proof.Result) {
+	if f.Status != finding.StatusPatchAvailable || f.Proof.Kind != "script" || f.Proof.Command != "python "+reproFile || !markerRe.MatchString(f.Proof.Result) {
 		t.Fatalf("status=%s proof=%+v verification=%q", f.Status, f.Proof, f.Remediation.Verification)
 	}
 	if !strings.Contains(f.Remediation.Verification, "the reproduction no longer shows the problem") || !strings.Contains(f.Proof.Summary, "Calls add(1, 2)") {
@@ -697,7 +697,7 @@ func TestDebugBisectFindsTheCommitThatIntroducedTheBug(t *testing.T) {
 	}
 	// The fix landed on a branch in a worktree, like a scan fix.
 	branch := "spackle/" + res.RunID
-	if f.Status != finding.StatusFixed || f.Remediation.Branch != branch {
+	if f.Status != finding.StatusPatchAvailable || f.Remediation.Branch != branch {
 		t.Fatalf("status=%s branch=%q notes=%v", f.Status, f.Remediation.Branch, res.Run.Notes)
 	}
 	if onBranch := git("show", branch+":calc.py"); !strings.Contains(onBranch, "a + b") {
@@ -748,7 +748,7 @@ func TestDebugBisectIsSkippedWhenTheTargetIsNotInGit(t *testing.T) {
 	if !strings.Contains(strings.Join(res.Run.Notes, "|"), "Bisect was skipped") || len(bisectDirs(o.Target, rt)) != 0 {
 		t.Fatalf("notes = %v", res.Run.Notes)
 	}
-	if f := oneFinding(t, res); f.Status != finding.StatusFixed || f.Remediation.Branch != "" {
+	if f := oneFinding(t, res); f.Status != finding.StatusPatchAvailable || f.Remediation.Branch != "" {
 		t.Fatalf("status=%s branch=%q", f.Status, f.Remediation.Branch)
 	}
 }
