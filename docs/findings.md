@@ -217,6 +217,16 @@ Each class has a default CVSS 4.0 vector. Standard text for the class (OWASP cat
 
 Debug mode uses one more class, `bug`, for a functional failure.
 
+## Verifying a fix
+
+`spackle verify <run-id>` re-runs every stored proof of concept of a run against the code as it is now. The run id may be a unique prefix, or `latest`. Use it after you apply a patch or merge the fix branch, or after you fix a finding by hand.
+
+- **What it needs.** A container runtime: proofs run only in the sandbox, and without one the command refuses instead of guessing. The run must have stored proofs, which a scan keeps for each finding it demonstrated.
+- **Which runs.** Runs of a local directory only. A run of a git URL scanned a clone, and a run of a running target has no code to re-run a proof against; both are refused.
+- **Where it runs.** Against the directory that was scanned, whose absolute path is stored in the run, so you can run it from anywhere. A run stored by an older version only has the target as it was typed: run verify from the directory the scan was run from, and it says so.
+- **What it changes.** The stored run. Each outcome is appended to the run's ledger and the run's reports are rewritten. A proof that no longer succeeds sets the finding to `fixed`. A proof that still succeeds sets it to `open`, and if the finding has a patch the report says the patch is not applied. A proof that times out or is killed changes nothing and is reported as not verified.
+- **Exit code.** 1 when at least one proof still succeeds or could not be verified, 0 when none does, 2 when the command is refused.
+
 ## A worked example
 
 This finding comes from a deterministic scan of the demo application in this repository, with no model configured:

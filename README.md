@@ -243,6 +243,16 @@ Reports render as terminal text, Markdown, HTML, JSON and SARIF. `spackle report
 
 <div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
 
+## Verify a fix
+
+A scan that writes a fix leaves the patch in `findings/<id>/fix.patch` and, in a git repository, on a `spackle/<run-id>` branch. Your code is not changed, so the finding has status `patch-available`. After you apply the patch or merge the branch, re-run the stored proofs against the code as it is now:
+
+```shell
+spackle verify latest
+```
+
+Each proof runs in the sandbox again. A proof that no longer succeeds marks its finding `fixed`; one that still succeeds keeps it open. The command exits 1 when any proof still succeeds or could not be run to an answer, and 0 when none does. It needs a container runtime, it works for runs of a local directory only (not for a git URL or a running target), and it updates the stored run: the outcomes are added to that run's ledger and its reports are rewritten. See [docs/findings.md](docs/findings.md#verifying-a-fix).
+
 ## Running-target mode
 
 Point Spackle at an application you run. It crawls within scope, probes without changing state, and ties each finding to the stored request and response that show it.

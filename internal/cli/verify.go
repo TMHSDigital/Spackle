@@ -11,7 +11,7 @@ import (
 )
 
 func runVerify(env Env, args []string) int {
-	fs := newFlagSet(env, "verify", "<run-id>", "Re-run a run's stored proofs of concept against the code as it is now.\nA proof that no longer succeeds marks its finding fixed. Proofs run only in the sandbox,\nso a container runtime is required. The run id may be a unique prefix, or \"latest\".")
+	fs := newFlagSet(env, "verify", "<run-id>", "Re-run a run's stored proofs of concept against the code as it is now.\nA proof that no longer succeeds marks its finding fixed. Proofs run only in the sandbox,\nso a container runtime is required. The run id may be a unique prefix, or \"latest\".\n\nOnly a run of a local directory can be verified, not one of a git URL or a running target.\nProofs run against the directory that was scanned. The stored run is updated: outcomes are\nadded to its ledger and its reports are rewritten. Exit code 1 means a proof still succeeds\nor could not be verified.")
 	var g globalFlags
 	g.register(fs)
 	pos, err := parseInterleaved(fs, args)
