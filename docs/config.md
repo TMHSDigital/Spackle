@@ -391,7 +391,7 @@ statement = "Staging environment owned by my team. Ticket SEC-123."
 | `hosts` | none, required | Hosts that may receive requests, as `host` or `host:port` |
 | `path_prefixes` | `["/"]` | Paths that may be requested |
 | `allow_unsafe_methods` | `false` | Permit POST, PUT, PATCH and DELETE |
-| `max_requests` | 400 | Requests for the whole run, counting every redirect hop |
+| `max_requests` | 400 | Requests for the whole run, counting every redirect hop. When the cap is reached while a model assesses the findings, the run ends with outcome `budget-exhausted` and the report lists the findings that were not assessed |
 | `requests_per_second` | 5 | Rate limit. Values above 50 are lowered to 50 |
 | `statement` | empty | Your note on why you are authorized. Recorded in the ledger |
 

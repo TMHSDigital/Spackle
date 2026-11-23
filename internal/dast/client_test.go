@@ -290,9 +290,15 @@ func TestRequestCap(t *testing.T) {
 	in, hits := counter(t)
 	c := clientFor(t, in.URL, "max_requests = 2", ClientOptions{})
 	for i := 0; i < 2; i++ {
+		if c.AtCap() {
+			t.Fatalf("at the cap after %d of 2 requests", i)
+		}
 		if _, err := c.Do(context.Background(), "GET", in.URL+"/", nil, nil); err != nil {
 			t.Fatalf("request %d: %v", i, err)
 		}
+	}
+	if !c.AtCap() || c.CapRefusals() != 0 || c.MaxRequests() != 2 {
+		t.Fatalf("at cap = %v, refusals = %d, max = %d; want the cap reached and nothing refused yet", c.AtCap(), c.CapRefusals(), c.MaxRequests())
 	}
 	for i := 0; i < 3; i++ {
 		if _, err := c.Do(context.Background(), "GET", in.URL+"/", nil, nil); !errors.Is(err, ErrRequestCap) {
@@ -301,6 +307,9 @@ func TestRequestCap(t *testing.T) {
 	}
 	if hits.Load() != 2 || c.Requests() != 2 || len(c.Exchanges()) != 2 {
 		t.Fatalf("hits = %d, requests = %d, exchanges = %d; want 2 each", hits.Load(), c.Requests(), len(c.Exchanges()))
+	}
+	if c.CapRefusals() != 3 {
+		t.Fatalf("refusals = %d, want the 3 requests that were not sent", c.CapRefusals())
 	}
 }
 

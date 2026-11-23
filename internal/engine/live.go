@@ -279,11 +279,24 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 	outcome := "completed"
 	var skipped []string
 	capNote := ""
+	notAssessed := func(rest []finding.Finding) {
+		for _, f := range rest {
+			skipped = append(skipped, "Not assessed by a model: "+f.Title+" ("+f.Location.String()+")")
+		}
+	}
+	requestCap := fmt.Sprintf("request cap reached: all %d requests the scope allows for this run have been sent. Raise max_requests in the scope to assess the rest", client.MaxRequests())
 	for i := range findings {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, "", cerr
 		}
 		f := findings[i]
+		if client.AtCap() {
+			// No request is left to probe this finding or any after it.
+			capNote = requestCap
+			notAssessed(findings[i:])
+			outcome = "budget-exhausted"
+			break
+		}
 		if berr := bud.Check(); berr != nil {
 			capNote = berr.Error()
 			for _, rest := range findings[i:] {
@@ -304,6 +317,7 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 		}
 		reg := tools.NewNetworkRegistry(sealer)
 		reg.Add(dast.HTTPTool(client, tgt.URL))
+		refusedBefore := client.CapRefusals()
 		rev, aerr := agent.InvestigateEndpoint(ctx, run, parent[f.ID], sealer, reg, f, text.String(), known)
 		if aerr != nil {
 			if errors.Is(aerr, budget.ErrExhausted) || errors.Is(aerr, dast.ErrRequestCap) {
@@ -322,7 +336,17 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 			}
 			continue
 		}
+		// The request tool tells the model that the cap is reached and
+		// hands no error back here, so the client is asked instead.
+		cutShort := client.CapRefusals() > refusedBefore
 		switch {
+		case cutShort && !rev.Confirmed:
+			// The model ran out of requests while it assessed this
+			// finding. What it concluded without them is not a verdict:
+			// the finding keeps its standing and is listed as not assessed.
+			capNote = requestCap
+			notAssessed(findings[i : i+1])
+			outcome = "budget-exhausted"
 		case rev.Rejected != "":
 			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: f.ID, Reason: rev.Rejected}); err != nil {
 				return nil, "", err

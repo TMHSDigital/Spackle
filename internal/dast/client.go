@@ -80,6 +80,7 @@ type Client struct {
 	sleep       func(time.Duration)
 	headers     map[string]string
 	maxRequests int
+	refused     int // requests not sent because the cap was reached
 	interval    time.Duration
 
 	// sendMu serializes Do. The rate limit already means one request at a
@@ -271,6 +272,7 @@ func (c *Client) atCap() bool {
 func (c *Client) send(ctx context.Context, method string, u *url.URL, extra map[string]string, body []byte) (hop, error) {
 	c.mu.Lock()
 	if c.requests >= c.maxRequests {
+		c.refused++
 		c.mu.Unlock()
 		return hop{}, fmt.Errorf("%w: all %d requests the scope allows for this run have been sent, so nothing more will be. Raise max_requests in the scope if more are needed", ErrRequestCap, c.maxRequests)
 	}
@@ -387,6 +389,21 @@ func (c *Client) Requests() int {
 	defer c.mu.Unlock()
 	return c.requests
 }
+
+// AtCap reports whether every request the scope allows has been sent.
+func (c *Client) AtCap() bool { return c.atCap() }
+
+// CapRefusals returns how many requests were not sent because the cap had
+// been reached. A caller that hides ErrRequestCap from its own caller, as the
+// model's request tool does, can still see here that requests were refused.
+func (c *Client) CapRefusals() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.refused
+}
+
+// MaxRequests returns the request cap of the scope.
+func (c *Client) MaxRequests() int { return c.maxRequests }
 
 // remaining returns how many more requests the cap allows.
 func (c *Client) remaining() int {

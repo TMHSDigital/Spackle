@@ -246,6 +246,92 @@ func TestLiveModelAssessmentCannotLeaveScope(t *testing.T) {
 	}
 }
 
+func TestLiveAssessmentReportsARequestCapHitByTheModel(t *testing.T) {
+	outside, _ := outsideServer(t)
+	app, hits := flawedApp(t, outside.URL)
+
+	// A deterministic scan shows how many requests the baseline needs.
+	base := liveOpts(t, app.URL)
+	base.ScopeFile = scopeFile(t, app.URL)
+	det, err := Run(context.Background(), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := int(hits.Load())
+	if len(det.Run.Findings) < 2 {
+		t.Fatalf("the baseline found %d finding(s), the test needs at least 2", len(det.Run.Findings))
+	}
+
+	// The model sends ten requests per finding and then says the flaw is not
+	// there. The cap leaves room for the baseline and fifteen requests, so
+	// it is reached while the second finding is assessed.
+	refused := 0
+	fake := llm.NewFake()
+	fake.Handler = func(req llm.Request, _ int) (llm.Response, error) {
+		resp := llm.Response{Usage: llm.Usage{InputTokens: 50, OutputTokens: 20, CostKnown: true}}
+		last := req.Messages[len(req.Messages)-1]
+		if last.Role == llm.RoleUser {
+			resp.StopReason = llm.StopToolUse
+			for i := 1; i <= 10; i++ {
+				resp.ToolCalls = append(resp.ToolCalls, llm.ToolCall{ID: fmt.Sprint(i), Name: "http_request", Args: json.RawMessage(fmt.Sprintf(`{"url":"/search?q=check%d"}`, i))})
+			}
+			return resp, nil
+		}
+		for _, tr := range last.ToolResults {
+			if tr.IsError && strings.Contains(tr.Content, "request cap") {
+				refused++
+			}
+		}
+		resp.StopReason = llm.StopEnd
+		resp.Text = `{"verdict":"not_confirmed","reason":"Nothing came back."}`
+		return resp, nil
+	}
+	hits.Store(0)
+	o := liveOpts(t, app.URL)
+	u, err := url.Parse(app.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.ScopeFile = filepath.Join(t.TempDir(), "scope.toml")
+	scope := fmt.Sprintf("hosts = [%q]\nrequests_per_second = 50\nmax_requests = %d\nstatement = \"My own test server.\"\n", u.Host, baseline+15)
+	if err := os.WriteFile(o.ScopeFile, []byte(scope), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	o.Yes = true
+	o.Config.Model = config.Model{Provider: "ollama", Model: "fake-model"}
+	o.ProviderFactory = func(config.Model) (llm.Provider, error) { return llm.NewRedacting(fake), nil }
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refused == 0 {
+		t.Fatalf("the cap was never reached by the model (%d requests were sent): the test does not cover the case", hits.Load())
+	}
+	if res.Run.Outcome != "budget-exhausted" {
+		t.Fatalf("outcome = %q, want budget-exhausted: the model ran out of requests", res.Run.Outcome)
+	}
+	var listed []string
+	for _, s := range res.Run.Skipped {
+		if !strings.Contains(s.Cap, "max_requests") {
+			t.Errorf("the skip entry does not name the request cap: %q", s.Cap)
+		}
+		listed = append(listed, s.Skipped...)
+	}
+	dismissed := 0
+	for _, f := range res.Run.Findings {
+		if f.Status == finding.StatusDismissed {
+			dismissed++
+		}
+	}
+	// Only the first finding was assessed with every request it asked for.
+	if dismissed != 1 {
+		t.Errorf("%d finding(s) were dismissed, want only the one assessed before the cap", dismissed)
+	}
+	if want := len(res.Run.Findings) - 1; len(listed) != want {
+		t.Errorf("%d finding(s) are listed as not assessed, want %d: %q", len(listed), want, listed)
+	}
+}
+
 func TestOfflineRefusesARemoteLiveTarget(t *testing.T) {
 	// 192.0.2.1 is reserved for documentation and is never routed.
 	o := liveOpts(t, "http://192.0.2.1:8080/")
