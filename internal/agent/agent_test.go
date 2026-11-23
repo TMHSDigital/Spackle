@@ -547,3 +547,26 @@ func TestOverLongQuotesAreRefusedBeforeSearching(t *testing.T) {
 		t.Errorf("a two-line quote was refused (line %d, ok %v)", line, ok)
 	}
 }
+
+// A fix must change the code, not the check. Every layout of test code is
+// refused, including a top-level test directory.
+func TestFixMayNotEditTestFiles(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"test/api.js", "spec/user_spec.rb", "conftest.py", "src/app.js"} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, rel := range []string{"test/api.js", "spec/user_spec.rb", "conftest.py"} {
+		if _, _, err := loadOriginals(root, map[string]string{rel: "new"}); err == nil || !strings.Contains(err.Error(), "test or proof file") {
+			t.Errorf("a fix that edits %s was accepted: %v", rel, err)
+		}
+	}
+	if _, _, err := loadOriginals(root, map[string]string{"src/app.js": "new"}); err != nil {
+		t.Errorf("a fix to ordinary code was refused: %v", err)
+	}
+}

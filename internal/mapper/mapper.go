@@ -140,7 +140,7 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 			m.Skipped = append(m.Skipped, walk.Skip{Rel: f.Rel, Reason: "unreadable: " + rerr.Error()})
 			continue
 		}
-		if isTestFile(f.Rel) {
+		if walk.IsTestPath(f.Rel) {
 			m.Tests.HasTests = true
 			continue
 		}
@@ -227,20 +227,6 @@ func isManifest(rel string) bool {
 
 // isTestFile reports whether a path is test code. Test code is not attack
 // surface, so it contributes to the harness and not to entry points.
-func isTestFile(rel string) bool {
-	lower := strings.ToLower(rel)
-	base := filepath.Base(lower)
-	switch {
-	case strings.HasSuffix(base, "_test.go"), strings.HasSuffix(base, "_test.py"), strings.HasPrefix(base, "test_"):
-		return true
-	case strings.Contains(base, ".test."), strings.Contains(base, ".spec."):
-		return true
-	case strings.HasPrefix(lower, "tests/"), strings.Contains(lower, "/tests/"), strings.Contains(lower, "/__tests__/"), strings.HasPrefix(lower, "test/"), strings.Contains(lower, "/test/"):
-		return true
-	}
-	return false
-}
-
 type linePattern struct {
 	re     *regexp.Regexp
 	kind   string

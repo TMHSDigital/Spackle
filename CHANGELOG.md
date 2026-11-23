@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The HTML report now shows control characters and bidirectional overrides as visible escapes, like the terminal and Markdown reports. They used to reach the page raw, so a quoted line could display in a different order than its bytes.
 - Built-in rule accuracy: the Python SQL call rules now require SQL text, so `ssh.execute("cd " + d)` is no longer reported as SQL injection; the insecure-random rules require a sensitive word that stands on its own, so a random index into `keys` is no longer reported; and a rule finding carries the same OWASP categories as a model-drafted finding of its class.
 - `spackle bench`: a fixture whose scan failed is no longer counted as a clean fixture left alone or as missed flaws. Failed fixtures are left out of the totals and counted in their own `failed_fixtures` figure, and no results file is written for such a run unless `--force` is given.
+- One definition of "test code" is now used everywhere. A fix can no longer edit a test under `test/`, `spec/` or a `conftest.py`, and the built-in code rules skip the same files the mapper and the fixer treat as tests.
 
 ## [0.1.0] - 2026-11-22
 

@@ -44,29 +44,6 @@ func (codeSeeder) Name() string { return "builtin-code" }
 
 func (codeSeeder) Available() (bool, string) { return true, "" }
 
-// isTestPath reports whether rel looks like test code. Test code is not
-// attack surface, and it is full of deliberately unsafe fixtures.
-func isTestPath(rel string) bool {
-	p := "/" + strings.ToLower(rel)
-	base := p[strings.LastIndex(p, "/")+1:]
-	switch {
-	case strings.Contains(p, "/tests/"), strings.Contains(p, "/__tests__/"):
-		return true
-	case strings.HasSuffix(base, "_test.go"), strings.HasSuffix(base, "_test.py"):
-		return true
-	case strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py"):
-		return true
-	}
-	for _, mid := range []string{".test.", ".spec."} {
-		for _, ext := range []string{"ts", "tsx", "js", "jsx", "mjs", "cjs"} {
-			if strings.HasSuffix(base, mid+ext) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // commentStyle says how a language writes comments.
 type commentStyle struct {
 	hash    bool // "#" starts a comment that runs to the end of the line
@@ -155,7 +132,7 @@ func (s codeSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lea
 	}
 	return eachFile(ctx, "built-in code rules", files, func(f walk.File) ([]Lead, error) {
 		rules := byLang[f.Lang]
-		if len(rules) == 0 || isTestPath(f.Rel) {
+		if len(rules) == 0 || walk.IsTestPath(f.Rel) {
 			return nil, nil
 		}
 		text, err := walk.ReadText(f.Abs)

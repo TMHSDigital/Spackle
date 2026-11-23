@@ -108,7 +108,7 @@ func loadOriginals(root string, files map[string]string) (clean, originals map[s
 		if rerr != nil {
 			return nil, nil, fmt.Errorf("file %q: %w. A fix may only change files that exist in the target", name, rerr)
 		}
-		if strings.HasPrefix(rel, pocPrefix) || isTestPath(rel) {
+		if strings.HasPrefix(rel, pocPrefix) || walk.IsTestPath(rel) {
 			return nil, nil, fmt.Errorf("file %q is a test or proof file; fix the code, not the check", name)
 		}
 		if len(content) > walk.MaxFileSize {
@@ -144,14 +144,6 @@ func loadOriginals(root string, files map[string]string) (clean, originals map[s
 		clean[rel], originals[rel] = content, orig
 	}
 	return clean, originals, nil
-}
-
-func isTestPath(rel string) bool {
-	lower := strings.ToLower(rel)
-	base := path.Base(lower)
-	return strings.HasSuffix(base, "_test.go") || strings.HasSuffix(base, "_test.py") || strings.HasPrefix(base, "test_") ||
-		strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") ||
-		strings.HasPrefix(lower, "tests/") || strings.Contains(lower, "/tests/") || strings.Contains(lower, "/__tests__/")
 }
 
 // Fix asks the model for a patch and verifies it in the sandbox, up to

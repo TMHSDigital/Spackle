@@ -401,3 +401,29 @@ func looksBinary(path string) (bool, error) {
 	}
 	return bytes.IndexByte(buf[:n], 0) >= 0, nil
 }
+
+// IsTestPath reports whether a forward-slash relative path is test code: a
+// file in a test directory, or a file named the way a test runner expects.
+// It is the one definition every stage uses, so the seeders (test code is
+// not attack surface), the mapper (a test is not an entry point) and the
+// fixer (fix the code, not the check) agree on what a test is.
+func IsTestPath(rel string) bool {
+	lower := strings.ToLower(strings.ReplaceAll(rel, `\`, "/"))
+	segs := strings.Split(lower, "/")
+	base := segs[len(segs)-1]
+	for _, dir := range segs[:len(segs)-1] {
+		switch dir {
+		case "test", "tests", "spec", "specs", "__tests__", "testdata":
+			return true
+		}
+	}
+	switch {
+	case strings.HasSuffix(base, "_test.go"), strings.HasSuffix(base, "_test.py"), strings.HasSuffix(base, "_spec.rb"), strings.HasSuffix(base, "_test.rb"):
+		return true
+	case strings.HasPrefix(base, "test_"), base == "conftest.py":
+		return true
+	case strings.Contains(base, ".test."), strings.Contains(base, ".spec."):
+		return true
+	}
+	return false
+}

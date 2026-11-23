@@ -240,3 +240,25 @@ func TestOutputDirectoriesArePrunedOnlyWhereTheyAreOutput(t *testing.T) {
 		t.Errorf("pruned = %s, want %s", got, want)
 	}
 }
+
+func TestIsTestPath(t *testing.T) {
+	tests := []string{
+		"pkg/store_test.go", "app/test_views.py", "tests/unit/a.py", "test/api.js", "src/test/helper.ts",
+		"spec/models/user_spec.rb", "web/__tests__/app.jsx", "web/app.test.tsx", "web/app.spec.js",
+		"conftest.py", "pkg/conftest.py", "pkg/testdata/fixture.go", `win\tests\a.py`, "Tests/Unit/A.py",
+	}
+	for _, rel := range tests {
+		if !IsTestPath(rel) {
+			t.Errorf("IsTestPath(%q) = false, want true", rel)
+		}
+	}
+	code := []string{
+		"main.go", "app/views.py", "internal/target/target.go", "src/latest/api.js", "contest.py",
+		"attest/sign.go", "pkg/testing.go", "docs/spec.md", "protest/app.py",
+	}
+	for _, rel := range code {
+		if IsTestPath(rel) {
+			t.Errorf("IsTestPath(%q) = true, want false", rel)
+		}
+	}
+}
