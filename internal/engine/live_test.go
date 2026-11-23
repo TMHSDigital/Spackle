@@ -257,3 +257,14 @@ func TestOfflineRefusesARemoteLiveTarget(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// A forge address that is not a repository URL is most likely a mistyped
+// clone URL. The refusal says how to scan the repository.
+func TestLiveRefusalOnAForgeMentionsTheCloneURL(t *testing.T) {
+	o := opts(t)
+	o.Target, o.Yes = "https://github.com/owner/repo/tree/main/docs", true
+	_, err := Run(context.Background(), o)
+	if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "clone URL ending in .git") {
+		t.Fatalf("err = %v", err)
+	}
+}

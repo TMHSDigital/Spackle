@@ -82,3 +82,26 @@ func TestDisplayStripsCredentials(t *testing.T) {
 		t.Fatalf("Display leaks credentials: %s", got.Display)
 	}
 }
+
+func TestForgeRepositoryURLs(t *testing.T) {
+	cases := map[string]Kind{
+		"https://gitlab.com/group/project":                KindGit,
+		"https://gitlab.com/group/subgroup/project":       KindGit,
+		"https://gitlab.com/group/sub/deeper/project/":    KindGit,
+		"https://gitlab.com/group/project/-/issues/3":     KindURL,
+		"https://gitlab.com/group":                        KindURL,
+		"https://github.com/owner/repo":                   KindGit,
+		"https://github.com/owner/repo/tree/main/docs":    KindURL,
+		"https://example.test/group/subgroup/project":     KindURL,
+		"https://example.test/group/subgroup/project.git": KindGit,
+	}
+	for arg, want := range cases {
+		got, err := Classify(arg)
+		if err != nil || got.Kind != want {
+			t.Errorf("Classify(%q) = %v, %v; want %v", arg, got.Kind, err, want)
+		}
+	}
+	if !KnownForge("GitLab.com") || KnownForge("example.test") {
+		t.Error("KnownForge is wrong")
+	}
+}

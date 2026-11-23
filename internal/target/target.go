@@ -90,10 +90,30 @@ func looksLikeGitRemote(u *url.URL) bool {
 	if strings.HasSuffix(strings.ToLower(path), ".git") {
 		return true
 	}
-	switch strings.ToLower(u.Hostname()) {
+	if !KnownForge(u.Hostname()) {
+		return false
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for _, p := range parts {
+		// "-" separates a GitLab project from its pages (/-/issues): that
+		// is a page of the forge, not a repository.
+		if p == "" || p == "-" {
+			return false
+		}
+	}
+	if strings.EqualFold(u.Hostname(), "gitlab.com") {
+		// GitLab projects can sit in nested groups: group/subgroup/project.
+		return len(parts) >= 2
+	}
+	return len(parts) == 2
+}
+
+// KnownForge reports whether host is a code hosting site whose repository
+// URLs Spackle recognizes without a .git suffix.
+func KnownForge(host string) bool {
+	switch strings.ToLower(host) {
 	case "github.com", "gitlab.com", "bitbucket.org", "codeberg.org":
-		parts := strings.Split(strings.Trim(path, "/"), "/")
-		return len(parts) == 2 && parts[0] != "" && parts[1] != ""
+		return true
 	}
 	return false
 }

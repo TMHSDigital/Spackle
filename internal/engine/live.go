@@ -50,6 +50,11 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 		Interactive: opts.Interactive, Stdin: opts.Stdin, Stderr: opts.Progress,
 	})
 	if err != nil {
+		if target.KnownForge(tgt.URL.Hostname()) {
+			// Most likely a repository address that was not recognized as
+			// one, not a wish to probe the forge itself.
+			return Result{}, fmt.Errorf("%w: %w. %s is a code hosting site: to scan a repository there, give its clone URL ending in .git", ErrRefused, err, tgt.URL.Hostname())
+		}
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 	if cfg.Offline && !llm.IsLoopbackHost(tgt.URL.Hostname()) {
