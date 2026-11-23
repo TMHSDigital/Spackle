@@ -253,6 +253,10 @@ func fixtureRun() Run {
 		Skipped: []ledger.BudgetSkip{
 			{Cap: "max model calls (40)", Skipped: []string{"app/admin/reports.py", "app/payments/webhook.py"}},
 		},
+		Rejected: []ledger.Reject{
+			{Stage: "investigator", Intent: "I3 Check the export job for path traversal", Reason: "the investigation failed: the provider returned HTTP 500."},
+			{Stage: "seed", Intent: "L-9f2c", Reason: "location has neither a file nor an endpoint"},
+		},
 		Notes: []string{"Live testing was limited to passive checks by the scope file."},
 		Usage: Usage{
 			ModelCalls: 40, InputTokens: 182400, OutputTokens: 21950,
@@ -485,7 +489,7 @@ func TestUnknownFormat(t *testing.T) {
 
 func TestZeroFindings(t *testing.T) {
 	run := fixtureRun()
-	run.Findings, run.Skipped, run.Notes = nil, nil, nil
+	run.Findings, run.Skipped, run.Rejected, run.Notes = nil, nil, nil, nil
 	for _, format := range []string{"terminal", "markdown", "html"} {
 		out := string(render(t, format, run))
 		// The terminal report wraps the sentence, so compare with whitespace collapsed.
@@ -958,6 +962,7 @@ func TestLoadRoundTrip(t *testing.T) {
 	}
 	mapSummary := ledger.MapSummary{Files: 48, Skipped: 3, Languages: []string{"python"}, EntryPoints: 9, InfraFiles: 2}
 	skip := ledger.BudgetSkip{Cap: "max model calls (2)", Skipped: []string{"app/admin/reports.py"}}
+	reject := ledger.Reject{Stage: "investigator", Intent: "I2 Trace the upload handler", Reason: "the draft quoted a line that is not in the file"}
 	events := []struct {
 		typ  string
 		data any
@@ -975,6 +980,7 @@ func TestLoadRoundTrip(t *testing.T) {
 		{ledger.TypeSandboxRun, ledger.SandboxRun{FindingID: critical.ID, Purpose: "poc", Image: "python:3.12-slim", Command: "python poc.py", Isolation: "container, no network egress"}},
 		{ledger.TypeFinding, fs[fxDismissed]},
 		{ledger.TypeBudgetSkip, skip},
+		{ledger.TypeReject, reject},
 		{ledger.TypeNote, "Live testing was limited to passive checks."},
 		{ledger.TypeRunEnd, ledger.RunEnd{Outcome: "budget-exhausted"}},
 	}
@@ -1011,6 +1017,7 @@ func TestLoadRoundTrip(t *testing.T) {
 		// The later upsert wins, so the second finding is dismissed and ranks last.
 		Findings: []finding.Finding{critical, fs[fxDismissed]},
 		Skipped:  []ledger.BudgetSkip{skip},
+		Rejected: []ledger.Reject{reject},
 		Notes:    []string{"Live testing was limited to passive checks."},
 		Usage: Usage{
 			ModelCalls: 2, InputTokens: 1500, OutputTokens: 250, CostUSD: 0.25,
@@ -1091,5 +1098,27 @@ func TestSARIFPathsAreRelativeToTheRepositoryRoot(t *testing.T) {
 	}
 	if loc := sarifLocate(finding.Location{File: "a.go"}, ""); loc.PhysicalLocation.ArtifactLocation.URI != "a.go" {
 		t.Fatalf("with no prefix the path must be unchanged: %+v", loc.PhysicalLocation)
+	}
+}
+
+func TestRejectedWorkIsListedInEveryFormat(t *testing.T) {
+	run := fixtureRun()
+	for _, format := range Formats() {
+		if format == "sarif" {
+			continue // SARIF carries results only
+		}
+		var buf bytes.Buffer
+		if err := Render(format, run, &buf); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		for _, want := range []string{"I3 Check the export job for path traversal", "L-9f2c"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s report does not mention rejected work %q", format, want)
+			}
+		}
+	}
+	if got := rejectLine(ledger.Reject{Stage: "investigator", Intent: "I1 x", Reason: "bad draft."}); got != "Investigation not completed: I1 x (bad draft)." {
+		t.Errorf("rejectLine = %q", got)
 	}
 }

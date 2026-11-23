@@ -202,7 +202,7 @@ Nothing in a model's draft is trusted. Before a draft becomes a finding, Spackle
 - The title, the description, the fix summary and the confidence reason are all present.
 - CWE entries that are not of the form `CWE-<number>` are dropped.
 
-A draft that fails is sent back to the model once with the specific problems. If the second answer also fails, the draft is rejected, the reason is written to the ledger as a `draft.reject` event, and the run continues. The lead behind it is still reported, as an unconfirmed lead that says why.
+A draft that fails is sent back to the model once with the specific problems. If the second answer also fails, the draft is rejected, the reason is written to the ledger as a `draft.reject` event, and the run continues. The lead behind it is still reported, as an unconfirmed lead that says why. Every rejected draft, failed investigation and lead dropped at validation is also listed under "What was skipped" in the terminal, Markdown and HTML reports and in the `rejected` array of the JSON report, so a report never reads as full coverage when part of the plan produced nothing.
 
 The same holds for the other model stages. A plan is checked against the real map and leads. A proof is checked before it runs. A patch is rebuilt as a diff from whole files and checked in the sandbox. A chain that names an unknown finding id is ignored.
 

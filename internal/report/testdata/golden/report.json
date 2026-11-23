@@ -357,6 +357,18 @@
       ]
     }
   ],
+  "rejected": [
+    {
+      "stage": "investigator",
+      "intent": "I3 Check the export job for path traversal",
+      "reason": "the investigation failed: the provider returned HTTP 500."
+    },
+    {
+      "stage": "seed",
+      "intent": "L-9f2c",
+      "reason": "location has neither a file nor an endpoint"
+    }
+  ],
   "notes": [
     "Live testing was limited to passive checks by the scope file."
   ],

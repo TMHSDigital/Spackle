@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/ledger"
 )
 
 // The text renderers (terminal, markdown, html) share one intermediate form,
@@ -216,10 +217,34 @@ func (b builder) skipped(run Run) []string {
 		}
 		out = append(out, b.clean(line))
 	}
+	for _, r := range run.Rejected {
+		out = append(out, b.clean(rejectLine(r)))
+	}
 	for _, n := range run.Notes {
 		out = append(out, b.clean("Note: "+strings.TrimSpace(n)))
 	}
 	return out
+}
+
+// rejectLine says what a draft.reject event means for the reader: part of
+// the plan produced no result, so the report does not cover it.
+func rejectLine(r ledger.Reject) string {
+	what := "Investigation not completed"
+	switch r.Stage {
+	case "seed", "dast":
+		what = "Lead dropped at validation"
+	case "engine":
+		what = "Finding dropped at validation"
+	}
+	intent := strings.TrimSpace(r.Intent)
+	if intent == "" {
+		intent = "unnamed"
+	}
+	reason := strings.TrimSuffix(strings.TrimSpace(r.Reason), ".")
+	if reason == "" {
+		reason = "no reason was recorded"
+	}
+	return what + ": " + intent + " (" + reason + ")."
 }
 
 func usageSummary(u Usage) []kv {

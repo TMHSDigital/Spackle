@@ -37,6 +37,7 @@ type jsonReport struct {
 	Findings  []finding.Finding   `json:"findings"`
 	Dismissed []finding.Finding   `json:"dismissed"`
 	Skipped   []ledger.BudgetSkip `json:"skipped"`
+	Rejected  []ledger.Reject     `json:"rejected"`
 	Notes     []string            `json:"notes"`
 	Coverage  jsonCoverage        `json:"coverage"`
 	Usage     jsonUsage           `json:"usage"`
@@ -109,6 +110,7 @@ func renderJSON(run Run, w io.Writer) error {
 		Findings:  nonNil(run.Active()),
 		Dismissed: nonNil(run.Dismissed()),
 		Skipped:   make([]ledger.BudgetSkip, 0, len(run.Skipped)),
+		Rejected:  nonNil(run.Rejected),
 		Notes:     nonNil(run.Notes),
 		Coverage:  jsonCoverage{Map: run.Map, Seeders: nonNil(run.Seeders), Leads: run.Usage.Leads},
 		Usage: jsonUsage{

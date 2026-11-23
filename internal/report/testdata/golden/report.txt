@@ -308,6 +308,9 @@ Dismissed by review
 
 What was skipped
   - Cap reached: max model calls (40). Not examined: app/admin/reports.py; app/payments/webhook.py.
+  - Investigation not completed: I3 Check the export job for path traversal (the investigation
+    failed: the provider returned HTTP 500).
+  - Lead dropped at validation: L-9f2c (location has neither a file nor an endpoint).
   - Note: Live testing was limited to passive checks by the scope file.
 
 Coverage

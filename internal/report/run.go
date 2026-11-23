@@ -45,6 +45,9 @@ type Run struct {
 	Seeders  []ledger.SeederStatus
 	Findings []finding.Finding // ranked; includes dismissed and fixed
 	Skipped  []ledger.BudgetSkip
+	// Rejected lists work that produced nothing: an investigation that
+	// failed or whose draft was refused, and leads dropped at validation.
+	Rejected []ledger.Reject
 	Notes    []string
 	Usage    Usage
 }
@@ -194,6 +197,12 @@ func Load(runDir string) (Run, error) {
 				return Run{}, err
 			}
 			run.Skipped = append(run.Skipped, d)
+		case ledger.TypeReject:
+			var d ledger.Reject
+			if err := ev.Decode(&d); err != nil {
+				return Run{}, err
+			}
+			run.Rejected = append(run.Rejected, d)
 		case ledger.TypeNote:
 			var s string
 			if err := ev.Decode(&s); err != nil {
