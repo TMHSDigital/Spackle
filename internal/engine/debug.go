@@ -238,7 +238,7 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 
 	runID := opts.RunID
 	if runID == "" {
-		if runID, err = NewRunID(clock()); err != nil {
+		if runID, err = NewRunID(opts.Config.StateDir, clock()); err != nil {
 			return Result{}, err
 		}
 	}

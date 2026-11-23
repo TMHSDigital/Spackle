@@ -80,7 +80,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 
 	runID := opts.RunID
 	if runID == "" {
-		if runID, err = NewRunID(clock()); err != nil {
+		if runID, err = NewRunID(opts.Config.StateDir, clock()); err != nil {
 			return Result{}, err
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -328,6 +329,83 @@ func TestSecretValuesNeverReachTheRunDirectory(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunIDsSortInStartOrderWithinASecond(t *testing.T) {
+	state := filepath.Join(t.TempDir(), ".spackle")
+	now := fixedClock()()
+	stamp := now.UTC().Format("20060102-150405")
+	shape := regexp.MustCompile(`^[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$`)
+
+	// With no runs directory yet the first id has sequence number 00.
+	first, err := NewRunID(state, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !shape.MatchString(first) || !strings.HasPrefix(first, stamp+"-00") {
+		t.Fatalf("first id = %q, want %s-00 and four random hex digits", first, stamp)
+	}
+
+	// Every run started in the same second sorts after the ones before it,
+	// whatever its random digits are.
+	prev := first
+	for i := 0; i < 40; i++ {
+		if err := os.MkdirAll(filepath.Join(RunsDir(state), prev), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		id, err := NewRunID(state, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !shape.MatchString(id) || id <= prev {
+			t.Fatalf("id %q of run %d does not sort after %q", id, i+2, prev)
+		}
+		prev = id
+	}
+	if err := os.MkdirAll(filepath.Join(RunsDir(state), prev), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	latest, err := ResolveRun(state, "latest")
+	if err != nil || filepath.Base(latest) != prev {
+		t.Fatalf("latest = %q, err = %v, want the run started last (%s)", latest, err, prev)
+	}
+
+	// An id of the older form, with six random digits, is sorted after too,
+	// and other seconds and stray names do not count.
+	state = filepath.Join(t.TempDir(), ".spackle")
+	for _, name := range []string{stamp + "-7c3c93", "20261122-115959-ffffff", stamp + "-zz0000", stamp} {
+		if err := os.MkdirAll(filepath.Join(RunsDir(state), name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if id, err := NewRunID(state, now); err != nil || !strings.HasPrefix(id, stamp+"-7d") {
+		t.Fatalf("id = %q, err = %v, want sequence number 7d after an older run 7c3c93", id, err)
+	}
+
+	// The sequence number stops at ff: the id is still valid and unique.
+	if err := os.MkdirAll(filepath.Join(RunsDir(state), stamp+"-ff0000"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := NewRunID(state, now); err != nil || !strings.HasPrefix(id, stamp+"-ff") || !shape.MatchString(id) {
+		t.Fatalf("id = %q, err = %v, want sequence number ff", id, err)
+	}
+}
+
+func TestTwoScansInOneSecondResolveLatestToTheSecond(t *testing.T) {
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	o.RunID = ""
+	first, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := ResolveRun(o.Config.StateDir, "latest")
+	if err != nil || filepath.Base(latest) != second.RunID || first.RunID >= second.RunID {
+		t.Fatalf("latest = %q, err = %v, want the second run %s (the first was %s)", latest, err, second.RunID, first.RunID)
 	}
 }
 

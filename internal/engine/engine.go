@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,13 +103,32 @@ type Plan struct {
 // RunsDir returns the directory that holds runs for a state directory.
 func RunsDir(stateDir string) string { return filepath.Join(stateDir, "runs") }
 
-// NewRunID returns an id of the form 20261122-153045-a1b2c3.
-func NewRunID(now time.Time) (string, error) {
-	var b [3]byte
+// NewRunID returns an id of the form 20261122-153045-00a1b2: the UTC start
+// time to the second, a sequence number in two hex digits, and two random
+// bytes. The sequence number is one more than the highest among the runs in
+// stateDir that started in the same second, so ids sort in the order the
+// runs were started, which "latest" and every listing rely on. It stops at
+// ff. Runs started at the same moment by two processes share a sequence
+// number, and the random bytes keep their ids apart.
+func NewRunID(stateDir string, now time.Time) (string, error) {
+	var b [2]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", fmt.Errorf("generate run id: %w", err)
 	}
-	return now.UTC().Format("20060102-150405") + "-" + hex.EncodeToString(b[:]), nil
+	stamp := now.UTC().Format("20060102-150405") + "-"
+	seq := 0
+	// A runs directory that does not exist yet has no earlier runs.
+	entries, _ := os.ReadDir(RunsDir(stateDir))
+	for _, e := range entries {
+		rest, ok := strings.CutPrefix(e.Name(), stamp)
+		if !ok || len(rest) < 2 {
+			continue
+		}
+		if n, err := strconv.ParseUint(rest[:2], 16, 8); err == nil && int(n) >= seq {
+			seq = min(int(n)+1, 0xff)
+		}
+	}
+	return fmt.Sprintf("%s%02x%s", stamp, seq, hex.EncodeToString(b[:])), nil
 }
 
 // ResolveRun finds a run directory by id, accepting a unique prefix or the
