@@ -11,9 +11,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  GOLANGCI_LINT_VERSION: v2.15.0
-
 jobs:
   test:
     name: test (${{ matrix.os }}, go ${{ matrix.go }})
@@ -52,6 +49,8 @@ jobs:
         run: test -z "$(gofmt -s -l cmd internal)"
       - name: go mod tidy is clean
         run: go mod tidy -diff
+      - name: Load tool versions
+        run: grep -E '^[A-Z_]+=v[0-9.]+$' .github/tool-versions.env >> "$GITHUB_ENV"
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}

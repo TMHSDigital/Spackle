@@ -54,7 +54,7 @@ Both entry points take the same targets. Use `.\make.ps1 <target>` on Windows an
 | `all` | `lint`, `test`, then `build` |
 | `help` | Lists the targets |
 
-`lint` needs [golangci-lint](https://golangci-lint.run) v2 on your `PATH`. The linter must be built with a Go version at least as new as the one you are using: a binary built with an older Go refuses to load code that targets a newer one. If you see that error, rebuild it with your current toolchain (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@<version>`). CI pins the linter version in `.github/workflows/ci.yml`, and the dev container in `.devcontainer/` installs the same one for you.
+`lint` needs [golangci-lint](https://golangci-lint.run) v2 on your `PATH`. The linter must be built with a Go version at least as new as the one you are using: a binary built with an older Go refuses to load code that targets a newer one. If you see that error, rebuild it with your current toolchain (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@<version>`). The linter version is declared once, in `.github/tool-versions.env`: CI and the dev container in `.devcontainer/` both read it, so they install the same one.
 
 ## Check your change
 

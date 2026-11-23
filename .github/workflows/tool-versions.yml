@@ -1,0 +1,42 @@
+name: tool-versions
+
+# golangci-lint and GoReleaser are pinned in .github/tool-versions.env.
+# Dependabot does not read that file, so this job compares each pin with the
+# tool's latest release once a week and fails when one is behind.
+
+on:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/tool-versions.env
+      - .github/workflows/tool-versions.yml
+
+permissions: read-all
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compare pins with the latest releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . .github/tool-versions.env
+          behind=0
+          check() {
+            latest="$(gh release view --repo "$2" --json tagName --jq .tagName)"
+            if [ "$3" = "${latest}" ]; then
+              echo "$1 is pinned at $3, the latest release."
+            else
+              echo "::error file=.github/tool-versions.env::$1 is pinned at $3 and the latest release is ${latest}. Update .github/tool-versions.env."
+              behind=1
+            fi
+          }
+          check GOLANGCI_LINT_VERSION golangci/golangci-lint "${GOLANGCI_LINT_VERSION}"
+          check GORELEASER_VERSION goreleaser/goreleaser "${GORELEASER_VERSION}"
+          exit "${behind}"

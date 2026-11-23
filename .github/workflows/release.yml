@@ -11,7 +11,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GORELEASER_VERSION: v2.20.3
   IMAGE: ghcr.io/tmhsdigital/spackle
 
 jobs:
@@ -34,6 +33,8 @@ jobs:
       - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
       - name: Test before release
         run: go test ./...
+      - name: Load tool versions
+        run: grep -E '^[A-Z_]+=v[0-9.]+$' .github/tool-versions.env >> "$GITHUB_ENV"
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: ${{ env.GORELEASER_VERSION }}

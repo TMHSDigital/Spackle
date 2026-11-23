@@ -4,9 +4,12 @@ version: 2
 
 project_name: spackle
 
+# Check the module files, never rewrite them: the archives must be built
+# from exactly the go.mod and go.sum of the tagged commit. CI already fails
+# a push whose go.mod is not tidy.
 before:
   hooks:
-    - go mod tidy
+    - go mod verify
 
 builds:
   - id: spackle
@@ -18,6 +21,7 @@ builds:
     goarch: [amd64, arm64]
     flags:
       - -trimpath
+      - -mod=readonly
     ldflags:
       - -s -w
       - -X github.com/TMHSDigital/spackle/internal/version.Version={{ .Version }}
