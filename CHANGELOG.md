@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Findings in files whose name contains two dots, such as the Next.js catch-all route `pages/api/auth/[...nextauth].js`, are no longer dropped. Only a real `..` path segment is refused.
 - A conversation that uses all its turns now ends with a final answer on the Anthropic provider. The last request used to drop the tool list, which the API refuses when the history holds tool calls, so the investigation was recorded as failed.
 - A proof of concept that times out or is killed is no longer read as "the flaw is gone". The fixer rejects such a patch attempt, `spackle verify` keeps the finding status and reports the proof as not verified (and exits 1), and a debug bisect stops instead of counting the commit as good.
+- The fix branch no longer picks up uncommitted edits. A fix for a file with uncommitted changes in the working tree stays a patch file, with a note, instead of being committed (and, with `--pr`, pushed) together with those edits. A fix that fails part way no longer leaves files behind for the next fix commit.
 
 ## [0.1.0] - 2026-11-22
 

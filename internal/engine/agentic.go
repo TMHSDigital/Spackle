@@ -337,7 +337,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		if branch != "" {
 			var fixed []finding.Finding
 			for i := range findings {
-				if findings[i].Remediation.Patch != "" {
+				if findings[i].Remediation.Patch != "" && r.lab.branched[findings[i].ID] {
 					findings[i].Remediation.Branch = branch
 					fixed = append(fixed, findings[i])
 				}

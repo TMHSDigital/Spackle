@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/agent"
@@ -35,6 +36,9 @@ type lab struct {
 	fixes []acceptedFix
 	// worktree is where the fix branch is checked out, once created.
 	worktree string
+	// branched holds the ids of the findings whose fix was committed to
+	// the fix branch.
+	branched map[string]bool
 }
 
 // openPR pushes the fix branch and opens a draft pull request. It runs only
@@ -354,6 +358,32 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 		return "", "The target's git repository could not be located reliably, so fixes were written as patch files only."
 	}
 	rel = filepath.FromSlash(rel)
+
+	// A fix is the whole new content of each file, built from the file as
+	// it is in the working tree. Writing that over HEAD would commit the
+	// operator's uncommitted edits to that file under the fix's message, so
+	// such a fix stays a patch file only.
+	var skipped []string
+	var fixes []acceptedFix
+	for _, fx := range l.fixes {
+		names := make([]string, 0, len(fx.files))
+		for name := range fx.files {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		dirty, derr := gitx.Dirty(ctx, l.root, names...)
+		switch {
+		case derr != nil:
+			skipped = append(skipped, fmt.Sprintf("%s could not be compared with the last commit: %s", fx.id, clipText(derr.Error(), 200)))
+		case dirty:
+			skipped = append(skipped, fmt.Sprintf("%s changes %s, which has uncommitted changes in your working tree; commit or stash them and scan again to get this fix on a branch", fx.id, strings.Join(names, ", ")))
+		default:
+			fixes = append(fixes, fx)
+		}
+	}
+	if len(fixes) == 0 {
+		return "", "No fix branch was created. Not on a branch (apply the patch file by hand): " + strings.Join(skipped, "; ") + "."
+	}
 	branch = "spackle/" + l.r.runID
 	absState, _ := filepath.Abs(l.r.cfg.StateDir)
 	wt := filepath.Join(absState, "worktrees", l.r.runID)
@@ -365,9 +395,20 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 		return "", "The fix branch could not be created (" + clipText(err.Error(), 200) + "), so fixes were written as patch files only."
 	}
 	touched := map[string]string{}
-	var skipped []string
 	committed := 0
-	for _, fx := range l.fixes {
+	// undo puts the worktree back to the last commit after a fix failed
+	// part way, so its files are not swept into the next fix's commit.
+	undo := func(fx acceptedFix) {
+		for name, owner := range touched {
+			if owner == fx.id {
+				delete(touched, name)
+			}
+		}
+		if rerr := gitx.ResetWorktree(ctx, wt); rerr != nil {
+			skipped = append(skipped, fmt.Sprintf("the fix worktree could not be restored after %s failed: %v", fx.id, rerr))
+		}
+	}
+	for _, fx := range fixes {
 		conflict := ""
 		for name := range fx.files {
 			if owner, ok := touched[name]; ok {
@@ -381,7 +422,11 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 		ok := true
 		for name, content := range fx.files {
 			p := filepath.Join(wt, rel, filepath.FromSlash(name))
-			if err := os.WriteFile(p, []byte(content), 0o600); err != nil { //nolint:gosec // name was validated by walk.Resolve against the target
+			err := os.MkdirAll(filepath.Dir(p), 0o700)
+			if err == nil {
+				err = os.WriteFile(p, []byte(content), 0o600) //nolint:gosec // name was validated by walk.Resolve against the target
+			}
+			if err != nil {
 				ok = false
 				skipped = append(skipped, fmt.Sprintf("%s could not be written to the fix branch: %v", fx.id, err))
 				break
@@ -389,13 +434,19 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 			touched[name] = fx.id
 		}
 		if !ok {
+			undo(fx)
 			continue
 		}
 		if err := gitx.CommitAll(ctx, wt, fmt.Sprintf("fix: %s (%s)\n\nPatch written and checked by Spackle. Review before merging.", fx.title, fx.id)); err != nil {
 			skipped = append(skipped, fmt.Sprintf("%s could not be committed: %v", fx.id, err))
+			undo(fx)
 			continue
 		}
 		committed++
+		if l.branched == nil {
+			l.branched = map[string]bool{}
+		}
+		l.branched[fx.id] = true
 	}
 	note = fmt.Sprintf("%d fix(es) committed to branch %s in worktree %s. Your working tree was not changed.", committed, branch, filepath.ToSlash(wt))
 	if len(skipped) > 0 {

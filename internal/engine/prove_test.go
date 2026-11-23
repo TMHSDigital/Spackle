@@ -495,3 +495,52 @@ func TestVerifyKeepsTheStatusWhenAProofTimesOut(t *testing.T) {
 		t.Fatalf("verify ran against %q, want %q", last.SourceDir, res.Run.TargetPath)
 	}
 }
+
+func TestFixBranchLeavesOutUncommittedEdits(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed; fix branches need it")
+	}
+	rt := &fakeRuntime{fixClosesProof: true}
+	o := labOpts(t, rt)
+	git := func(args ...string) string {
+		t.Helper()
+		full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"}, args...)
+		cmd := exec.Command("git", full...)
+		cmd.Dir = o.Target
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("add", "-A")
+	git("commit", "-q", "-m", "init")
+	// The operator has unfinished, uncommitted work in the file that gets fixed.
+	app := filepath.Join(o.Target, "app.py")
+	src, err := os.ReadFile(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(app, append(src, []byte("\nWIP_NOT_FOR_REVIEW = True\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := res.Run.Findings[0]
+	if f.Remediation.Patch == "" {
+		t.Fatal("the fix was not kept as a patch file")
+	}
+	if f.Remediation.Branch != "" {
+		t.Fatalf("the finding names branch %q although the fix was not committed", f.Remediation.Branch)
+	}
+	if out := git("branch", "--list", "spackle/*"); out != "" {
+		t.Fatalf("a fix branch was created from a file with uncommitted changes: %s", out)
+	}
+	if notes := strings.Join(res.Run.Notes, " | "); !strings.Contains(notes, "uncommitted changes in your working tree") {
+		t.Fatalf("no note explains why there is no branch: %s", notes)
+	}
+}

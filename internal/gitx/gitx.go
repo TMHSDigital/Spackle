@@ -132,6 +132,16 @@ func IsClean(ctx context.Context, dir string) (bool, error) {
 	return out == "", err
 }
 
+// Dirty reports whether any of the given paths (relative to dir) differs
+// from HEAD: modified, staged, deleted or untracked.
+func Dirty(ctx context.Context, dir string, paths ...string) (bool, error) {
+	if len(paths) == 0 {
+		return false, nil
+	}
+	out, err := run(ctx, dir, append([]string{"status", "--porcelain", "--"}, paths...)...)
+	return strings.TrimSpace(out) != "", err
+}
+
 // Clone makes a shallow clone of remote into dest. Submodules are not
 // fetched: they are separate code the operator did not name as the target.
 func Clone(ctx context.Context, remote, dest string) error {
@@ -211,6 +221,16 @@ func CommitAll(ctx context.Context, dir, message string) error {
 	_, err := run(ctx, dir,
 		"-c", "user.name=Spackle", "-c", "user.email=spackle@localhost", "-c", "commit.gpgsign=false",
 		"commit", "--no-verify", "-m", message)
+	return err
+}
+
+// ResetWorktree throws away every uncommitted change in dir. It is only
+// ever called inside a Spackle worktree, never the operator's working tree.
+func ResetWorktree(ctx context.Context, dir string) error {
+	if _, err := run(ctx, dir, "reset", "-q", "--hard", "HEAD"); err != nil {
+		return err
+	}
+	_, err := run(ctx, dir, "clean", "-q", "-fd")
 	return err
 }
 

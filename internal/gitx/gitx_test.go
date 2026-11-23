@@ -185,3 +185,22 @@ func TestApplyPatch(t *testing.T) {
 		t.Fatal("a patch that no longer applies must fail the check")
 	}
 }
+
+func TestDirtyAndResetWorktree(t *testing.T) {
+	dir := newRepo(t)
+	ctx := context.Background()
+	if dirty, err := Dirty(ctx, dir, "a.txt"); err != nil || dirty {
+		t.Fatalf("a clean file is dirty=%v err=%v", dirty, err)
+	}
+	writeFile(t, dir, "a.txt", "edited")
+	writeFile(t, dir, "sub/new.txt", "new")
+	if dirty, err := Dirty(ctx, dir, "a.txt"); err != nil || !dirty {
+		t.Fatalf("an edited file is dirty=%v err=%v", dirty, err)
+	}
+	if err := ResetWorktree(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	if clean, err := IsClean(ctx, dir); err != nil || !clean {
+		t.Fatalf("after a reset: clean=%v err=%v", clean, err)
+	}
+}
