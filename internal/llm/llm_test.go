@@ -315,6 +315,7 @@ func TestRedactingKeepsSecretsFromTheProvider(t *testing.T) {
 	p := NewRedacting(fake)
 	_, err := p.Complete(context.Background(), Request{
 		System: "key in system: " + aws,
+		Tools:  []ToolDef{{Name: "grep"}},
 		Messages: []Message{
 			{Role: RoleUser, Text: `config has password = "` + pw + `"`},
 			{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "1", Name: "grep", Args: json.RawMessage(`{"pattern":"` + aws + `"}`)}}},
@@ -474,5 +475,19 @@ func TestFakeScript(t *testing.T) {
 	}
 	if _, err := f.Complete(context.Background(), Request{}); err == nil {
 		t.Fatal("an exhausted script must be an error, not a silent empty response")
+	}
+}
+
+func TestFakeRefusesToolBlocksWithoutTools(t *testing.T) {
+	history := []Message{
+		{Role: RoleUser, Text: "look"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "1", Name: "grep", Args: json.RawMessage(`{}`)}}},
+		{Role: RoleTool, ToolResults: []ToolResult{{CallID: "1", Content: "nothing"}}},
+	}
+	if _, err := NewFake(Say("ok")).Complete(context.Background(), Request{Messages: history}); err == nil {
+		t.Fatal("a request with tool blocks and no tools must fail, as it does at a real provider")
+	}
+	if _, err := NewFake(Say("ok")).Complete(context.Background(), Request{Messages: history, Tools: []ToolDef{{Name: "grep"}}}); err != nil {
+		t.Fatal(err)
 	}
 }

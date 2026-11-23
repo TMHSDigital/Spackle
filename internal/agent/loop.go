@@ -118,10 +118,13 @@ func (r *Runner) Run(ctx context.Context, parent int64, system, user string, reg
 			if stuck {
 				out.Stopped = StopStagnation
 			}
-			// One last request with no tools, so the work done so far is
-			// not thrown away.
+			// One last request, so the work done so far is not thrown
+			// away. The tool list stays on it: a provider refuses a
+			// conversation that holds tool calls and defines no tools.
+			// The nudge asks for an answer; a tool call that comes back
+			// anyway is not run, and only the text is kept.
 			msgs = append(msgs, llm.Message{Role: llm.RoleUser, Text: finalAnswerNudge})
-			final, _, err := r.complete(ctx, parent, llm.Request{System: system, Messages: msgs, MaxTokens: r.MaxTokens})
+			final, _, err := r.complete(ctx, parent, llm.Request{System: system, Messages: msgs, Tools: defs, MaxTokens: r.MaxTokens})
 			if err != nil {
 				return out, err
 			}

@@ -303,8 +303,10 @@ func TestTurnLimitAsksForAFinalAnswer(t *testing.T) {
 		t.Fatalf("%+v", inv)
 	}
 	last := f.fake.Requests[len(f.fake.Requests)-1]
-	if len(last.Tools) != 0 || !strings.Contains(last.Messages[len(last.Messages)-1].Text, "Stop using tools") {
-		t.Fatal("the final request should offer no tools and ask for the answer")
+	// The history holds tool calls, so the request must still define the
+	// tools: a provider refuses it otherwise. The nudge asks for the answer.
+	if len(last.Tools) == 0 || !strings.Contains(last.Messages[len(last.Messages)-1].Text, "Stop using tools") {
+		t.Fatal("the final request should keep the tool definitions and ask for the answer")
 	}
 }
 

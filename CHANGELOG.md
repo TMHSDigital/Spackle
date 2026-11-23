@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Different rules of the same class that fire at one place (several container hardening rules on one line, several advisories on one lockfile, several missing headers on one page) are now reported as separate findings instead of one. Finding ids of uninvestigated leads change as a result.
 - Findings in files whose name contains two dots, such as the Next.js catch-all route `pages/api/auth/[...nextauth].js`, are no longer dropped. Only a real `..` path segment is refused.
+- A conversation that uses all its turns now ends with a final answer on the Anthropic provider. The last request used to drop the tool list, which the API refuses when the history holds tool calls, so the investigation was recorded as failed.
 
 ## [0.1.0] - 2026-11-22
 

@@ -45,6 +45,16 @@ func (f *Fake) Complete(_ context.Context, req Request) (Response, error) {
 	defer f.mu.Unlock()
 	n := len(f.Requests)
 	f.Requests = append(f.Requests, req)
+	// Real providers refuse a conversation that holds tool calls or tool
+	// results when the request defines no tools. Fail the same way, so a
+	// caller that drops the tool list is caught in tests.
+	if len(req.Tools) == 0 {
+		for _, m := range req.Messages {
+			if len(m.ToolCalls) > 0 || len(m.ToolResults) > 0 {
+				return Response{}, fmt.Errorf("fake provider: request %d has tool blocks in its history and defines no tools", n+1)
+			}
+		}
+	}
 	if f.Handler != nil {
 		return f.Handler(req, n)
 	}
