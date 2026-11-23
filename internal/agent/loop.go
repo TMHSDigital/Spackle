@@ -142,8 +142,17 @@ func (r *Runner) complete(ctx context.Context, parent int64, req llm.Request) (l
 	if err := r.Budget.Check(); err != nil {
 		return llm.Response{}, 0, err
 	}
-	resp, err := r.Provider.Complete(ctx, req)
+	// The wall time cap is checked before a call starts. Without a
+	// deadline, a call that starts just under the cap could run for as
+	// long as the provider's client allows. Give it what is left.
+	callCtx, cancel := context.WithTimeout(ctx, r.Budget.Remaining())
+	resp, err := r.Provider.Complete(callCtx, req)
+	overran := err != nil && callCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+	cancel()
 	rec := ledger.ModelCall{Stage: r.Stage, Provider: r.Provider.Name(), Model: r.Provider.Model()}
+	if overran {
+		err = fmt.Errorf("%w: the wall time cap was reached during a model call, which was stopped", budget.ErrExhausted)
+	}
 	if err != nil {
 		rec.Error = clip(err.Error(), 300)
 		// A failed call is recorded so the ledger shows it happened.

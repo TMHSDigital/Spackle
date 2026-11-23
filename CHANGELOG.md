@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Sandbox limits and other numeric settings are now checked when the configuration is loaded. A `[sandbox] timeout` above the 15 minute cap or a negative limit is refused before the run starts, instead of failing every proof after the model call that wrote it.
 - `spackle debug`: bisect now checks the committed code at HEAD first and, when it does not show the failure, says the cause is uncommitted changes instead of blaming the HEAD commit. A `--test` name that matches no test is refused before any model call, instead of being read as a failing or a passing test.
 - The running-target note "N URL(s) were outside the authorized scope" now counts each URL once instead of once per page that links to it.
+- The wall time cap now also bounds a model call or sandbox run that is in progress when the cap is reached. Such a call is stopped and the run ends as budget exhausted; it used to run on for as long as the provider client or the sandbox timeout allowed.
 
 ## [0.1.0] - 2026-11-22
 

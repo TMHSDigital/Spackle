@@ -59,7 +59,15 @@ func (b *Box) run(ctx context.Context, purpose, image string, cmd []string, file
 		return sandbox.Result{}, err
 	}
 	spec := sandbox.Spec{Image: image, Cmd: cmd, SourceDir: b.Root, Files: files, Profile: b.Profile}
-	res, err := b.Runtime.Run(ctx, spec)
+	// A sandbox run has its own timeout, but one that starts just under
+	// the wall time cap must not outlive the run by that much.
+	runCtx, cancel := context.WithTimeout(ctx, b.Budget.Remaining())
+	res, err := b.Runtime.Run(runCtx, spec)
+	overran := err != nil && runCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+	cancel()
+	if overran {
+		return res, fmt.Errorf("%w: the wall time cap was reached during a sandbox run, which was stopped", budget.ErrExhausted)
+	}
 	if err != nil {
 		return res, err
 	}

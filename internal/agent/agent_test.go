@@ -570,3 +570,38 @@ func TestFixMayNotEditTestFiles(t *testing.T) {
 		t.Errorf("a fix to ordinary code was refused: %v", err)
 	}
 }
+
+// slowProvider answers only when its context ends, like a provider that
+// hangs.
+type slowProvider struct{}
+
+func (slowProvider) Name() string  { return "slow" }
+func (slowProvider) Model() string { return "slow-model" }
+func (slowProvider) Local() bool   { return true }
+func (slowProvider) Complete(ctx context.Context, _ llm.Request) (llm.Response, error) {
+	<-ctx.Done()
+	return llm.Response{}, ctx.Err()
+}
+
+// A model call that is still running when the wall time cap is reached is
+// stopped, and the run ends as budget exhausted rather than as a failure.
+func TestModelCallIsStoppedAtTheWallTimeCap(t *testing.T) {
+	f := setup(t, budget.Caps{Tokens: 1_000_000, USD: 5, Wall: 300 * time.Millisecond, SandboxRuns: 5})
+	f.runner.Provider = slowProvider{}
+	start := time.Now()
+	_, err := f.runner.Run(context.Background(), 0, "system", "user", nil)
+	if !errors.Is(err, budget.ErrExhausted) || !strings.Contains(err.Error(), "wall time cap") {
+		t.Fatalf("err = %v, want the wall time cap", err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("the call ran for %s past a 300ms cap", d)
+	}
+	// A cancellation by the caller is still a cancellation, not a cap.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	g := setup(t, budget.Caps{})
+	g.runner.Provider = slowProvider{}
+	if _, err := g.runner.Run(ctx, 0, "system", "user", nil); errors.Is(err, budget.ErrExhausted) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled run returned %v", err)
+	}
+}
