@@ -142,6 +142,11 @@ func TestValidationProblems(t *testing.T) {
 		"[scan]\nexclude = [\"../other/**\"]\n":                                        ".. segment",
 		"[scan]\ninclude = [\"/abs\"]\n":                                               "relative to the target root",
 		"[scan]\ndisable_rules = [\"\"]\n":                                             "empty rule id",
+		"[sandbox]\ntimeout = \"20m\"\n":                                               "above the hard cap",
+		"[sandbox]\nmemory_mb = -1\n":                                                  "must be positive",
+		"[scope]\nmax_requests = -5\n":                                                 "cannot be negative",
+		"[fix]\nmax_attempts = -1\n":                                                   "max_attempts cannot be negative",
+		"[model]\nprovider = \"ollama\"\nmodel = \"x\"\nmax_output_tokens = -1\n":      "max_output_tokens cannot be negative",
 	}
 	for body, want := range cases {
 		_, _, err := Load(writeConfig(t, body))

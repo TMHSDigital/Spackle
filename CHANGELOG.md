@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Built-in rule accuracy: the Python SQL call rules now require SQL text, so `ssh.execute("cd " + d)` is no longer reported as SQL injection; the insecure-random rules require a sensitive word that stands on its own, so a random index into `keys` is no longer reported; and a rule finding carries the same OWASP categories as a model-drafted finding of its class.
 - `spackle bench`: a fixture whose scan failed is no longer counted as a clean fixture left alone or as missed flaws. Failed fixtures are left out of the totals and counted in their own `failed_fixtures` figure, and no results file is written for such a run unless `--force` is given.
 - One definition of "test code" is now used everywhere. A fix can no longer edit a test under `test/`, `spec/` or a `conftest.py`, and the built-in code rules skip the same files the mapper and the fixer treat as tests.
+- Sandbox limits and other numeric settings are now checked when the configuration is loaded. A `[sandbox] timeout` above the 15 minute cap or a negative limit is refused before the run starts, instead of failing every proof after the model call that wrote it.
 
 ## [0.1.0] - 2026-11-22
 

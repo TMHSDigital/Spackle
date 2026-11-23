@@ -13,6 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -395,6 +396,32 @@ func (c Config) Validate() error {
 	case "none", "scope":
 	default:
 		add("[sandbox] network %q is not one of none, scope. \"scope\" lets the sandbox reach the authorized scope and nothing is enforced beyond the container runtime's own networking, so use it only for running-target proofs", c.Sandbox.Network)
+	}
+	// The sandbox package owns the limits of a run. Ask it now, so a value
+	// it would refuse later (a timeout above its hard cap, a negative
+	// limit) stops the run before anything is spent.
+	if c.Sandbox.Network == "none" || c.Sandbox.Network == "scope" {
+		profile := sandbox.Profile{
+			Network: c.Sandbox.Network, MemoryMB: c.Sandbox.MemoryMB, CPUs: c.Sandbox.CPUs,
+			PIDs: c.Sandbox.PIDs, Timeout: c.Sandbox.Timeout.Duration,
+		}
+		if err := profile.Validate(); err != nil {
+			add("[sandbox] %s", strings.TrimPrefix(err.Error(), "sandbox: "))
+		}
+	}
+	if c.Scope.MaxRequests < 0 || c.Scope.RequestsPerSecond < 0 {
+		add("[scope] max_requests and requests_per_second cannot be negative")
+	}
+	if c.Fix.MaxAttempts < 0 {
+		add("[fix] max_attempts cannot be negative")
+	}
+	if c.Model.MaxOutputTokens < 0 {
+		add("[model] max_output_tokens cannot be negative")
+	}
+	for name, m := range c.Stages {
+		if m.MaxOutputTokens < 0 {
+			add("[stages.%s] max_output_tokens cannot be negative", name)
+		}
 	}
 	switch c.Output.FailOn {
 	case "critical", "high", "medium", "low", "never":

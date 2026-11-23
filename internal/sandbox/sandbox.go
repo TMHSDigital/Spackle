@@ -182,7 +182,11 @@ func formatCPUs(c float64) string {
 	return strconv.FormatFloat(c, 'f', -1, 64)
 }
 
-func (p Profile) validate() error {
+// Validate reports whether the profile's limits can be used for a run. The
+// configuration loader calls it too, so a bad limit is refused when the
+// configuration is read and not after a model has been paid to write a
+// proof.
+func (p Profile) Validate() error {
 	if p.Network != networkNone && p.Network != networkScope {
 		return fmt.Errorf("sandbox: network %q is not allowed: only \"none\" and \"scope\" exist so a run can never join the host network. Set the profile network to \"none\" or \"scope\"", p.Network)
 	}
@@ -278,7 +282,7 @@ func validateSpec(spec Spec) (validated, error) {
 		}
 	}
 	v.profile = spec.Profile.WithDefaults()
-	if err := v.profile.validate(); err != nil {
+	if err := v.profile.Validate(); err != nil {
 		return v, err
 	}
 	for key := range spec.Files {
