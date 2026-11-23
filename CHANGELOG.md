@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - SARIF file paths are now relative to the repository root when a subdirectory of a git repository is scanned, so code scanning alerts attach to the right file (for example with the Action input `path: services/api`).
 - Investigations that failed, drafts that were refused and leads dropped at validation are now listed under "What was skipped" in the terminal, Markdown and HTML reports and in a new `rejected` array of the JSON report. They used to be recorded in the ledger only, so a report could say nothing was skipped when part of the plan produced no result.
 - The quote check on a drafted finding now compares against the file as the model saw it, with secrets shown as redaction markers, so a finding whose cited line holds a secret is no longer rejected. A quote must also cover a meaningful part of the line it matches: a fragment of a few characters is refused.
+- `spackle debug --good <rev>` on Linux: each commit exported for bisect is now readable by the unprivileged sandbox user. The export used to be private to the operator, so every bisect probe failed to copy the source and bisect stopped early.
 
 ## [0.1.0] - 2026-11-22
 

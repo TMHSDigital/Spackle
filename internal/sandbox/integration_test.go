@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/TMHSDigital/spackle/internal/gitx"
 )
 
 // integrationRuntime returns a real runtime with the test image present. Without one the test
@@ -273,5 +275,50 @@ func TestIntegrationMissingImageIsAnError(t *testing.T) {
 	_, err := rt.Run(ctx, Spec{Image: missing, Cmd: []string{"true"}})
 	if err == nil || !strings.Contains(err.Error(), "pull "+missing) {
 		t.Errorf("a missing image must be an error naming the pull command, got %v", err)
+	}
+}
+
+// A commit exported for bisect must be readable by the unprivileged
+// container user, like the staged proof files are.
+func TestIntegrationRunsAgainstAnArchiveExport(t *testing.T) {
+	rt, ctx := integrationRuntime(t)
+	if !gitx.Available() {
+		t.Skip("git is not installed")
+	}
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false"}, args...)
+		cmd := exec.Command("git", full...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	if err := os.MkdirAll(filepath.Join(repo, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "pkg", "data.txt"), []byte("exported-content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "-q", "-m", "init")
+
+	parent, err := os.MkdirTemp("", "spackle-export-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(parent) }()
+	src, err := gitx.ExportDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gitx.Archive(ctx, repo, "HEAD", src); err != nil {
+		t.Fatal(err)
+	}
+	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"cat", "pkg/data.txt"}, SourceDir: src})
+	if res.ExitCode != 0 || !strings.Contains(res.Stdout, "exported-content") {
+		t.Fatalf("the export was not readable in the sandbox: exit=%d stdout=%q stderr=%q", res.ExitCode, res.Stdout, res.Stderr)
 	}
 }

@@ -623,10 +623,16 @@ func (d *debugRun) probe(ctx context.Context, rep reproduction, rev string) (bad
 		return false, fmt.Errorf("create a directory for commit %s: %w", shortRev(rev), err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := gitx.Archive(ctx, d.root, rev, tmp); err != nil {
+	// The sandbox user cannot enter the private temp directory itself, so
+	// the commit is exported into a world-readable child of it.
+	src, err := gitx.ExportDir(tmp)
+	if err != nil {
+		return false, fmt.Errorf("create a directory for commit %s: %w", shortRev(rev), err)
+	}
+	if err := gitx.Archive(ctx, d.root, rev, src); err != nil {
 		return false, err
 	}
-	res, ev, err := d.rerun(ctx, "bisect", rep, nil, tmp)
+	res, ev, err := d.rerun(ctx, "bisect", rep, nil, src)
 	if err != nil {
 		return false, err
 	}

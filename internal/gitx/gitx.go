@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -309,21 +310,29 @@ func untar(r io.Reader, dest string) error {
 		if rel, rerr := filepath.Rel(root, target); rerr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
 		}
+		// The export is mounted read-only into the sandbox, whose user is
+		// neither the owner nor in the group, so everything is made
+		// world-readable. The modes are set explicitly afterwards because a
+		// strict umask would otherwise strip them.
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o750); err != nil {
+			if err := mkdirAllReadable(root, target); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+			if err := mkdirAllReadable(root, filepath.Dir(target)); err != nil {
 				return err
 			}
-			mode := os.FileMode(0o640)
+			mode := os.FileMode(0o644)
 			if hdr.Mode&0o111 != 0 {
-				mode = 0o750
+				mode = 0o755
 			}
-			f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode) //nolint:gosec // target is confined to dest above
+			f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode) //nolint:gosec // target is confined to dest above; world-readable for the sandbox user by design
 			if err != nil {
+				return err
+			}
+			if err := f.Chmod(mode); err != nil && runtime.GOOS != "windows" {
+				_ = f.Close()
 				return err
 			}
 			// Cap each file so a crafted archive cannot fill the disk.
@@ -336,4 +345,45 @@ func untar(r io.Reader, dest string) error {
 			}
 		}
 	}
+}
+
+// mkdirAllReadable creates dir and any missing parents below root with mode
+// 0755, whatever the umask is.
+func mkdirAllReadable(root, dir string) error {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return err
+	}
+	cur := root
+	for _, seg := range strings.Split(rel, string(filepath.Separator)) {
+		if seg == "." || seg == "" {
+			continue
+		}
+		cur = filepath.Join(cur, seg)
+		err := os.Mkdir(cur, 0o755) //nolint:gosec // G301: readable by the unprivileged sandbox user by design
+		if err != nil && !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		if err == nil {
+			if cerr := os.Chmod(cur, 0o755); cerr != nil && runtime.GOOS != "windows" { //nolint:gosec // G302: see above
+				return cerr
+			}
+		}
+	}
+	return nil
+}
+
+// ExportDir creates a world-readable directory named "src" inside parent
+// (which stays private to the operator) for Archive to export into. The
+// sandbox user must be able to traverse and read the export, and a
+// directory made by os.MkdirTemp is mode 0700.
+func ExportDir(parent string) (string, error) {
+	dir := filepath.Join(parent, "src")
+	if err := os.Mkdir(dir, 0o755); err != nil { //nolint:gosec // G301: readable by the unprivileged sandbox user by design
+		return "", err
+	}
+	if err := os.Chmod(dir, 0o755); err != nil && runtime.GOOS != "windows" { //nolint:gosec // G302: see above
+		return "", err
+	}
+	return dir, nil
 }

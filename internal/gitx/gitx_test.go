@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -128,6 +129,44 @@ func TestArchiveExportsACommitWithoutTouchingTheIndex(t *testing.T) {
 	}
 	if after, _ := Status(ctx, dir); after != before {
 		t.Fatalf("Archive changed the operator's index:\nbefore %q\nafter  %q", before, after)
+	}
+}
+
+// The export is bind-mounted into a container whose user is neither the
+// owner nor in the group, so it must be readable and traversable by others.
+func TestArchiveExportIsWorldReadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
+	dir := newRepo(t)
+	ctx := context.Background()
+	writeFile(t, dir, "pkg/sub/b.txt", "b\n")
+	writeFile(t, dir, "run.sh", "#!/bin/sh\n")
+	if err := os.Chmod(filepath.Join(dir, "run.sh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	head := commit(t, dir, "more")
+	parent, err := os.MkdirTemp("", "spackle-export-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(parent) }()
+	src, err := ExportDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Archive(ctx, dir, head, src); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]os.FileMode{".": 0o755, "pkg": 0o755, "pkg/sub": 0o755, "pkg/sub/b.txt": 0o644, "a.txt": 0o644, "run.sh": 0o755}
+	for rel, mode := range want {
+		st, err := os.Stat(filepath.Join(src, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := st.Mode().Perm(); got != mode {
+			t.Errorf("%s has mode %o, want %o", rel, got, mode)
+		}
 	}
 }
 
