@@ -16,6 +16,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/llm"
+	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -872,14 +873,14 @@ func TestRedaction(t *testing.T) {
 func TestRedactKeepLines(t *testing.T) {
 	pem := "-----BEGIN " + "PRIVATE KEY-----\nAAAA\nBBBB\n-----END " + "PRIVATE KEY-----"
 	in := "a\nk = " + pem + " # tail\nz\n"
-	out := redactKeepLines(in)
+	out := redact.KeepLines(in)
 	if strings.Count(out, "\n") != strings.Count(in, "\n") {
 		t.Errorf("line count changed: %q", out)
 	}
 	if strings.Contains(out, "AAAA") || !strings.HasSuffix(out, " # tail\nz\n") || !strings.HasPrefix(out, "a\nk = [REDACTED:private-key-block:") {
 		t.Errorf("unexpected output: %q", out)
 	}
-	if got := redactKeepLines("plain\ntext\n"); got != "plain\ntext\n" {
+	if got := redact.KeepLines("plain\ntext\n"); got != "plain\ntext\n" {
 		t.Errorf("clean text changed: %q", got)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -104,8 +105,14 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 		}
 		line, found := locateQuote(fl, quote, s.Line)
 		if !found {
-			add("flow step %d: the quote %q does not appear in %s. Quote the line exactly as it is in the file", i+1, clip(quote, 120), s.File)
+			add("flow step %d: the quote %q does not appear in %s. Quote the whole line exactly as the tools show it; a fragment of a few characters is not accepted", i+1, clip(quote, 120), s.File)
 			continue
+		}
+		note := clip(s.Note, 400)
+		if s.Line >= 1 && (line-s.Line > 3 || s.Line-line > 3) {
+			// The model's line number was wrong. Say so, so a reader knows
+			// the number was corrected by matching the quote.
+			note = strings.TrimSpace(note + fmt.Sprintf(" (The draft gave line %d; the quote was found at line %d.)", s.Line, line))
 		}
 		role := strings.ToLower(strings.TrimSpace(s.Role))
 		switch role {
@@ -113,7 +120,7 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 		default:
 			role = "propagation"
 		}
-		flow = append(flow, finding.FlowStep{Role: role, File: s.File, Line: line, Quote: clip(quote, 400), Note: clip(s.Note, 400)})
+		flow = append(flow, finding.FlowStep{Role: role, File: s.File, Line: line, Quote: clip(quote, 400), Note: note})
 	}
 	if len(d.Flow) == 0 {
 		add("flow is empty: include at least the sink, quoted from the file")
@@ -192,7 +199,30 @@ func readLines(root, rel string) ([]string, error) {
 	if err != nil {
 		return nil, errors.New("cannot be read as text")
 	}
+	// Check quotes against the view the model had. Its tools show secrets
+	// as redaction markers, so a quote of such a line holds the marker and
+	// would never match the raw file. This also keeps the secret out of the
+	// stored quote.
+	text = redact.KeepLines(text)
 	return strings.Split(strings.TrimRight(text, "\n"), "\n"), nil
+}
+
+// minQuote is the number of non-space characters a quote must have, unless
+// the line it matches is short: then half of that line is enough. Without a
+// floor, a quote of ")" or "=" matches some line of almost any file and the
+// check would prove nothing.
+const minQuote = 12
+
+func nonSpace(s string) int { return len(strings.ReplaceAll(squash(s), " ", "")) }
+
+// coversEnough reports whether quote is a meaningful part of the text it
+// was found in.
+func coversEnough(quote, matched string) bool {
+	need := (nonSpace(matched) + 1) / 2
+	if need > minQuote {
+		need = minQuote
+	}
+	return nonSpace(quote) >= need
 }
 
 // squash collapses whitespace so a quote matches regardless of indentation
@@ -202,7 +232,8 @@ func squash(s string) string { return strings.Join(strings.Fields(s), " ") }
 // locateQuote finds a quote in a file and returns its 1-based line. It
 // prefers a match at or near the line the model gave and otherwise accepts
 // the first match anywhere in the file. Multi-line quotes are matched
-// against the joined lines.
+// against the joined lines. A fragment too short to identify a line (see
+// minQuote) is not a match.
 func locateQuote(lines []string, quote string, hint int) (int, bool) {
 	want := squash(quote)
 	if want == "" {
@@ -217,7 +248,8 @@ func locateQuote(lines []string, quote string, hint int) (int, bool) {
 		if end > len(lines) {
 			end = len(lines)
 		}
-		return strings.Contains(squash(strings.Join(lines[i:end], " ")), want)
+		got := squash(strings.Join(lines[i:end], " "))
+		return strings.Contains(got, want) && coversEnough(want, got)
 	}
 	if hint >= 1 {
 		for delta := 0; delta <= 3; delta++ {

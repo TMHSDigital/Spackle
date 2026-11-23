@@ -283,3 +283,24 @@ func entropy(s string) float64 {
 	}
 	return h
 }
+
+// KeepLines is Apply that keeps every line where it was: a
+// secret that spans lines is replaced by its marker followed by the same
+// number of newlines.
+func KeepLines(text string) string {
+	ms := Scan(text)
+	if len(ms) == 0 {
+		return text
+	}
+	var b strings.Builder
+	b.Grow(len(text))
+	pos := 0
+	for _, m := range ms {
+		b.WriteString(text[pos:m.Start])
+		b.WriteString(Marker(m.Rule, m.Hash))
+		b.WriteString(strings.Repeat("\n", strings.Count(text[m.Start:m.End], "\n")))
+		pos = m.End
+	}
+	b.WriteString(text[pos:])
+	return b.String()
+}

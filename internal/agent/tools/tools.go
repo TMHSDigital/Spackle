@@ -294,7 +294,7 @@ func (r *Registry) text(abs string) (string, error) {
 	if err != nil {
 		return "", errors.New(reason(err))
 	}
-	red := redactKeepLines(raw)
+	red := redact.KeepLines(raw)
 	// Only files that contain secrets are kept in memory; the rest are
 	// re-read (and re-scanned, in case they changed) on each use.
 	r.mu.Lock()
@@ -305,27 +305,6 @@ func (r *Registry) text(abs string) (string, error) {
 	}
 	r.mu.Unlock()
 	return red, nil
-}
-
-// redactKeepLines is redact.Apply that keeps every line where it was: a
-// secret that spans lines is replaced by its marker followed by the same
-// number of newlines.
-func redactKeepLines(text string) string {
-	ms := redact.Scan(text)
-	if len(ms) == 0 {
-		return text
-	}
-	var b strings.Builder
-	b.Grow(len(text))
-	pos := 0
-	for _, m := range ms {
-		b.WriteString(text[pos:m.Start])
-		b.WriteString(redact.Marker(m.Rule, m.Hash))
-		b.WriteString(strings.Repeat("\n", strings.Count(text[m.Start:m.End], "\n")))
-		pos = m.End
-	}
-	b.WriteString(text[pos:])
-	return b.String()
 }
 
 // decode reads args into v, refusing fields the schema does not name.

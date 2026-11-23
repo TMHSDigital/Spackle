@@ -197,7 +197,7 @@ Nothing in a model's draft is trusted. Before a draft becomes a finding, Spackle
 - The file exists inside the target. Paths that leave the target, including through a symbolic link, are refused.
 - The start line is inside the file.
 - The flow is not empty, and every step has a quote.
-- Every quote really appears in the file it cites. Whitespace differences are ignored. When the quote is found on another line of the same file, the line number is corrected to the real one.
+- Every quote really appears in the file it cites. Whitespace differences are ignored. The file is compared as the model's tools show it, with secrets replaced by redaction markers, so a quote of a line that holds a secret carries the marker and never the value. A quote must have at least 12 non-space characters, or at least half of the line it matches when that line is shorter: a fragment such as `)` is refused. When the quote is found on another line of the same file, the line number is corrected to the real one and the step's note says so.
 - The CVSS vector is valid, or the class default is used as described above.
 - The title, the description, the fix summary and the confidence reason are all present.
 - CWE entries that are not of the form `CWE-<number>` are dropped.

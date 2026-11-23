@@ -499,3 +499,37 @@ func TestExtractJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestQuoteCheckUsesTheRedactedViewAndRefusesFragments(t *testing.T) {
+	root := t.TempDir()
+	secret := "sk_live_" + "9aB3xQ7mLp2Zr8Tn5Vw1Yc4D"
+	src := "import os\n\nSECRET_KEY = \"" + secret + "\"\n\ndef sign(payload):\n    return hmac_sign(SECRET_KEY, payload)\n"
+	if err := os.WriteFile(filepath.Join(root, "settings.py"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lines, err := readLines(root, "settings.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown := lines[2]
+	if strings.Contains(shown, secret) || !strings.Contains(shown, "[REDACTED:") {
+		t.Fatalf("the line is not redacted the way the tools show it: %q", shown)
+	}
+	// The line as the model saw it, marker included, validates.
+	if line, ok := locateQuote(lines, shown, 3); !ok || line != 3 {
+		t.Fatalf("a quote of the redacted line was refused (line %d, ok %v)", line, ok)
+	}
+	// A fragment that would match almost any file does not.
+	for _, frag := range []string{")", "=", "os", "return"} {
+		if _, ok := locateQuote(lines, frag, 6); ok {
+			t.Errorf("the fragment %q was accepted as a quote", frag)
+		}
+	}
+	// A short line can still be quoted whole, and most of a long line is enough.
+	if _, ok := locateQuote(lines, "import os", 1); !ok {
+		t.Error("a whole short line was refused")
+	}
+	if _, ok := locateQuote(lines, "hmac_sign(SECRET_KEY, payload)", 6); !ok {
+		t.Error("most of a long line was refused")
+	}
+}
