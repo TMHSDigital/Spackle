@@ -21,7 +21,7 @@ In practice, a contribution will not be merged if it does any of the following, 
 
 ## Set up
 
-You need Go 1.26 or newer and git. Docker or Podman is optional and is needed only for the sandbox tests, which skip with a clear message when no runtime is present.
+You need Go 1.26 or newer and git. `go.mod` names a current 1.26 patch release, so an older 1.26 toolchain downloads that release by itself the first time you build. Docker or Podman is optional and is needed only for the sandbox tests, which skip with a clear message when no runtime is present.
 
 On Windows, in PowerShell:
 

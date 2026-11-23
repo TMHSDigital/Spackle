@@ -1,6 +1,6 @@
 module github.com/TMHSDigital/spackle
 
-go 1.26.0
+go 1.26.11
 
 require github.com/pandatix/go-cvss v0.6.4
 

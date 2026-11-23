@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Agent search tools are faster on large targets: the target listing is taken from the mapper and shared by every stage of a run, and a file is scanned for secrets once and again only when it changes.
 - The deterministic scan is faster: the built-in code, secret and infrastructure seeders process files in parallel, each secret rule runs only on files that contain one of its literal markers, and listing the target no longer stats every file twice.
 - A rule now reports at most 50 leads per file and a seeder at most 5000 leads per run, so one generated or vendored file can no longer bury a report or exhaust memory. The seeder line in the report says how many leads were dropped and where. The report of an external scanner is read up to 256 MiB.
+- The `go` directive in `go.mod` is now `1.26.11`, so a source install with an older Go 1.26 toolchain builds with the current patch release and its standard library fixes.
 
 ### Fixed
 
