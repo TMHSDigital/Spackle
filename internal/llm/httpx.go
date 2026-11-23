@@ -22,6 +22,14 @@ var retryWait = func(attempt int) time.Duration {
 	return time.Duration(attempt-1) * 2 * time.Second
 }
 
+// errUndecodable marks a response with a success status whose body could not
+// be decoded. The provider has already done, and charged for, the work, so
+// doJSON does not send the request again.
+type errUndecodable struct{ err error }
+
+func (e *errUndecodable) Error() string { return e.err.Error() }
+func (e *errUndecodable) Unwrap() error { return e.err }
+
 // doJSON sends a JSON request and decodes a JSON response, retrying
 // transient failures with backoff. headers must not be logged: they carry
 // the API key.
@@ -50,6 +58,10 @@ func doJSON(ctx context.Context, client *http.Client, provider, method, url stri
 		lastErr = err
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && !apiErr.Retryable() {
+			return err
+		}
+		var undecodable *errUndecodable
+		if errors.As(err, &undecodable) {
 			return err
 		}
 		if errors.Is(err, ErrOffline) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -95,7 +107,7 @@ func doOnce(ctx context.Context, client *http.Client, provider, method, url stri
 		return nil
 	}
 	if err := json.Unmarshal(data, out); err != nil {
-		return fmt.Errorf("%s returned a response that is not the expected JSON: %w. Check that base_url points at the API root", provider, err)
+		return &errUndecodable{fmt.Errorf("%s returned a response that is not the expected JSON: %w. Check that base_url points at the API root", provider, err)}
 	}
 	return nil
 }

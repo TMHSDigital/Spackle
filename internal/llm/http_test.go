@@ -276,7 +276,7 @@ func TestScrubURLError(t *testing.T) {
 }
 
 func TestDoJSONExplainsANonJSONSuccessBody(t *testing.T) {
-	noBackoff(t)
+	asked := noBackoff(t)
 	s := serveSequence(t, reply{200, "<!DOCTYPE html><html><body>Welcome to nginx</body></html>"})
 	var out pingResponse
 	err := doJSON(context.Background(), s.srv.Client(), "ollama", http.MethodPost, s.srv.URL, nil, pingRequest{Model: "m"}, &out)
@@ -291,6 +291,10 @@ func TestDoJSONExplainsANonJSONSuccessBody(t *testing.T) {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		t.Fatalf("a 200 with a bad body is not an API error: %v", err)
+	}
+	// The provider already did the work: the request is not sent again.
+	if n := s.calls(); n != 1 || len(*asked) != 0 {
+		t.Fatalf("calls = %d, waits = %v: a 200 with a bad body must be requested once", n, *asked)
 	}
 }
 
@@ -320,6 +324,9 @@ func TestDoJSONCapsTheResponseBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "is not the expected JSON") || !strings.Contains(err.Error(), "unexpected end of JSON input") {
 		t.Fatalf("err = %v, want the invalid JSON hint for a cut body", err)
+	}
+	if n := big.calls(); n != 1 {
+		t.Fatalf("calls = %d, want 1: a response cut at the size limit must not be requested again", n)
 	}
 
 	// An error body over the limit is cut too, and still reported as the API
