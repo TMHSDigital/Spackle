@@ -18,7 +18,8 @@ import (
 )
 
 // MaxFileSize is the largest file Spackle reads as source. Larger files are
-// reported as skipped, not silently ignored.
+// reported as skipped, not silently ignored. The same holds for directories
+// that are pruned by default.
 const MaxFileSize = 1 << 20
 
 // File is one readable text file in the target.
@@ -35,13 +36,62 @@ type Skip struct {
 	Reason string
 }
 
-// skipDirs are never descended into.
+// metaDirs hold version control data and Spackle's own state. They are
+// never source, so they are pruned without a skip record.
+var metaDirs = map[string]bool{".git": true, ".hg": true, ".svn": true, ".spackle": true}
+
+// skipDirs are pruned wherever they appear: their names are specific to
+// dependency trees, caches and editor state.
 var skipDirs = map[string]bool{
-	".git": true, ".hg": true, ".svn": true, ".spackle": true,
-	"node_modules": true, "vendor": true, ".venv": true, "venv": true,
+	"node_modules": true, ".venv": true, "venv": true,
 	"__pycache__": true, ".tox": true, ".mypy_cache": true, ".pytest_cache": true,
-	"dist": true, "build": true, "target": true, ".next": true, ".nuxt": true,
-	".terraform": true, ".idea": true, ".vscode": true, "coverage": true,
+	".next": true, ".nuxt": true, ".terraform": true, ".idea": true, ".vscode": true,
+}
+
+// outputDirs are names that usually hold dependencies or build output but
+// are also ordinary names for first-party code (a "target" or "build"
+// package). They are pruned at the target root, and deeper only when a
+// marker confirms what they are: one of the listed files inside the
+// directory ("in"), or beside it in its parent ("beside").
+var outputDirs = map[string]struct{ in, beside []string }{
+	"vendor":   {in: []string{"modules.txt", "autoload.php"}, beside: []string{"go.mod", "composer.json", "Gemfile"}},
+	"target":   {in: []string{"CACHEDIR.TAG"}, beside: []string{"Cargo.toml", "pom.xml", "build.sbt"}},
+	"dist":     {beside: []string{"package.json", "pyproject.toml", "setup.py"}},
+	"build":    {beside: []string{"package.json", "pyproject.toml", "setup.py", "build.gradle", "build.gradle.kts", "CMakeLists.txt"}},
+	"coverage": {beside: []string{"package.json"}},
+}
+
+// SkippedDirReason is the skip reason of a directory pruned by default.
+const SkippedDirReason = "dependency, cache or build output directory, not scanned by default; name it in [scan] include to read it"
+
+// prunedByDefault reports whether the directory at abs (rel from the root)
+// is one Spackle does not read unless asked to.
+func prunedByDefault(abs, rel, name string) bool {
+	if skipDirs[name] {
+		return true
+	}
+	markers, ok := outputDirs[name]
+	if !ok {
+		return false
+	}
+	if !strings.Contains(rel, "/") {
+		return true // directly under the target root
+	}
+	exists := func(dir, file string) bool {
+		st, err := os.Stat(filepath.Join(dir, file))
+		return err == nil && st.Mode().IsRegular()
+	}
+	for _, f := range markers.in {
+		if exists(abs, f) {
+			return true
+		}
+	}
+	for _, f := range markers.beside {
+		if exists(filepath.Dir(abs), f) {
+			return true
+		}
+	}
+	return false
 }
 
 var langByExt = map[string]string{
@@ -84,8 +134,8 @@ type Options struct {
 	// Exclude lists paths that are not read. A pattern that matches a
 	// directory excludes everything beneath it.
 	Exclude []string
-	// Include lists directories that are read although their name is one
-	// of the default skips (build, dist, vendor and so on).
+	// Include lists directories that are read although they are pruned by
+	// default (node_modules, a root build or dist, a vendor tree).
 	Include []string
 }
 
@@ -207,7 +257,12 @@ func ListWith(root string, opts Options) (Result, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if abs != realRoot && skipDirs[d.Name()] && !Match(opts.Include, rel) {
+			switch {
+			case abs == realRoot:
+			case metaDirs[d.Name()]:
+				return filepath.SkipDir
+			case prunedByDefault(abs, rel, d.Name()) && !Match(opts.Include, rel):
+				skip(rel, SkippedDirReason)
 				return filepath.SkipDir
 			}
 			return nil

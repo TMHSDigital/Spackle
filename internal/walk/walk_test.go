@@ -44,7 +44,15 @@ func TestListSkipsDependencyDirsBinariesAndHugeFiles(t *testing.T) {
 	if got := rels(res); got != "main.go,src/app.py" {
 		t.Fatalf("files = %s", got)
 	}
-	if len(res.Skipped) != 1 || res.Skipped[0].Rel != "big.txt" || !strings.Contains(res.Skipped[0].Reason, "larger than") {
+	// The pruned directories are reported; version control data is not.
+	var skipped []string
+	for _, s := range res.Skipped {
+		skipped = append(skipped, s.Rel)
+	}
+	if got := strings.Join(skipped, ","); got != "big.txt,node_modules,vendor" {
+		t.Fatalf("skipped = %+v", res.Skipped)
+	}
+	if !strings.Contains(res.Skipped[0].Reason, "larger than") || res.Skipped[1].Reason != SkippedDirReason {
 		t.Fatalf("skipped = %+v", res.Skipped)
 	}
 	if res.Files[0].Lang != "go" || res.Files[1].Lang != "python" {
@@ -165,7 +173,7 @@ func TestListWithExcludesAndIncludes(t *testing.T) {
 	var skipped []string
 	for _, s := range res.Skipped {
 		if s.Reason != "excluded by configuration" {
-			t.Errorf("skip %s has reason %q", s.Rel, s.Reason)
+			continue
 		}
 		skipped = append(skipped, s.Rel)
 	}
@@ -199,5 +207,36 @@ func TestMatch(t *testing.T) {
 		if CheckPattern(bad) == nil {
 			t.Errorf("CheckPattern(%q) accepted a bad pattern", bad)
 		}
+	}
+}
+
+func TestOutputDirectoriesArePrunedOnlyWhereTheyAreOutput(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{
+		"build/out.js",                           // at the root: pruned
+		"internal/target/target.go",              // a first-party package named target
+		"app/build/handler.py",                   // nested, no marker: read
+		"web/package.json", "web/dist/bundle.js", // nested beside a manifest: pruned
+		"svc/go.mod", "svc/vendor/lib/lib.go", // nested beside go.mod: pruned
+		"rust/target/CACHEDIR.TAG", "rust/target/debug/x.rs", // marker inside: pruned
+		"pkg/node_modules/dep/index.js", // always pruned
+	} {
+		write(t, root, rel, "x")
+	}
+	res, err := List(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := rels(res), "app/build/handler.py,internal/target/target.go,svc/go.mod,web/package.json"; got != want {
+		t.Errorf("files = %s, want %s", got, want)
+	}
+	var pruned []string
+	for _, s := range res.Skipped {
+		if s.Reason == SkippedDirReason {
+			pruned = append(pruned, s.Rel)
+		}
+	}
+	if got, want := strings.Join(pruned, ","), "build,pkg/node_modules,rust/target,svc/vendor,web/dist"; got != want {
+		t.Errorf("pruned = %s, want %s", got, want)
 	}
 }

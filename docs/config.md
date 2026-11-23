@@ -433,7 +433,12 @@ Things to know:
 
 Patterns are forward-slash globs relative to the target root. `*` and `?` match within one path segment and `**` matches any number of segments, so `bench/corpus/**` excludes that tree and `**/testdata/**` excludes every `testdata` directory. A pattern with no slash, such as `*.min.js`, is also matched against the file or directory name alone.
 
-Directories named `.git`, `node_modules`, `vendor`, `dist`, `build`, `target`, `coverage` and similar are not read by default. Name one in `include` (for example `build` or `services/api/vendor/**`) when it holds source you answer for.
+Some directories are not read by default, and each one that is pruned is listed in the report as "Not read":
+
+- Dependency trees, caches and editor state, wherever they appear: `node_modules`, `.venv`, `venv`, `__pycache__`, `.tox`, `.mypy_cache`, `.pytest_cache`, `.next`, `.nuxt`, `.terraform`, `.idea`, `.vscode`.
+- `vendor`, `dist`, `build`, `target` and `coverage`, when they sit directly under the target root, or deeper when a marker shows they are dependencies or build output (for example `vendor` beside a `go.mod`, `dist` beside a `package.json`, `target` beside a `Cargo.toml` or holding `CACHEDIR.TAG`). A nested directory with one of these names and no marker, such as a `target` package, is read.
+
+Name a pruned directory in `include` (for example `build` or `services/api/vendor/**`) when it holds source you answer for. Version control data (`.git`, `.hg`, `.svn`) and Spackle's own state directory are never read.
 
 A rule id is the part after the colon in a finding's origin (`builtin-code:py-sql-fstring` is rule `py-sql-fstring`). Write `source:rule` to disable a rule for one scanner only.
 
