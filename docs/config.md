@@ -445,6 +445,8 @@ A rule id is the part after the colon in a finding's origin (`builtin-code:py-sq
 
 Every excluded path is listed in the report as "Not read", and the report notes the configured exclusions, inclusions and disabled rules with the number of leads each removed, so a reader can see what the scan did not cover. The map cache is not used while `exclude` or `include` is set.
 
+Two fixed limits keep one noisy file from burying a report: a rule reports at most 50 leads per file, and a seeder at most 5000 leads per run. When a limit drops leads, the seeder's line in the report says how many and names the rule and file with the most matches. Exclude the file, or disable the rule, to see the rest of the picture.
+
 ## Fixes
 
 | Key | Flag | Default | Meaning |

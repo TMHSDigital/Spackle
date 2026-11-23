@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A finding with a checked patch that is not applied now has status `patch-available` instead of `fixed`, and it counts toward `--fail-on`: the exit code no longer passes while the flaw is still in the scanned code. `fixed` is kept for a finding whose proof no longer succeeds against the code itself, as `spackle verify` establishes. The JSON report counts gain `patch_available`, and SARIF lists a fixed finding at level `note`.
 - Agent search tools are faster on large targets: the target listing is taken from the mapper and shared by every stage of a run, and a file is scanned for secrets once and again only when it changes.
 - The deterministic scan is faster: the built-in code, secret and infrastructure seeders process files in parallel, each secret rule runs only on files that contain one of its literal markers, and listing the target no longer stats every file twice.
+- A rule now reports at most 50 leads per file and a seeder at most 5000 leads per run, so one generated or vendored file can no longer bury a report or exhaust memory. The seeder line in the report says how many leads were dropped and where. The report of an external scanner is read up to 256 MiB.
 
 ### Fixed
 

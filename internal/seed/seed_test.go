@@ -50,3 +50,73 @@ func TestEachFileIsDeterministic(t *testing.T) {
 		t.Fatalf("no files: leads=%d err=%v", len(leads), err)
 	}
 }
+
+type manyLeads struct{ leads []Lead }
+
+func (manyLeads) Name() string              { return "many" }
+func (manyLeads) Available() (bool, string) { return true, "" }
+func (m manyLeads) Run(context.Context, string, []walk.File) ([]Lead, error) {
+	return m.leads, nil
+}
+
+// One rule that matches thousands of lines of a generated file must not
+// bury the report, and the drop must be visible in the seeder's status.
+func TestLeadCapsAreAppliedAndReported(t *testing.T) {
+	var leads []Lead
+	for line := 1; line <= 3000; line++ {
+		leads = append(leads, Lead{RuleID: "noisy", Class: "debug-enabled", File: "gen/big.js", Line: line, Title: "t", Detail: "d", Fix: "f"})
+	}
+	leads = append(leads, Lead{RuleID: "real", Class: "sql-injection", File: "app.py", Line: 4, Title: "t", Detail: "d", Fix: "f"})
+	got, statuses := RunAll(context.Background(), []Seeder{manyLeads{leads}}, "", nil)
+	if len(got) != MaxLeadsPerRuleFile+1 {
+		t.Fatalf("leads = %d, want %d", len(got), MaxLeadsPerRuleFile+1)
+	}
+	st := statuses[0]
+	if st.Leads != MaxLeadsPerRuleFile+1 || !strings.Contains(st.Note, "2950 leads were not listed") || !strings.Contains(st.Note, "rule noisy in gen/big.js, 3000 matches") {
+		t.Fatalf("status = %+v", st)
+	}
+
+	// The per-run cap: many files, each under the per-file cap.
+	leads = nil
+	for f := 0; f < 300; f++ {
+		for line := 1; line <= 20; line++ {
+			leads = append(leads, Lead{RuleID: "r", Class: "debug-enabled", File: fmt.Sprintf("f%d.py", f), Line: line, Title: "t", Detail: "d", Fix: "f"})
+		}
+	}
+	got, statuses = RunAll(context.Background(), []Seeder{manyLeads{leads}}, "", nil)
+	if len(got) != MaxLeadsPerSeeder || !strings.Contains(statuses[0].Note, "1000 leads were not listed: a seeder reports at most") {
+		t.Fatalf("leads = %d status = %+v", len(got), statuses[0])
+	}
+}
+
+func TestLimitedBufferStopsAtItsLimit(t *testing.T) {
+	b := &limitedBuffer{limit: 10}
+	for _, chunk := range []string{"12345", "678", "9abcdef", "more"} {
+		if n, err := b.Write([]byte(chunk)); err != nil || n != len(chunk) {
+			t.Fatalf("Write(%q) = %d, %v; a write must always succeed", chunk, n, err)
+		}
+	}
+	if b.String() != "123456789a" || !b.truncated {
+		t.Fatalf("buffer = %q truncated = %v", b.String(), b.truncated)
+	}
+}
+
+// redactedLine visits only the matches on the line, and still redacts every
+// one of them.
+func TestRedactedLineWithManyMatches(t *testing.T) {
+	key := func(i int) string { return fmt.Sprintf("AKIA%016d", i) }
+	var b strings.Builder
+	for i := 0; i < 2000; i++ {
+		b.WriteString("a = \"" + key(i) + "\"; b = \"" + key(i+5000) + "\"\n")
+	}
+	text := b.String()
+	leads := secretLeads("gen.py", text)
+	if len(leads) != 4000 {
+		t.Fatalf("leads = %d, want 4000", len(leads))
+	}
+	for _, l := range []Lead{leads[0], leads[1999], leads[3999]} {
+		if strings.Contains(l.Snippet, "AKIA") || strings.Count(l.Snippet, "[REDACTED:") != 2 {
+			t.Fatalf("line %d snippet = %q", l.Line, l.Snippet)
+		}
+	}
+}

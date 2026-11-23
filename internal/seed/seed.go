@@ -90,6 +90,10 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 			if err != nil {
 				st.Error = err.Error()
 			}
+			got, capNote := capLeads(got)
+			if capNote != "" {
+				st.Note = strings.TrimSpace(st.Note + " " + capNote)
+			}
 			for i := range got {
 				got[i].Source = s.Name()
 				got[i].Finalize()
@@ -100,6 +104,51 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 		statuses = append(statuses, st)
 	}
 	return Sort(Unique(leads)), statuses
+}
+
+// Lead caps. A generated or vendored file can match one rule thousands of
+// times. Past a point more leads of the same rule in the same file add
+// nothing a reader can use, and each one costs a ledger line and a finding.
+const (
+	// MaxLeadsPerRuleFile is how many leads one rule may report in one file.
+	MaxLeadsPerRuleFile = 50
+	// MaxLeadsPerSeeder is how many leads one seeder may report in one run.
+	MaxLeadsPerSeeder = 5000
+)
+
+// capLeads applies the lead caps to one seeder's output, keeping the first
+// leads in the seeder's own order. The note says what was dropped, so the
+// cap is visible in the seeder's status and never silent.
+func capLeads(leads []Lead) ([]Lead, string) {
+	type key struct{ rule, file string }
+	perKey := map[key]int{}
+	overFile, overRun := 0, 0
+	worst, worstN := key{}, 0
+	kept := leads[:0:0]
+	for _, l := range leads {
+		k := key{l.RuleID, l.File}
+		perKey[k]++
+		if l.File != "" && perKey[k] > MaxLeadsPerRuleFile {
+			overFile++
+			if perKey[k] > worstN {
+				worst, worstN = k, perKey[k]
+			}
+			continue
+		}
+		if len(kept) >= MaxLeadsPerSeeder {
+			overRun++
+			continue
+		}
+		kept = append(kept, l)
+	}
+	var notes []string
+	if overFile > 0 {
+		notes = append(notes, fmt.Sprintf("%d leads were not listed: a rule reports at most %d leads per file (most: rule %s in %s, %d matches).", overFile, MaxLeadsPerRuleFile, worst.rule, worst.file, worstN))
+	}
+	if overRun > 0 {
+		notes = append(notes, fmt.Sprintf("%d leads were not listed: a seeder reports at most %d leads per run.", overRun, MaxLeadsPerSeeder))
+	}
+	return kept, strings.Join(notes, " ")
 }
 
 // Unique drops leads with a repeated ID, keeping the first.

@@ -59,7 +59,7 @@ func (secretsSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Le
 func secretLeads(rel, text string) []Lead {
 	matches := redact.Scan(text)
 	leads := make([]Lead, 0, len(matches))
-	for _, m := range matches {
+	for i, m := range matches {
 		sev := "high"
 		if criticalSecretRules[m.Rule] {
 			sev = "critical"
@@ -74,7 +74,7 @@ func secretLeads(rel, text string) []Lead {
 			Severity: sev,
 			File:     rel,
 			Line:     m.Line,
-			Snippet:  truncate(strings.TrimSpace(redactedLine(text, matches, m)), maxSnippet),
+			Snippet:  truncate(strings.TrimSpace(redactedLine(text, matches, i)), maxSnippet),
 			Detail:   fmt.Sprintf("Rule %s matched a value with fingerprint %s. A credential stored in the repository is readable by everyone with access to the code and its history.", m.Rule, m.Hash),
 			Fix:      "Revoke and rotate this credential, then load the new one from the environment or a secret manager. Removing the line is not enough because the value stays in version control history.",
 		}
@@ -89,16 +89,26 @@ func secretLeads(rel, text string) []Lead {
 // redactedLine returns the line on which m starts with every match that
 // touches the line replaced by its marker. It works from the matches of the
 // whole text rather than rescanning the line, because a multi-line secret
-// cut down to one line would no longer match and would leak.
-func redactedLine(text string, matches []redact.Match, m redact.Match) string {
+// cut down to one line would no longer match and would leak. idx is the
+// index of the match in matches, which are sorted and do not overlap, so
+// only the neighbours that touch the line are visited.
+func redactedLine(text string, matches []redact.Match, idx int) string {
+	m := matches[idx]
 	ls := strings.LastIndexByte(text[:m.Start], '\n') + 1
 	le := len(text)
 	if i := strings.IndexByte(text[m.Start:], '\n'); i >= 0 {
 		le = m.Start + i
 	}
+	first, last := idx, idx
+	for first > 0 && matches[first-1].End > ls {
+		first--
+	}
+	for last+1 < len(matches) && matches[last+1].Start < le {
+		last++
+	}
 	var b strings.Builder
 	pos := ls
-	for _, o := range matches {
+	for _, o := range matches[first : last+1] {
 		if o.End <= ls || o.Start >= le {
 			continue
 		}

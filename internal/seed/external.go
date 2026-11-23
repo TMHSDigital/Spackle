@@ -152,12 +152,19 @@ func (e *external) Run(ctx context.Context, root string, files []walk.File) ([]L
 	// passed as single arguments and cannot be reinterpreted.
 	cmd := exec.CommandContext(ctx, binPath, argv...) //nolint:gosec // fixed scanner binary from PATH with a fixed argument vector; only the target path and listed file names vary
 	cmd.Dir = absRoot
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	// A scanner's report is held in memory and decoded in one piece, so it
+	// is bounded: past the limit the rest is dropped and the run is
+	// reported as failed instead of exhausting memory.
+	stdout := &limitedBuffer{limit: maxScannerOutput}
+	stderr := &limitedBuffer{limit: 1 << 20}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
 	runErr := cmd.Run()
 
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("%s did not finish within %s or the scan was cancelled: %w; rerun, or scan a smaller target", e.name, scannerTimeout, ctx.Err())
+	}
+	if stdout.truncated {
+		return nil, fmt.Errorf("%s produced a report larger than %d MiB, which is not read; exclude generated or vendored paths with [scan] exclude, or run %s by hand", e.name, maxScannerOutput>>20, e.bin)
 	}
 	if len(bytes.TrimSpace(stdout.Bytes())) == 0 {
 		var exitErr *exec.ExitError
@@ -834,4 +841,27 @@ func hadolintLeads(data []byte, root string, st *parseStats) ([]Lead, error) {
 		})
 	}
 	return leads, nil
+}
+
+// maxScannerOutput bounds the report one external scanner may write.
+const maxScannerOutput = 256 << 20
+
+// limitedBuffer is a bytes.Buffer that stops growing at limit and records
+// that it had to drop output. Writes always succeed, so the scanner is not
+// killed by a closed pipe and can finish and exit normally.
+type limitedBuffer struct {
+	bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if room := b.limit - b.Len(); room < len(p) {
+		b.truncated = true
+		if room > 0 {
+			b.Buffer.Write(p[:room])
+		}
+		return len(p), nil
+	}
+	return b.Buffer.Write(p)
 }
