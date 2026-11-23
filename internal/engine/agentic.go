@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/agent"
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
@@ -150,11 +151,18 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	if err != nil {
 		return nil, nil, "", err
 	}
+	// interrupted is set when the operator cancels the run. The loop then
+	// stops, and everything found so far is still reported.
+	interrupted := false
+	planCap := ""
 	intents, perr := agent.Plan(ctx, planner, mapSeq, sealer, m, leads, limit)
 	if perr != nil || len(intents) == 0 {
-		if errors.Is(perr, budget.ErrExhausted) || ctx.Err() != nil {
-			intents = nil
-		} else {
+		switch {
+		case ctx.Err() != nil:
+			intents, interrupted = nil, true
+		case errors.Is(perr, budget.ErrExhausted):
+			intents, planCap = nil, perr.Error()
+		default:
 			note := "The planner returned no usable plan, so investigations were planned directly from scanner leads."
 			if perr != nil {
 				note = "The planner failed (" + clipText(perr.Error(), 200) + "), so investigations were planned directly from scanner leads."
@@ -198,17 +206,38 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	leadState := map[string]string{} // lead id -> "found" | "dismissed:<reason>" | "incomplete:<reason>"
 	outcome := "completed"
 	var skipped []string
-	capNote := ""
+	capNote := planCap
+	if planCap != "" {
+		outcome = "budget-exhausted"
+		skipped = append(skipped, "Planning did not finish, so no lead was investigated.")
+	}
+	// notInvestigated records the intents from i on as skipped.
+	notInvestigated := func(i int) {
+		for _, rest := range intents[i:] {
+			skipped = append(skipped, fmt.Sprintf("Not investigated: %s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
+		}
+	}
+	// record appends a finished finding to the ledger at once, so an
+	// interrupt or a later failure cannot lose it. The ranked findings are
+	// appended again at the end of the run; the ledger keeps the latest
+	// event per id.
+	record := func(f finding.Finding, seq int64) error {
+		if f.Validate() != nil {
+			return nil // reported as a reject when the run ends
+		}
+		_, err := r.led.Append(seq, ledger.TypeFinding, f)
+		return err
+	}
 
 	for i, it := range intents {
-		if cerr := ctx.Err(); cerr != nil {
-			return nil, nil, "", cerr
+		if ctx.Err() != nil {
+			interrupted = true
+			notInvestigated(i)
+			break
 		}
 		if berr := bud.CanAfford(estInputPerIntent/2, estUSD); berr != nil {
 			capNote = berr.Error()
-			for _, rest := range intents[i:] {
-				skipped = append(skipped, fmt.Sprintf("Not investigated: %s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
-			}
+			notInvestigated(i)
 			outcome = "budget-exhausted"
 			break
 		}
@@ -217,14 +246,14 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		if ierr != nil {
 			if errors.Is(ierr, budget.ErrExhausted) {
 				capNote = ierr.Error()
-				for _, rest := range intents[i:] {
-					skipped = append(skipped, fmt.Sprintf("Not investigated: %s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
-				}
+				notInvestigated(i)
 				outcome = "budget-exhausted"
 				break
 			}
 			if ctx.Err() != nil {
-				return nil, nil, "", ctx.Err()
+				interrupted = true
+				notInvestigated(i)
+				break
 			}
 			// A provider failure on one investigation should not discard
 			// the rest of the run. Record it and move on.
@@ -266,13 +295,23 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 				case errors.Is(perr, budget.ErrExhausted):
 					capNote = perr.Error()
 				case ctx.Err() != nil:
-					return nil, nil, "", ctx.Err()
+					// The finding itself is complete; only its proof or
+					// fix was cut short. Keep it.
+					interrupted = true
+					notInvestigated(i + 1)
 				default:
-					return nil, nil, "", perr
+					// One failed proof or fix step must not end the run.
+					// The finding stays as it was traced.
+					if _, err := r.led.Append(vseq, ledger.TypeReject, ledger.Reject{Stage: "prover", Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + clipText(perr.Error(), 300)}); err != nil {
+						return nil, nil, "", err
+					}
 				}
 			}
 			parent[f.ID] = vseq
 			findings = append(findings, f)
+			if err := record(f, vseq); err != nil {
+				return nil, nil, "", err
+			}
 			for _, id := range it.LeadIDs {
 				leadState[id] = "found"
 			}
@@ -285,6 +324,19 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 				leadState[id] = "incomplete:" + inv.Rejected
 			}
 		}
+		if interrupted {
+			break
+		}
+	}
+	if interrupted {
+		outcome = "interrupted"
+		capNote = "interrupted by the operator"
+		r.say("Interrupted: writing the findings produced so far")
+		// The run's context is cancelled. The remaining steps are local and
+		// short, so they get a fresh context with its own limit.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		defer cancel()
 	}
 
 	// Leads that did not become an investigated finding are still reported,
@@ -342,7 +394,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 					fixed = append(fixed, findings[i])
 				}
 			}
-			if r.cfg.Fix.PR {
+			if r.cfg.Fix.PR && !interrupted {
 				if _, err := r.led.Append(mapSeq, ledger.TypeNote, r.lab.openPR(ctx, branch, fixed)); err != nil {
 					return nil, nil, "", err
 				}
@@ -352,7 +404,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 
 	// Look for chains across confirmed findings. Optional: skip when the
 	// budget is gone, and never fail the run over it.
-	if bud.Check() == nil {
+	if !interrupted && bud.Check() == nil {
 		if mech, merr := runnerFor("mechanical"); merr == nil {
 			if linked, cerr := agent.Correlate(ctx, mech, mapSeq, sealer, findings); cerr == nil {
 				findings = linked

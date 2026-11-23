@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spackle debug --good <rev>` on Linux: each commit exported for bisect is now readable by the unprivileged sandbox user. The export used to be private to the operator, so every bisect probe failed to copy the source and bisect stopped early.
 - Built-in code rules now read comments in the syntax of the file language. A Go or Python statement that starts with `*` and a JavaScript private member that starts with `#` are no longer skipped as comments, a word in a trailing comment can no longer hide a lead, and commented-out code no longer produces one.
 - The Go rule for file paths built from request data no longer treats `filepath.Clean` as a sanitizer: `filepath.Join(base, filepath.Clean(input))` keeps a leading `../` and is now reported. `filepath.Base` and the rooted `Clean("/" + input)` idiom still suppress the lead.
+- Interrupting an agentic scan (Ctrl-C) no longer discards the findings already investigated. Each finding is written to the ledger as soon as it is complete, the run ends with outcome `interrupted`, the reports are written, and the command exits 3. An interrupt during planning is no longer reported as `completed`, and one failed proof or fix step no longer ends the whole run.
 
 ## [0.1.0] - 2026-11-22
 

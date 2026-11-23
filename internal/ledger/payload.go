@@ -99,7 +99,7 @@ type SandboxRun struct {
 
 // RunEnd is the data of a run.end event.
 type RunEnd struct {
-	Outcome string `json:"outcome"` // completed|budget-exhausted|failed
+	Outcome string `json:"outcome"` // completed|budget-exhausted|interrupted|failed
 	Note    string `json:"note,omitempty"`
 }
 

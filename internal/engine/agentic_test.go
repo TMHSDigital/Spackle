@@ -325,3 +325,70 @@ func TestOfflineSkipsNetworkScannersAndRefusesClones(t *testing.T) {
 		t.Fatalf("findings=%d seeders=%+v", len(res.Run.Findings), res.Run.Seeders)
 	}
 }
+
+// An interrupt must not lose what the run already found: the finished
+// finding is in the ledger and the report, and the outcome says interrupted.
+func TestInterruptKeepsFinishedFindings(t *testing.T) {
+	other := seed.Lead{RuleID: "md5", Title: "MD5 used", Class: "weak-hash", Surface: finding.SurfaceCode, CWE: []string{"CWE-328"}, Severity: "medium", File: "app.py", Line: 1, Detail: "d", Fix: "Use SHA-256."}
+	plan := `{"intents":[` +
+		`{"title":"find query","class":"sql-injection","hypothesis":"Does q reach SQL?","files":["app.py"],"lead_ids":["` + leadID(sqlLead(), "fake") + `"],"priority":1},` +
+		`{"title":"hashing","class":"weak-hash","hypothesis":"Is MD5 used for secrets?","files":["app.py"],"lead_ids":["` + leadID(other, "fake") + `"],"priority":2}]}`
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	investigations := 0
+	fake := llm.NewFake()
+	fake.Handler = func(req llm.Request, _ int) (llm.Response, error) {
+		resp := llm.Response{StopReason: llm.StopEnd, Usage: llm.Usage{InputTokens: 100, OutputTokens: 50, CostKnown: true}}
+		switch stageOf(req) {
+		case "planner":
+			resp.Text = plan
+		case "reviewer":
+			resp.Text = `{"verdict":"confirmed","reason":"q is interpolated on line 4"}`
+		case "correlate":
+			t.Error("chain analysis ran after the interrupt")
+		default:
+			investigations++
+			if investigations == 2 {
+				cancel() // the operator presses Ctrl-C during the second investigation
+				return llm.Response{}, context.Canceled
+			}
+			resp.Text = goodDraft()
+		}
+		return resp, nil
+	}
+	o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), other}})
+	res, err := Run(ctx, o)
+	if err != nil {
+		t.Fatalf("an interrupted run must still produce a result: %v", err)
+	}
+	if res.Run.Outcome != "interrupted" {
+		t.Fatalf("outcome = %s, want interrupted", res.Run.Outcome)
+	}
+	if len(res.Run.Findings) != 2 || res.Run.Findings[0].Class != "sql-injection" || res.Run.Findings[0].Confidence.Level != finding.ConfidenceHigh {
+		t.Fatalf("the finished finding was lost: %+v", res.Run.Findings)
+	}
+	if len(res.Run.Skipped) != 1 || !strings.Contains(res.Run.Skipped[0].Cap, "interrupted") || !strings.Contains(strings.Join(res.Run.Skipped[0].Skipped, " "), "Not investigated: hashing") {
+		t.Fatalf("skipped = %+v", res.Run.Skipped)
+	}
+	if _, err := os.Stat(filepath.Join(res.RunDir, "reports", "report.md")); err != nil {
+		t.Fatalf("no report was written for the interrupted run: %v", err)
+	}
+}
+
+func TestInterruptDuringPlanningIsNotReportedAsCompleted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake := llm.NewFake()
+	fake.Handler = func(llm.Request, int) (llm.Response, error) {
+		cancel()
+		return llm.Response{}, context.Canceled
+	}
+	o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	res, err := Run(ctx, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.Outcome != "interrupted" || len(res.Run.Findings) != 1 {
+		t.Fatalf("outcome = %s findings = %d", res.Run.Outcome, len(res.Run.Findings))
+	}
+}

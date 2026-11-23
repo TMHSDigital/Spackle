@@ -57,6 +57,12 @@ func runScan(env Env, args []string) int {
 		return ExitError
 	}
 	fmt.Fprintf(env.Stderr, "Run %s stored in %s\n", res.RunID, res.RunDir)
+	if res.Run.Outcome == "interrupted" {
+		// The report holds what was found before the interrupt. The run
+		// did not finish, so it is not a pass whatever it found.
+		fmt.Fprintf(env.Stderr, "The run was interrupted. The report covers only what was investigated before that.\n")
+		return ExitError
+	}
 	return exitFor(cfg, res.Run)
 }
 

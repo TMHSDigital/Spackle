@@ -346,6 +346,7 @@ Caps are hard limits enforced in Go. No tool call and nothing in target content 
 What happens when a cap is reached:
 
 - **Tokens, spend or wall time.** No new model call is made. Before each investigation Spackle also checks that roughly one more would fit, and stops planning new ones when it would not. Findings already produced are kept. The run ends with outcome `budget-exhausted`, and a `budget.skip` ledger event lists what was not investigated. The report shows that list. Leads that were never investigated are still reported, as `plausible`.
+- **Interrupt (Ctrl-C).** An agentic scan stops at the next step and keeps what it has: each finding is written to the ledger as soon as its investigation, review, proof and fix are done. The run ends with outcome `interrupted`, the reports are written, the report lists what was not investigated, and the command exits 3 because the run did not finish.
 - **Sandbox runs.** No further container is started. A finding that could not be demonstrated or fix-checked for that reason keeps the labels it had earned.
 - **Max findings.** Findings are ranked, the list is cut, and the ones dropped are named in a `budget.skip` event. One run plans at most 30 investigations whatever the other caps say.
 - **Max turns.** The conversation gets one last request with no tools and a prompt to answer from what it has seen. The same happens when a model repeats identical tool calls four times.
