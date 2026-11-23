@@ -162,7 +162,12 @@ func (s *scanner) discover(t *target) bool {
 		return false
 	}
 	if err := s.c.grant.Permits(t.u, "GET"); err != nil {
-		s.outOfScope++
+		// Count each out-of-scope URL once, not once per page that links
+		// to it: the note reports distinct URLs.
+		if key := "out-of-scope " + t.key(); !s.known[key] {
+			s.known[key] = true
+			s.outOfScope++
+		}
 		return false
 	}
 	if logoutLike(t.u.Path) || logoutLike(t.u.RawQuery) || logoutLike(t.values.Encode()) {

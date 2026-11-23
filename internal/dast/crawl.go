@@ -130,8 +130,9 @@ func extract(body []byte, base *url.URL) ([]*url.URL, []form) {
 	return links, forms
 }
 
-// logoutWords mark URLs the crawl leaves alone so it does not end the
-// session it is using or delete the operator's data.
+// logoutWords mark URLs the crawl leaves alone so it does not delete the
+// operator's data or end a session. The client itself holds no session; the
+// words are about what a request could do on the target's side.
 var logoutWords = []string{"logout", "signout", "delete", "remove", "destroy"}
 
 func logoutLike(s string) bool {

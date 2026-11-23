@@ -157,7 +157,7 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 		return m.Languages[i].Lang < m.Languages[j].Lang
 	})
 
-	detectManifests(&m, frameworks, manifests)
+	detectManifests(frameworks, manifests)
 	for fw := range frameworks {
 		m.Frameworks = append(m.Frameworks, fw)
 	}
@@ -352,7 +352,7 @@ func scanFile(m *Map, frameworks map[string]bool, f walk.File, text string) {
 	}
 }
 
-func detectManifests(m *Map, frameworks map[string]bool, manifests []walk.File) {
+func detectManifests(frameworks map[string]bool, manifests []walk.File) {
 	deps := map[string]string{
 		"flask": "flask", "django": "django", "fastapi": "fastapi", "sqlalchemy": "sqlalchemy",
 		`"express"`: "express", `"next"`: "next", `"react"`: "react", `"fastify"`: "fastify", `"koa"`: "koa",
@@ -370,7 +370,6 @@ func detectManifests(m *Map, frameworks map[string]bool, manifests []walk.File) 
 			}
 		}
 	}
-	_ = m
 }
 
 func chooseHarness(m *Map, files []walk.File) {

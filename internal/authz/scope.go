@@ -18,8 +18,9 @@ import (
 	"github.com/TMHSDigital/spackle/internal/config"
 )
 
-// Caps applied to every grant. They bound the traffic a run can send even
-// when the operator leaves the values out or sets them too high.
+// Caps applied to every grant. The defaults bound the traffic of a run when
+// the operator leaves the values out. Only the request rate has a ceiling:
+// max_requests is taken as given, however large.
 const (
 	defaultMaxRequests       = 400
 	defaultRequestsPerSecond = 5

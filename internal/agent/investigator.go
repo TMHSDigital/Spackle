@@ -116,9 +116,11 @@ func Investigate(ctx context.Context, r *Runner, parent int64, root string, seal
 			inv.Rejected = "the draft was rejected after one correction: " + clip(problem, 600)
 			return inv, r.reject(parent, intent, inv.Rejected)
 		}
-		// Send the problems back once. This is a fresh, short conversation
-		// that carries the previous answer, so it costs little and cannot
-		// loop.
+		// Send the problems back once, so it cannot loop. This is a new
+		// conversation that carries the previous answer, with the same
+		// tools and the same turn limit as the first attempt: the model may
+		// read the files again, so a retry can cost as much as the
+		// investigation did.
 		retry := "Your previous answer could not be used:\n" + clip(problem, 1200) +
 			"\n\nYour previous answer was:\n" + sealer.Wrap("previous answer", clip(out.Text, 6000)) +
 			"\n\nRe-read the files if you need to, fix those problems, and reply again in the required JSON format. " +

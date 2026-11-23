@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - One definition of "test code" is now used everywhere. A fix can no longer edit a test under `test/`, `spec/` or a `conftest.py`, and the built-in code rules skip the same files the mapper and the fixer treat as tests.
 - Sandbox limits and other numeric settings are now checked when the configuration is loaded. A `[sandbox] timeout` above the 15 minute cap or a negative limit is refused before the run starts, instead of failing every proof after the model call that wrote it.
 - `spackle debug`: bisect now checks the committed code at HEAD first and, when it does not show the failure, says the cause is uncommitted changes instead of blaming the HEAD commit. A `--test` name that matches no test is refused before any model call, instead of being read as a failing or a passing test.
+- The running-target note "N URL(s) were outside the authorized scope" now counts each URL once instead of once per page that links to it.
 
 ## [0.1.0] - 2026-11-22
 

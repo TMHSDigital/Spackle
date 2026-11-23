@@ -63,7 +63,8 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	}
 
 	// Everything that can refuse the run is checked before a run directory
-	// exists, so a refused run leaves nothing behind.
+	// exists, so a refused run has no run directory and no ledger. A clone
+	// of a git URL target and the map cache can already be on disk.
 	agentic := opts.Config.Model.Configured()
 	provs := newProviders(opts.Config, opts.ProviderFactory)
 	var defaultProv llm.Provider

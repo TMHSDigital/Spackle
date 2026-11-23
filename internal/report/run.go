@@ -66,7 +66,9 @@ type Usage struct {
 	Leads       int
 }
 
-// Counts summarizes findings by severity label for open findings.
+// Counts summarizes a run's findings. The severity buckets and Demonstrated
+// cover every finding that is not dismissed (open, patch available and
+// fixed), not only the open ones.
 type Counts struct {
 	Critical, High, Medium, Low, None int
 	Open, Fixed, Dismissed            int
