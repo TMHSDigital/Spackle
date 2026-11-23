@@ -28,7 +28,7 @@ In practice:
 - A truth entry that no finding matches is a **false negative**.
 - A finding Spackle dismissed counts as nothing. Dismissing a real flaw therefore shows up as a false negative, and dismissing a decoy hit removes a false positive.
 - Confidence does not matter to matching. A `plausible` lead at the right class and line is a true positive.
-- A fixture whose scan fails is recorded with its error, and its planted flaws count as missed.
+- A fixture whose scan fails is recorded with its error and left out of the totals: its planted flaws are not counted as missed and it is not counted as a clean fixture. The run reports how many failed, and no results file is written for such a run unless `--force` is given.
 
 ## Metrics
 
@@ -42,6 +42,7 @@ Each is computed over the totals for the run, exactly as below. A ratio with a z
 | Verified-fix rate | Verified fixes / TP |
 | Cost per finding | Model spend for the whole run / TP |
 | Decoys flagged | The number of clean fixtures with at least one false positive, next to the number of clean fixtures |
+| Fixtures failed | Shown only when a fixture's scan failed. Such a fixture is left out of every other figure, and `spackle bench` does not write a results file unless `--force` is given |
 
 Notes on two of them:
 

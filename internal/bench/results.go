@@ -70,6 +70,10 @@ type Totals struct {
 	// DecoysFlagged counts clean fixtures with at least one false positive.
 	DecoysFlagged int `json:"decoys_flagged"`
 	CleanFixtures int `json:"clean_fixtures"`
+	// FailedFixtures counts fixtures whose scan failed. They are left out
+	// of every figure above: a scan that never ran found nothing, which
+	// must not read as a decoy left alone or as a missed flaw.
+	FailedFixtures int `json:"failed_fixtures,omitempty"`
 }
 
 // spend is the model accounting of one fixture's scan.
@@ -94,6 +98,17 @@ func ratio(num, den float64) float64 {
 func total(scores []FixtureScore, spends []spend) Totals {
 	t := Totals{CostKnown: true}
 	for i, s := range scores {
+		sp := spends[i]
+		if s.Error != "" {
+			// What the failed scan spent is still part of the run's cost.
+			t.FailedFixtures++
+			t.CostUSD += sp.costUSD
+			t.CostKnown = t.CostKnown && sp.costKnown
+			t.InputTokens += sp.inputTokens
+			t.OutputTokens += sp.outputTokens
+			t.TokensEstimated = t.TokensEstimated || sp.estimated
+			continue
+		}
 		t.TruePositives += s.TruePositives
 		t.FalsePositives += s.FalsePositives
 		t.FalseNegatives += s.FalseNegatives
@@ -104,7 +119,6 @@ func total(scores []FixtureScore, spends []spend) Totals {
 				t.DecoysFlagged++
 			}
 		}
-		sp := spends[i]
 		t.CostUSD += sp.costUSD
 		t.CostKnown = t.CostKnown && sp.costKnown
 		t.InputTokens += sp.inputTokens
@@ -333,5 +347,8 @@ func Summary(r Results) string {
 	fmt.Fprintf(&b, "Verified-fix rate: %s\n", fixRateText(r))
 	fmt.Fprintf(&b, "Cost per finding:  %s\n", costText(r))
 	fmt.Fprintf(&b, "Decoys flagged:    %d of %d\n", t.DecoysFlagged, t.CleanFixtures)
+	if t.FailedFixtures > 0 {
+		fmt.Fprintf(&b, "Fixtures failed:   %d (their scans did not run to the end; they are left out of every figure above)\n", t.FailedFixtures)
+	}
 	return b.String()
 }

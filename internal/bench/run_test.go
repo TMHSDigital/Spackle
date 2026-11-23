@@ -310,7 +310,9 @@ func TestRunRecordsFailingFixture(t *testing.T) {
 	if res.Mode != ModeDeterministic || res.Model != "none" || res.Provider != "" || !res.Totals.CostKnown {
 		t.Fatalf("mode %q model %q provider %q", res.Mode, res.Model, res.Provider)
 	}
-	if res.Totals.TruePositives != 1 || res.Totals.FalseNegatives != 2 {
+	// The failed fixture keeps its own record, but it is left out of the
+	// totals and counted as failed there.
+	if res.Totals.TruePositives != 1 || res.Totals.FalseNegatives != 0 || res.Totals.FailedFixtures != 1 {
 		t.Fatalf("totals = %+v", res.Totals)
 	}
 }
@@ -409,5 +411,33 @@ func TestRunDeterministicRealCorpus(t *testing.T) {
 	}
 	if res.Totals.CostUSD != 0 || !res.Totals.CostKnown {
 		t.Fatalf("a run without a model cannot cost anything: %+v", res.Totals)
+	}
+}
+
+// A fixture whose scan failed found nothing because it never ran. It must
+// not read as a decoy left alone, or as flaws that were missed.
+func TestFailedFixturesAreLeftOutOfTheTotals(t *testing.T) {
+	corpus := tempCorpus(t)
+	answers := map[string]engine.Result{
+		"a-vuln": {Run: report.Run{Findings: []finding.Finding{found("sql-injection", 10)}}},
+	}
+	fail := map[string]error{"b-clean": errors.New("scan broke"), "c-vuln": errors.New("scan broke")}
+	var seen []engine.Options
+	res, err := Run(context.Background(), Options{CorpusDir: corpus, Config: config.Default(), Scan: canned(answers, fail, &seen)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Totals.FailedFixtures != 2 {
+		t.Fatalf("failed fixtures = %d, want 2", res.Totals.FailedFixtures)
+	}
+	if res.Totals.CleanFixtures != 0 || res.Totals.DecoysFlagged != 0 {
+		t.Errorf("the failed clean fixture was counted: %d clean, %d flagged", res.Totals.CleanFixtures, res.Totals.DecoysFlagged)
+	}
+	if res.Totals.TruePositives != 1 || res.Totals.FalseNegatives != 1 {
+		// a-vuln plants two flaws and one was found; c-vuln never ran.
+		t.Errorf("totals = %+v, want only a-vuln's one hit and one miss", res.Totals)
+	}
+	if !strings.Contains(Summary(res), "Fixtures failed:   2") {
+		t.Errorf("the summary does not report the failures:\n%s", Summary(res))
 	}
 }

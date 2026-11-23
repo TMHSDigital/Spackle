@@ -35,7 +35,7 @@ func runBench(env Env, args []string) int {
 		f.DefValue = defaultBenchResults
 	}
 	corpus := fs.String("corpus", defaultBenchCorpus, "`directory` that holds the benchmark fixtures")
-	force := fs.Bool("force", false, "overwrite an existing results file for the same date and model")
+	force := fs.Bool("force", false, "overwrite an existing results file for the same date and model, and write a file even when some fixture scans failed")
 	table := fs.Bool("table", false, "print the README table for all results in --out and exit without running")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -119,6 +119,10 @@ func runBench(env Env, args []string) int {
 	// partial run is never written where it could be quoted as a result.
 	if len(res.Fixtures) < res.Corpus.Fixtures {
 		fmt.Fprintf(env.Stderr, "spackle bench: the run stopped after %d of %d fixtures, so no results file was written.\nThe figures above cover only part of the corpus and must not be quoted. Fix the cause in the note above and run again.\n", len(res.Fixtures), res.Corpus.Fixtures)
+		return ExitError
+	}
+	if n := res.Totals.FailedFixtures; n > 0 && !*force {
+		fmt.Fprintf(env.Stderr, "spackle bench: the scan of %d fixture(s) failed, so no results file was written.\nThe figures above leave those fixtures out and do not describe the whole corpus. Fix the cause and run again, or pass --force to write the file anyway; it records the failures.\n", n)
 		return ExitError
 	}
 	path, err := bench.Write(outDir, res, *force)
