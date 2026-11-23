@@ -125,8 +125,12 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		return nil, nil, "", err
 	}
 	r.sealer = sealer
+	// One cache for the whole run: every stage of every investigation gets
+	// its own registry, and without it each would list the target and scan
+	// its files for secrets again.
+	toolCache := tools.NewCache(m.Files)
 	newRegistry := func() *tools.Registry {
-		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(r.cfg)})
+		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(r.cfg), Cache: toolCache})
 	}
 	runnerFor := func(stage string) (*agent.Runner, error) {
 		prov, err := r.provs.forStage(stage)

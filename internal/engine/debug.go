@@ -289,8 +289,9 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 		return Result{}, r.fail(err)
 	}
 	r.sealer = sealer
+	toolCache := tools.NewCache(m.Files)
 	newRegistry := func() *tools.Registry {
-		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(cfg)})
+		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(cfg), Cache: toolCache})
 	}
 	runnerFor := func(stage string) (*agent.Runner, error) {
 		p, perr := provs.forStage(stage)

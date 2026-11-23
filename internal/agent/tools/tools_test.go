@@ -1426,3 +1426,49 @@ func TestInjectionCorpus(t *testing.T) {
 		t.Errorf("tool set changed after reading the corpus: %v", got)
 	}
 }
+
+// Registries that share a cache list the target once and scan each file for
+// secrets once, however many stages search it.
+func TestSharedCacheAvoidsRepeatedScans(t *testing.T) {
+	root, _ := newTarget(t)
+	cache := NewCache(nil)
+	grep := func() {
+		t.Helper()
+		reg := NewRegistry(Env{Root: root, Sealer: envelope.NewWithNonce(nonce), Cache: cache})
+		res := reg.Call(context.Background(), llm.ToolCall{ID: "1", Name: "grep", Args: json.RawMessage(`{"pattern":"get_user"}`)})
+		if res.IsError || !strings.Contains(res.Content, "app/db.py") {
+			t.Fatalf("grep failed: %s", res.Content)
+		}
+	}
+	grep()
+	first := cache.scans
+	if first == 0 {
+		t.Fatal("the first search scanned nothing")
+	}
+	grep() // a new registry, as the next stage of a run would build
+	if cache.scans != first {
+		t.Fatalf("a second registry scanned %d more files; clean files must not be scanned again", cache.scans-first)
+	}
+	// A file that changed is scanned again, and a new secret in it is redacted.
+	secret := "AKIA" + "IOSFODNN7EXAMPLE"
+	write(t, root, "app/db.py", "aws_key = \""+secret+"\"\ndef get_user(): pass\n")
+	reg := NewRegistry(Env{Root: root, Sealer: envelope.NewWithNonce(nonce), Cache: cache})
+	res := reg.Call(context.Background(), llm.ToolCall{ID: "2", Name: "read_file", Args: json.RawMessage(`{"path":"app/db.py"}`)})
+	if strings.Contains(res.Content, secret) || !strings.Contains(res.Content, "[REDACTED:") {
+		t.Fatalf("a changed file was served from a stale scan: %s", res.Content)
+	}
+	if cache.scans != first+1 {
+		t.Fatalf("scans = %d, want %d", cache.scans, first+1)
+	}
+}
+
+// A cache seeded with the mapper's listing is not listed again.
+func TestSeededCacheUsesTheGivenListing(t *testing.T) {
+	root, _ := newTarget(t)
+	only := []walk.File{{Rel: "app/db.py", Abs: filepath.Join(root, "app", "db.py"), Lang: "python"}}
+	reg := NewRegistry(Env{Root: root, Sealer: envelope.NewWithNonce(nonce), Cache: NewCache(only)})
+	res := reg.Call(context.Background(), llm.ToolCall{ID: "1", Name: "grep", Args: json.RawMessage(`{"pattern":"Store"}`)})
+	if res.IsError || !strings.Contains(res.Content, "app/db.py") || strings.Contains(res.Content, "app/views.py") {
+		t.Fatalf("grep did not search the seeded listing only: %s", res.Content)
+	}
+}

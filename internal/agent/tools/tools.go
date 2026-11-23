@@ -16,10 +16,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/TMHSDigital/spackle/internal/envelope"
@@ -45,6 +47,42 @@ type Env struct {
 	Sealer    *envelope.Sealer // wraps every result as untrusted data
 	MaxOutput int              // max bytes of content per result; 0 means 24000
 	Walk      walk.Options     // configured path exclusions and inclusions
+	// Cache, when set, is shared by every registry of a run, so the target
+	// is listed once and a file is scanned for secrets once. A registry
+	// with no Cache keeps its own.
+	Cache *Cache
+}
+
+// Cache holds what is expensive to compute and the same for every stage of
+// a run: the listing of the target and, per file, the result of the secret
+// scan. It is safe for concurrent use.
+type Cache struct {
+	mu      sync.Mutex
+	listed  bool
+	list    []walk.File
+	listErr error
+	files   map[string]scanned
+	scans   int // secret scans performed; read by tests
+}
+
+// scanned is the secret scan of one file as it was when scanned.
+type scanned struct {
+	size int64
+	mod  time.Time
+	// red is the redacted text when the file holds secrets. It is empty
+	// for a clean file, whose text is read again when needed, not kept.
+	red string
+}
+
+// NewCache returns a cache for one run. files, when not nil, is the target
+// listing the mapper already produced; the tools then do not walk the
+// target again.
+func NewCache(files []walk.File) *Cache {
+	c := &Cache{files: map[string]scanned{}}
+	if files != nil {
+		c.list, c.listed = files, true
+	}
+	return c
 }
 
 // Tool is one callable tool.
@@ -85,17 +123,16 @@ type Registry struct {
 	rootErr  error
 	tools    map[string]Tool
 
-	mu       sync.Mutex
-	listed   bool
-	list     []walk.File
-	listErr  error
-	redacted map[string]string // abs path -> redacted text; "" means the file has no secrets
+	cache *Cache
 }
 
 // NewRegistry returns the read-only code tools for env:
 // read_file, list_dir, grep, find_symbol, find_references, git_log, git_show.
 func NewRegistry(env Env) *Registry {
-	r := &Registry{env: env, tools: map[string]Tool{}, redacted: map[string]string{}}
+	r := &Registry{env: env, tools: map[string]Tool{}, cache: env.Cache}
+	if r.cache == nil {
+		r.cache = NewCache(nil)
+	}
 	if env.Sealer == nil {
 		// Without a sealer nothing could be marked untrusted, so no result
 		// may leave. Call reports this instead of returning bare content.
@@ -247,16 +284,17 @@ func (r *Registry) files() ([]walk.File, error) {
 	if r.rootErr != nil {
 		return nil, r.rootErr
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.listed {
+	c := r.cache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.listed {
 		res, err := walk.ListWith(r.env.Root, r.env.Walk)
 		if err != nil {
 			err = errors.New("the target cannot be listed: " + reason(err))
 		}
-		r.list, r.listErr, r.listed = res.Files, err, true
+		c.list, c.listErr, c.listed = res.Files, err, true
 	}
-	return r.list, r.listErr
+	return c.list, c.listErr
 }
 
 // resolve confines a model-supplied path to the target. It returns the
@@ -283,27 +321,40 @@ func (r *Registry) resolve(p string) (abs, rel string, err error) {
 // bytes: otherwise a line from the middle of a private key would be shown
 // on its own (no rule matches it out of context), and whether a pattern
 // matched inside a secret would leak the secret one question at a time.
+//
+// The secret scan is the expensive part (every rule over the whole text), so
+// its result is remembered per file and reused while the file's size and
+// modification time are unchanged. Only files that hold secrets are kept in
+// memory; a clean file is read again but not scanned again.
 func (r *Registry) text(abs string) (string, error) {
-	r.mu.Lock()
-	cached, known := r.redacted[abs]
-	r.mu.Unlock()
-	if known && cached != "" {
-		return cached, nil
+	st, err := os.Stat(abs)
+	if err != nil {
+		return "", errors.New(reason(err))
+	}
+	c := r.cache
+	c.mu.Lock()
+	prev, known := c.files[abs]
+	c.mu.Unlock()
+	fresh := known && prev.size == st.Size() && prev.mod.Equal(st.ModTime())
+	if fresh && prev.red != "" {
+		return prev.red, nil
 	}
 	raw, err := walk.ReadText(abs)
 	if err != nil {
 		return "", errors.New(reason(err))
 	}
-	red := redact.KeepLines(raw)
-	// Only files that contain secrets are kept in memory; the rest are
-	// re-read (and re-scanned, in case they changed) on each use.
-	r.mu.Lock()
-	if red == raw {
-		r.redacted[abs] = ""
-	} else {
-		r.redacted[abs] = red
+	if fresh {
+		return raw, nil // scanned before and clean
 	}
-	r.mu.Unlock()
+	red := redact.KeepLines(raw)
+	entry := scanned{size: st.Size(), mod: st.ModTime()}
+	if red != raw {
+		entry.red = red
+	}
+	c.mu.Lock()
+	c.files[abs] = entry
+	c.scans++
+	c.mu.Unlock()
 	return red, nil
 }
 
@@ -369,7 +420,7 @@ func schema(props string, required ...string) json.RawMessage {
 // with Add (the scope-bound http_request tool). Results are still
 // truncated, redacted and enveloped by Call.
 func NewNetworkRegistry(sealer *envelope.Sealer) *Registry {
-	r := &Registry{env: Env{Sealer: sealer}, tools: map[string]Tool{}, redacted: map[string]string{}}
+	r := &Registry{env: Env{Sealer: sealer}, tools: map[string]Tool{}, cache: NewCache(nil)}
 	if sealer == nil {
 		r.rootErr = errors.New("the tool environment has no envelope sealer; this is a Spackle bug, stop and report it")
 	}
