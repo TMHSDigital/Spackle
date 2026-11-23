@@ -50,7 +50,7 @@ usd = 5.0               # model spend for the run
 wall_time = "30m"       # a duration such as 90s, 30m or 2h
 sandbox_runs = 40       # container runs for the run
 max_findings = 50       # findings reported, highest ranked first
-max_turns = 24          # tool-use turns in one agent conversation
+max_turns = 24          # tool-use turns in one agent conversation (code scans and debug)
 
 [scope]
 # hosts = ["localhost:8081"]   # absent by default: no running target is authorized
@@ -280,7 +280,7 @@ Investigators, the reviewer, the prover and the fixer have no entry, so they use
 The inheritance rule:
 
 - A stage with no entry uses `[model]`.
-- A stage entry must set `provider`. An entry without one is ignored and the stage uses `[model]`.
+- A stage entry must set `provider`. An entry without one is an error: the configuration is refused (exit code 2), because the entry would otherwise be ignored without a word.
 - When the stage's provider is the same as `[model]`'s, the fields it leaves empty (`model`, `base_url`, `api_key_env`) are inherited. So `[stages.mechanical]` with `provider = "anthropic"` and `model = "claude-haiku-5-5"` reuses the default key variable.
 - When the provider differs, nothing but `max_output_tokens` is inherited. Give the stage its own `model`, and its own `base_url` if the provider needs one.
 - A table named for anything but the six stages is an error.
@@ -343,6 +343,8 @@ Caps are hard limits enforced in Go. No tool call and nothing in target content 
 
 `tokens`, `usd`, `wall_time` and `sandbox_runs` apply only when a model is configured. `max_findings` applies to every run.
 
+`max_turns` applies to the agent conversations of a code scan and of debug mode. The model assessment of a running-target finding is capped at 8 turns whatever `max_turns` says.
+
 What happens when a cap is reached:
 
 - **Tokens, spend or wall time.** No new model call is made. Before each investigation Spackle also checks that roughly one more would fit, and stops planning new ones when it would not. Findings already produced are kept. The run ends with outcome `budget-exhausted`, and a `budget.skip` ledger event lists what was not investigated. The report shows that list. Leads that were never investigated are still reported, as `plausible`.
@@ -361,7 +363,7 @@ Authorization comes from the first of these that is present:
 
 1. `--authorize <scope-file>`.
 2. A `[scope]` table with `hosts` in `spackle.toml`.
-3. On a terminal only, a typed confirmation: Spackle shows the host and you type it back exactly. `y` is not accepted. This is never offered with `--yes`, without a terminal, or over MCP.
+3. On a terminal only, a typed confirmation: Spackle shows the host and you type it back. Case and surrounding spaces are ignored; anything else, including `y`, is not accepted. This is never offered with `--yes`, without a terminal, or over MCP.
 
 A source that is present but does not cover the target is a refusal. Spackle never falls through to the next source, so a wrong scope file cannot be papered over by a prompt.
 
