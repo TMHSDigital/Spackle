@@ -120,3 +120,20 @@ func TestRedactedLineWithManyMatches(t *testing.T) {
 		}
 	}
 }
+
+type notingSeeder struct{ manyLeads }
+
+func (notingSeeder) Note() string { return "3 results were skipped: no Spackle class fits them." }
+
+// What a seeder says about results it dropped must reach its status, which
+// is what the report shows.
+func TestRunAllKeepsTheSeedersNote(t *testing.T) {
+	lead := Lead{RuleID: "r", Class: "sql-injection", File: "app.py", Line: 4, Title: "t", Detail: "d", Fix: "f"}
+	_, statuses := RunAll(context.Background(), []Seeder{notingSeeder{manyLeads{[]Lead{lead}}}, manyLeads{[]Lead{lead}}}, "", nil)
+	if statuses[0].Note != "3 results were skipped: no Spackle class fits them." {
+		t.Fatalf("note = %q", statuses[0].Note)
+	}
+	if statuses[1].Note != "" {
+		t.Fatalf("a seeder with nothing to say got the note %q", statuses[1].Note)
+	}
+}

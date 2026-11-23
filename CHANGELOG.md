@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The GitHub Action could not be loaded: `action.yml` was not valid YAML (an unquoted colon in an input description). It now parses, and a new workflow runs the Action against the demo app on Linux, macOS and Windows.
 - The Action `args` input now accepts several lines. It used to read only the first line and drop the rest silently. A value with quotes, which would have been split into pieces, is refused with a clear message.
 - The GitHub Action no longer stops at the scan step when the scan finds something. The step ran under `bash -e`, so a scan that exited 1 ended it before the SARIF upload and left the `exit-code` and `sarif` outputs empty.
+- Scanner results that an external scanner adapter could not classify are no longer dropped without a word: the seeder line in the report now says how many were skipped and why.
 
 ## [0.1.0] - 2026-11-22
 

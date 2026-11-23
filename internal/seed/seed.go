@@ -90,6 +90,12 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 			if err != nil {
 				st.Error = err.Error()
 			}
+			// A seeder may have more to say about its run than its leads,
+			// for example how many scanner results it could not classify.
+			// Without this the drop would be silent.
+			if n, ok := s.(Noter); ok && n.Note() != "" {
+				st.Note = strings.TrimSpace(st.Note + " " + n.Note())
+			}
 			got, capNote := capLeads(got)
 			if capNote != "" {
 				st.Note = strings.TrimSpace(st.Note + " " + capNote)
