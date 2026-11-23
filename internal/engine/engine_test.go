@@ -440,3 +440,56 @@ func TestRefIsRefusedForADirectoryTarget(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// A clone belongs to its run. When no run comes of it, the clone is removed;
+// when a run is stored, the clone stays for that run.
+func TestCloneIsRemovedWhenNoRunIsStored(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	src := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = src
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(src, "app.py"), []byte("x = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "init"}} {
+		full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false"}, args...)
+		cmd := exec.Command("git", full...)
+		cmd.Dir = src
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	// Send the https URL to the local repository, so no network is used.
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "url.file:///"+strings.TrimPrefix(filepath.ToSlash(src), "/")+".insteadOf")
+	t.Setenv("GIT_CONFIG_VALUE_0", "https://spackle.invalid/owner/repo.git")
+
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	o.Target, o.DryRun = "https://spackle.invalid/owner/repo.git", true
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Plan == nil || res.Plan.TargetKind != "git" || res.Plan.Files != 1 {
+		t.Fatalf("plan = %+v", res.Plan)
+	}
+	clones := filepath.Join(o.Config.StateDir, "clones")
+	if entries, _ := os.ReadDir(clones); len(entries) != 0 {
+		t.Fatalf("a dry run left %d clone(s) behind", len(entries))
+	}
+	o.DryRun = false
+	res, err = Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(clones, res.RunID)); err != nil {
+		t.Fatalf("a stored run lost its clone: %v", err)
+	}
+}

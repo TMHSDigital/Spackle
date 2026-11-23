@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -66,8 +67,8 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	}
 
 	// Everything that can refuse the run is checked before a run directory
-	// exists, so a refused run has no run directory and no ledger. A clone
-	// of a git URL target and the map cache can already be on disk.
+	// exists, so a refused run has no run directory and no ledger. The
+	// clone of a git URL target is removed again; the map cache can stay.
 	agentic := opts.Config.Model.Configured()
 	provs := newProviders(opts.Config, opts.ProviderFactory)
 	var defaultProv llm.Provider
@@ -89,6 +90,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	stateDir := opts.Config.StateDir
 
 	root := tgt.Raw
+	runCreated := false
 	if tgt.Kind == target.KindGit && opts.Config.Offline {
 		return Result{}, fmt.Errorf("%w: %w: cloning %s would leave this machine. Clone it yourself and scan the directory, or drop --offline", ErrRefused, llm.ErrOffline, tgt.Display)
 	}
@@ -105,6 +107,15 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		if err := gitx.CloneRef(ctx, tgt.Raw, root, opts.Ref); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
+		// The clone belongs to the run. When no run comes of it (it is
+		// refused, not confirmed, or a dry run), nothing would ever list
+		// or remove the clone, so it is removed here.
+		clone := root
+		defer func() {
+			if !runCreated {
+				_ = os.RemoveAll(clone)
+			}
+		}()
 	}
 	// Every later stage needs an absolute root: the tool registry refuses a
 	// relative one, because a relative path would silently mean "wherever
@@ -155,7 +166,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 			plan.Investigations, plan.Estimate = est.Investigations, est.String()
 		}
 		if tgt.Kind == target.KindGit {
-			plan.Notes = append(plan.Notes, "The repository was cloned to "+filepath.ToSlash(root)+" to map it; a dry run does not remove the clone.")
+			plan.Notes = append(plan.Notes, "The repository was cloned to map it, and the clone was removed again.")
 		}
 		return Result{Plan: plan}, nil
 	}
@@ -173,6 +184,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	runCreated = true
 	r := &runner{opts: opts, cfg: opts.Config, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs}
 	defer func() { _ = led.Close() }()
 	if agentic {

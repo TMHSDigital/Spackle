@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spackle scan <git URL> --ref <branch or tag>` scans a named branch or tag instead of the default branch. The ref is recorded in the run.
 - `spackle scan --dry-run` shows what a scan would read, each seeder and its lead count, the leads by class, the number of investigations that would be planned and the cost estimate. It calls no model and stores no run.
 - SARIF reports now carry the traced data flow of a finding as `codeFlows`, readable rule names, descriptions and remediation help from the class table, and the verification text and fix branch of a finding that has a patch.
+- `spackle runs` lists the stored runs, and `spackle runs prune --keep <n>` or `--older-than <age>` deletes old runs with their clones and fix worktrees after listing them.
 
 ### Changed
 
@@ -59,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spackle debug`: bisect now checks the committed code at HEAD first and, when it does not show the failure, says the cause is uncommitted changes instead of blaming the HEAD commit. A `--test` name that matches no test is refused before any model call, instead of being read as a failing or a passing test.
 - The running-target note "N URL(s) were outside the authorized scope" now counts each URL once instead of once per page that links to it.
 - The wall time cap now also bounds a model call or sandbox run that is in progress when the cap is reached. Such a call is stopped and the run ends as budget exhausted; it used to run on for as long as the provider client or the sandbox timeout allowed.
+- The clone of a git URL target is removed when no run comes of it (the run is refused, not confirmed, or a dry run). It used to stay under the state directory with nothing referring to it.
 
 ## [0.1.0] - 2026-11-22
 
