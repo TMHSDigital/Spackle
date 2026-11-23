@@ -225,11 +225,12 @@ This finding comes from a deterministic scan of the demo application in this rep
 spackle scan examples/demo-app
 ```
 
-It is `findings/SPK-3D477B2C/finding.json` from that run, verbatim:
+It is `findings/SPK-790860CA/finding.json` from that run, verbatim. The block is pasted in by `tools/readme` from the scan's output, not typed by hand:
 
+<!-- finding-json:start -->
 ```json
 {
-  "id": "SPK-3D477B2C",
+  "id": "SPK-790860CA",
   "title": "SQL statement built with an f-string",
   "surface": "code",
   "class": "sql-injection",
@@ -266,8 +267,7 @@ It is `findings/SPK-3D477B2C/finding.json` from that run, verbatim:
       "The attacker can send requests to the affected endpoint"
     ],
     "steps": [
-      "Typical for this class of flaw; not confirmed for this code:",
-      "Send a request whose parameter closes the string literal and appends SQL",
+      "Send a request whose parameter closes the string literal and appends SQL (these steps are typical for this class of flaw; they were not confirmed for this code)",
       "Confirm the injection from error messages, changed results, or response timing",
       "Use UNION or boolean conditions to read other tables",
       "Modify or delete rows where the database account has write access"
@@ -301,17 +301,19 @@ It is `findings/SPK-3D477B2C/finding.json` from that run, verbatim:
   "status": "open"
 }
 ```
+<!-- finding-json:end -->
 
-The same finding in `reports/report.md`, verbatim:
+The same finding in `reports/report.md`, verbatim and pasted in the same way:
 
+<!-- finding-md:start -->
 ````markdown
-### SPK-3D477B2C: SQL statement built with an f-string
+### SPK-790860CA: SQL statement built with an f-string
 
 **Severity:** CRITICAL 9.3. **Confidence:** plausible. **Status:** open.
 
 #### Identity
 
-- **Id:** `SPK-3D477B2C`
+- **Id:** `SPK-790860CA`
 - **Title:** SQL statement built with an f-string
 - **Location:** `db.py:50`
 - **Class:** sql-injection
@@ -349,8 +351,7 @@ sql = f"SELECT id, title FROM notes WHERE shared = 1 AND title LIKE '%{q}%'"
 
 **Steps**
 
-1. Typical for this class of flaw; not confirmed for this code:
-1. Send a request whose parameter closes the string literal and appends SQL
+1. Send a request whose parameter closes the string literal and appends SQL (these steps are typical for this class of flaw; they were not confirmed for this code)
 1. Confirm the injection from error messages, changed results, or response timing
 1. Use UNION or boolean conditions to read other tables
 1. Modify or delete rows where the database account has write access
@@ -387,6 +388,7 @@ Pass values as bound parameters (placeholders) and keep the SQL text constant. V
 
 - **Found by:** builtin-code:py-sql-fstring-var
 ````
+<!-- finding-md:end -->
 
 ### How to read it
 
@@ -394,7 +396,7 @@ This is a deterministic lead. A built-in rule matched one line, and everything e
 
 - The flow has one step, the sink. Nobody traced where `q` comes from.
 - The severity is the default vector for the class, and the reasoning says it was not refined.
-- The exploitation steps begin with "Typical for this class of flaw; not confirmed for this code".
+- The first exploitation step ends with "(these steps are typical for this class of flaw; they were not confirmed for this code)".
 - The proof status is `not-run` and the confidence is `plausible`, each with its reason.
 - The remediation is the standard advice for the class, marked `unverified`.
 
