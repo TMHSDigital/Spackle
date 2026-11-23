@@ -66,7 +66,7 @@ var ruleCases = map[string]ruleCase{
 	},
 	"py-sql-fstring": {
 		match: []string{`cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`},
-		safe:  []string{`cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))`},
+		safe:  []string{`cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))`, `log.execute(f"hello")`, `runner.execute(f"deploy {env}")`},
 	},
 	"py-sql-fstring-var": {
 		match: []string{`sql = f"SELECT id, title FROM notes WHERE title LIKE '%{q}%'"`, `    query = f'DELETE FROM t WHERE id = {uid}'`},
@@ -82,15 +82,15 @@ var ruleCases = map[string]ruleCase{
 	},
 	"py-sql-percent-format": {
 		match: []string{`cursor.execute("SELECT * FROM users WHERE name = '%s'" % name)`},
-		safe:  []string{`cursor.execute("SELECT * FROM users WHERE name = %s", (name,))`},
+		safe:  []string{`cursor.execute("SELECT * FROM users WHERE name = %s", (name,))`, `client.raw("ping %s" % host)`},
 	},
 	"py-sql-str-format": {
 		match: []string{`cur.execute("SELECT * FROM t WHERE id = {}".format(uid))`},
-		safe:  []string{`cur.execute("SELECT * FROM t WHERE id = ?", (uid,))`},
+		safe:  []string{`cur.execute("SELECT * FROM t WHERE id = ?", (uid,))`, `task.execute("build {}".format(target))`},
 	},
 	"py-sql-concat": {
 		match: []string{`cur.execute("SELECT * FROM t WHERE id = " + uid)`},
-		safe:  []string{`cur.execute("SELECT * FROM t WHERE id = ?", [uid])`},
+		safe:  []string{`cur.execute("SELECT * FROM t WHERE id = ?", [uid])`, `ssh.execute("cd " + d)`},
 	},
 	"js-sql-template": {
 		match: []string{"db.query(\x60SELECT * FROM users WHERE id = ${req.params.id}\x60)"},
@@ -208,16 +208,16 @@ var ruleCases = map[string]ruleCase{
 		safe:  []string{`const agent = new https.Agent({ rejectUnauthorized: true })`},
 	},
 	"go-math-rand-secret": {
-		match: []string{`token := fmt.Sprintf("%06d", rand.Intn(1000000))`},
-		safe:  []string{`delay := time.Duration(rand.Intn(100)) * time.Millisecond`, `n, err := rand.Read(tokenBytes)`},
+		match: []string{`token := fmt.Sprintf("%06d", rand.Intn(1000000))`, `resetToken := strconv.Itoa(rand.Intn(1000000))`, `api_key := rand.Int63()`},
+		safe:  []string{`delay := time.Duration(rand.Intn(100)) * time.Millisecond`, `n, err := rand.Read(tokenBytes)`, `i := rand.Intn(len(keys))`, `monkey := rand.Intn(10)`, `laptop := rand.Intn(3)`},
 	},
 	"py-random-secret": {
 		match: []string{`token = "".join(random.choice(alphabet) for _ in range(32))`},
-		safe:  []string{`token = secrets.token_urlsafe(32)`, `delay = random.uniform(0, 1)`},
+		safe:  []string{`token = secrets.token_urlsafe(32)`, `delay = random.uniform(0, 1)`, `idx = random.randint(0, len(keys) - 1)`},
 	},
 	"js-math-random-secret": {
 		match: []string{`const sessionId = Math.random().toString(36).slice(2)`},
-		safe:  []string{`const jitter = Math.random() * 100`},
+		safe:  []string{`const jitter = Math.random() * 100`, `const key = items[Math.floor(Math.random() * items.length)].key`},
 	},
 	"py-jwt-no-verify": {
 		match: []string{`claims = jwt.decode(token, verify=False)`, `claims = jwt.decode(token, options={"verify_signature": False})`, `claims = jwt.decode(token, key, algorithms=["none"])`},
@@ -503,6 +503,29 @@ func TestCodeRulesCommentHandling(t *testing.T) {
 		got := len(matchRules([]*Rule{r}, c.lang, "f", c.src)) > 0
 		if got != c.want {
 			t.Errorf("%s on %q: lead=%v, want %v", c.rule, c.src, got, c.want)
+		}
+	}
+}
+
+// A lead carries the OWASP categories of its class, the same ones a
+// model-drafted finding of that class gets.
+func TestRuleLeadsUseTheClassOWASPLabels(t *testing.T) {
+	for i := range codeRules {
+		r := &codeRules[i]
+		c := ruleCases[r.ID]
+		if len(c.match) == 0 {
+			continue
+		}
+		leads := matchRules([]*Rule{r}, r.Langs[0], "f", c.match[0])
+		if len(leads) == 0 {
+			continue // reported by TestCodeRules
+		}
+		want := finding.Info(r.Class).OWASP
+		if len(want) == 0 {
+			continue
+		}
+		if got := strings.Join(leads[0].OWASP, "|"); got != strings.Join(want, "|") {
+			t.Errorf("rule %s (class %s): owasp %q, want the class labels %q", r.ID, r.Class, got, strings.Join(want, "|"))
 		}
 	}
 }

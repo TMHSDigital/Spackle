@@ -202,7 +202,13 @@ func matchRules(rules []*Rule, lang, rel, text string) []Lead {
 				Detail:   r.Detail,
 				Fix:      r.Fix,
 			}
-			if r.OWASP != "" {
+			// The OWASP categories come from the class table, so a finding
+			// carries the same labels whether a rule or a model produced
+			// it. The rule's own label is used only for a class that has
+			// none there.
+			if owasp := finding.Info(r.Class).OWASP; len(owasp) > 0 {
+				l.OWASP = append([]string(nil), owasp...)
+			} else if r.OWASP != "" {
 				l.OWASP = []string{r.OWASP}
 			}
 			leads = append(leads, l)

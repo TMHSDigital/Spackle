@@ -21,6 +21,10 @@ const (
 	// jsLit also accepts a template literal with no interpolation.
 	jsLit = `(?:"[^"]*"|'[^']*'|\x60[^\x60$]*\x60)`
 	sqlKW = `\s*(?i:SELECT|INSERT|UPDATE|DELETE)\b`
+	// sqlLit is a quoted string whose text starts with a SQL keyword. The
+	// call-site rules use it so that any method named execute or raw (an
+	// SSH client, a task runner) is not taken for a database call.
+	sqlLit = `(?:"` + sqlKW + `[^"]*"|'` + sqlKW + `[^']*')`
 	// sqlStmt needs a second keyword, so ordinary prose that happens to
 	// start with "Select" or "Update" is not taken for SQL.
 	sqlStmt = `(?i:SELECT\b[^\n]*\bFROM\b|INSERT\s+INTO\b|UPDATE\b[^\n]*\bSET\b|DELETE\s+FROM\b)`
@@ -31,7 +35,11 @@ const (
 	// reqGo is request-derived data in net/http handlers.
 	reqGo = `(?:\.URL\.Query\(\)|\.FormValue\(|\.PostFormValue\(|\.URL\.Path\b|\.URL\.RawQuery\b)`
 	// sensitiveWord marks lines that handle security-sensitive values.
-	sensitiveWord = `(?i)(?:token|secret|passw|session|nonce|otp|key)`
+	// The word has to stand on its own: at a boundary, or as the next word
+	// of a camelCase name. "keys", "monkey" and "laptop" are not sensitive,
+	// and "key" counts only in a compound such as api_key or signingKey.
+	sensitiveWord = `(?:^|[^A-Za-z])(?i:token|secret|passw(?:or)?d|session|nonce|otp|(?:api|secret|signing|private|encryption)_?key)(?:$|[^a-z])` +
+		`|[a-z](?:Token|Secret|Passw(?:or)?d|Session|Nonce|Otp|OTP)(?:$|[^a-z])`
 
 	owaspAccess    = "A01:2021 Broken Access Control"
 	owaspCrypto    = "A02:2021 Cryptographic Failures"
@@ -71,28 +79,28 @@ var codeRules = []Rule{
 	},
 	{
 		ID: "py-sql-fstring", Langs: langPy,
-		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*(?:[rR]?[fF]|[fF][rR])["']`),
+		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*(?:[rR]?[fF]|[fF][rR])["']` + sqlKW),
 		Title:   "SQL statement built with an f-string",
 		Class:   "sql-injection", CWE: "CWE-89", OWASP: owaspInjection, Severity: "high",
 		Detail: sqlDetail, Fix: sqlFix,
 	},
 	{
 		ID: "py-sql-percent-format", Langs: langPy,
-		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*` + strLit + `\s*%\s*[\w(\[{]`),
+		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*` + sqlLit + `\s*%\s*[\w(\[{]`),
 		Title:   "SQL statement built with % formatting",
 		Class:   "sql-injection", CWE: "CWE-89", OWASP: owaspInjection, Severity: "high",
 		Detail: sqlDetail, Fix: sqlFix,
 	},
 	{
 		ID: "py-sql-str-format", Langs: langPy,
-		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*` + strLit + `\s*\.format\(`),
+		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*` + sqlLit + `\s*\.format\(`),
 		Title:   "SQL statement built with str.format",
 		Class:   "sql-injection", CWE: "CWE-89", OWASP: owaspInjection, Severity: "high",
 		Detail: sqlDetail, Fix: sqlFix,
 	},
 	{
 		ID: "py-sql-concat", Langs: langPy,
-		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*` + strLit + `\s*\+`),
+		Pattern: re(`\.(?:execute|executemany|executescript|raw)\(\s*` + sqlLit + `\s*\+`),
 		Title:   "SQL statement built by string concatenation",
 		Class:   "sql-injection", CWE: "CWE-89", OWASP: owaspInjection, Severity: "high",
 		Detail: sqlDetail, Fix: sqlFix,
