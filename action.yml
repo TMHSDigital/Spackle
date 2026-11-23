@@ -160,8 +160,11 @@ runs:
           read -r -d '' -a extra <<< "${SPACKLE_ARGS}" || true
           if [ "${#extra[@]}" -gt 0 ]; then args+=("${extra[@]}"); fi
         fi
-        spackle "${args[@]}"
-        code=$?
+        # The runner starts this shell with -e. A scan that finds something
+        # exits 1, which must not end the step here: the outputs below and
+        # the SARIF upload still have to happen.
+        code=0
+        spackle "${args[@]}" || code=$?
         echo "exit-code=${code}" >> "${GITHUB_OUTPUT}"
         echo "sarif=${out}/report.sarif" >> "${GITHUB_OUTPUT}"
         if [ -f "${out}/report.sarif" ]; then echo "has-sarif=true" >> "${GITHUB_OUTPUT}"; fi

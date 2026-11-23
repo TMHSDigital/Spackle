@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Release pipeline: the container image is built only after the release tests pass, a prerelease tag no longer moves the `latest` image tag, and the image reports the same version, commit and build date as the release archives.
 - The GitHub Action could not be loaded: `action.yml` was not valid YAML (an unquoted colon in an input description). It now parses, and a new workflow runs the Action against the demo app on Linux, macOS and Windows.
 - The Action `args` input now accepts several lines. It used to read only the first line and drop the rest silently. A value with quotes, which would have been split into pieces, is refused with a clear message.
+- The GitHub Action no longer stops at the scan step when the scan finds something. The step ran under `bash -e`, so a scan that exited 1 ended it before the SARIF upload and left the `exit-code` and `sarif` outputs empty.
 
 ## [0.1.0] - 2026-11-22
 
