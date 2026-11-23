@@ -13,8 +13,14 @@ import (
 )
 
 // maxResponseBytes caps a provider response so a faulty endpoint cannot
-// exhaust memory.
-const maxResponseBytes = 32 << 20
+// exhaust memory. It is a variable only so tests can lower it.
+var maxResponseBytes int64 = 32 << 20
+
+// retryWait returns how long doJSON waits before the given attempt, counted
+// from 1. It is a variable only so tests can shorten the wait.
+var retryWait = func(attempt int) time.Duration {
+	return time.Duration(attempt-1) * 2 * time.Second
+}
 
 // doJSON sends a JSON request and decodes a JSON response, retrying
 // transient failures with backoff. headers must not be logged: they carry
@@ -31,11 +37,10 @@ func doJSON(ctx context.Context, client *http.Client, provider, method, url stri
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
 		if attempt > 1 {
-			wait := time.Duration(attempt-1) * 2 * time.Second
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(wait):
+			case <-time.After(retryWait(attempt)):
 			}
 		}
 		err := doOnce(ctx, client, provider, method, url, headers, payload, out)
