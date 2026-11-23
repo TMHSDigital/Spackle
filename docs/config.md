@@ -285,7 +285,7 @@ The inheritance rule:
 - When the provider differs, nothing but `max_output_tokens` is inherited. Give the stage its own `model`, and its own `base_url` if the provider needs one.
 - A table named for anything but the six stages is an error.
 
-Every stage's provider is built before the run starts, so a missing key for one stage refuses the run before anything is written.
+Every stage's provider is built before the run starts, so a missing key for one stage refuses the run before a run directory is created.
 
 ### Pricing
 

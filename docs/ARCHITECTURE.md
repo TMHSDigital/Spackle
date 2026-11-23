@@ -55,7 +55,7 @@ Each stage lists what it reads, what it writes, and whether it uses a model.
 
 An existing path is always a directory target. A git remote is cloned (depth 1) into the state directory and then treated as a path. Any other `http` or `https` URL is a running target and takes the live path described below. A bare host name that is not an existing path is refused: Spackle will not guess that you meant a live host.
 
-Everything that can refuse a run (a bad target, a missing key, an offline violation, an unconfirmed estimate) is checked before the run directory exists, so a refused run leaves nothing behind.
+Everything that can refuse a run (a bad target, a missing key, an offline violation, an unconfirmed estimate) is checked before the run directory exists, so a refused run creates no run directory and no ledger. Two things can already be on disk by then, because mapping happens before the cost estimate is shown: for a git URL target, the clone under `<state_dir>/clones/<run-id>/`, and the map cache under `<state_dir>/cache/`. A refused run does not remove them.
 
 ### Mapper
 
