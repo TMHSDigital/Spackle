@@ -59,6 +59,9 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 	if tgt.Live() {
+		if opts.DryRun {
+			return Result{}, fmt.Errorf("%w: --dry-run is for a directory or a git URL. For a running target, the scope file states what a scan may send", ErrRefused)
+		}
 		return runLive(ctx, opts, tgt, clock)
 	}
 
@@ -127,6 +130,35 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	say("Running %d seeders", len(seeders))
 	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files)
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
+
+	if opts.DryRun {
+		plan := &Plan{
+			Target: tgt.Display, TargetKind: string(tgt.Kind), Mode: "deterministic",
+			Files: m.FileCount, Languages: m.LanguageNames(), NotRead: []string{}, Seeders: statuses,
+			Leads: len(leads), LeadsByClass: map[string]int{}, LeadsBySeverity: map[string]int{},
+			Estimate: "No model is configured: the scan runs the deterministic stages only and costs nothing.",
+			Notes:    append([]string{}, scanNotes...),
+		}
+		if plan.Languages == nil {
+			plan.Languages = []string{}
+		}
+		for _, s := range m.Skipped {
+			plan.NotRead = append(plan.NotRead, fmt.Sprintf("%s (%s)", s.Rel, s.Reason))
+		}
+		for _, l := range leads {
+			plan.LeadsByClass[l.Class]++
+			plan.LeadsBySeverity[l.Severity]++
+		}
+		if agentic {
+			est := estimate(opts.Config, defaultProv, llm.NewPricer(llm.PricesFromConfig(opts.Config.Pricing)), len(leads))
+			plan.Mode, plan.Model = "agentic", est.Model
+			plan.Investigations, plan.Estimate = est.Investigations, est.String()
+		}
+		if tgt.Kind == target.KindGit {
+			plan.Notes = append(plan.Notes, "The repository was cloned to "+filepath.ToSlash(root)+" to map it; a dry run does not remove the clone.")
+		}
+		return Result{Plan: plan}, nil
+	}
 
 	if agentic {
 		est := estimate(opts.Config, defaultProv, llm.NewPricer(llm.PricesFromConfig(opts.Config.Pricing)), len(leads))

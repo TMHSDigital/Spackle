@@ -3,12 +3,14 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/config"
@@ -21,6 +23,7 @@ func runScan(env Env, args []string) int {
 	fs := newFlagSet(env, "scan", "[path|url]", "Find, demonstrate, explain and fix flaws in a target.\nThe target is a directory, a git URL, or the URL of an application you run.\nWith no target, the current directory is scanned.")
 	var g globalFlags
 	g.register(fs)
+	dryRun := fs.Bool("dry-run", false, "show what would be scanned and the cost estimate; call no model and store no run")
 	ref := fs.String("ref", "", "`branch or tag` to scan, for a git URL target (default: the remote's default branch)")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -44,7 +47,7 @@ func runScan(env Env, args []string) int {
 	defer stop()
 
 	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
-		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref,
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, DryRun: *dryRun,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
@@ -52,6 +55,13 @@ func runScan(env Env, args []string) int {
 			return ExitUsage
 		}
 		return ExitError
+	}
+	if res.Plan != nil {
+		if err := printPlan(env, cfg, *res.Plan); err != nil {
+			fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
+			return ExitError
+		}
+		return ExitOK
 	}
 	if err := emit(env, cfg, res.Run, res.RunDir); err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
@@ -156,4 +166,68 @@ func exitFor(cfg config.Config, run report.Run) int {
 		}
 	}
 	return ExitOK
+}
+
+// printPlan writes a dry run's plan: as JSON when json is the one requested
+// format, as text otherwise.
+func printPlan(env Env, cfg config.Config, p engine.Plan) error {
+	if len(cfg.Output.Formats) == 1 && cfg.Output.Formats[0] == "json" {
+		enc := json.NewEncoder(env.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(p)
+	}
+	w := env.Stdout
+	fmt.Fprintf(w, "Dry run of %s (%s target, %s mode). Nothing was sent to a model and no run was stored.\n\n", p.Target, p.TargetKind, p.Mode)
+	langs := "none recognized"
+	if len(p.Languages) > 0 {
+		langs = strings.Join(p.Languages, ", ")
+	}
+	fmt.Fprintf(w, "Files to read: %d (%s)\n", p.Files, langs)
+	if len(p.NotRead) > 0 {
+		fmt.Fprintf(w, "Not read: %d\n", len(p.NotRead))
+		for _, n := range p.NotRead {
+			fmt.Fprintf(w, "  %s\n", n)
+		}
+	}
+	fmt.Fprintln(w, "\nSeeders:")
+	for _, s := range p.Seeders {
+		state := fmt.Sprintf("%d leads", s.Leads)
+		switch {
+		case !s.Available:
+			state = "not available"
+		case s.Error != "":
+			state += ", failed: " + s.Error
+		}
+		line := fmt.Sprintf("  %-16s %s", s.Name, state)
+		if s.Note != "" {
+			line += " (" + s.Note + ")"
+		}
+		fmt.Fprintln(w, line)
+	}
+	fmt.Fprintf(w, "\nLeads: %d\n", p.Leads)
+	for _, group := range []struct {
+		label  string
+		counts map[string]int
+	}{{"By class", p.LeadsByClass}, {"By severity hint", p.LeadsBySeverity}} {
+		keys := make([]string, 0, len(group.counts))
+		for k := range group.counts {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s %d", k, group.counts[k]))
+		}
+		if len(parts) > 0 {
+			fmt.Fprintf(w, "  %s: %s\n", group.label, strings.Join(parts, ", "))
+		}
+	}
+	if p.Mode == "agentic" {
+		fmt.Fprintf(w, "\nInvestigations planned: up to %d\n", p.Investigations)
+	}
+	fmt.Fprintf(w, "\n%s\n", p.Estimate)
+	for _, n := range p.Notes {
+		fmt.Fprintf(w, "Note: %s\n", n)
+	}
+	return nil
 }

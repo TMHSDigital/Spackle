@@ -392,3 +392,42 @@ func TestInterruptDuringPlanningIsNotReportedAsCompleted(t *testing.T) {
 		t.Fatalf("outcome = %s findings = %d", res.Run.Outcome, len(res.Run.Findings))
 	}
 }
+
+// A dry run maps and seeds, reports the plan and the estimate, and stops:
+// no model call, no run directory.
+func TestDryRunCallsNoModelAndStoresNoRun(t *testing.T) {
+	fake := llm.NewFake()
+	fake.Handler = func(llm.Request, int) (llm.Response, error) {
+		t.Error("a dry run called the model")
+		return llm.Response{}, errors.New("no")
+	}
+	other := seed.Lead{RuleID: "md5", Title: "MD5 used", Class: "weak-hash", Surface: finding.SurfaceCode, CWE: []string{"CWE-328"}, Severity: "medium", File: "app.py", Line: 1, Detail: "d", Fix: "Use SHA-256."}
+	o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), other}})
+	o.DryRun = true
+	o.Confirm = func(Estimate) bool { t.Error("a dry run asked for confirmation"); return false }
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := res.Plan
+	if p == nil || res.RunID != "" || res.RunDir != "" {
+		t.Fatalf("result = %+v", res)
+	}
+	if p.Mode != "agentic" || p.Leads != 2 || p.LeadsByClass["sql-injection"] != 1 || p.LeadsBySeverity["medium"] != 1 || p.Files != 1 || p.Investigations == 0 {
+		t.Fatalf("plan = %+v", p)
+	}
+	if !strings.Contains(p.Estimate, "investigations") || len(p.Seeders) != 1 || p.Seeders[0].Leads != 2 {
+		t.Fatalf("plan = %+v", p)
+	}
+	if _, err := os.Stat(RunsDir(o.Config.StateDir)); err == nil {
+		t.Fatal("a dry run created the runs directory")
+	}
+
+	// Without a model the plan says the scan is free.
+	d := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	d.DryRun = true
+	res, err = Run(context.Background(), d)
+	if err != nil || res.Plan == nil || res.Plan.Mode != "deterministic" || res.Plan.Investigations != 0 || !strings.Contains(res.Plan.Estimate, "costs nothing") {
+		t.Fatalf("plan = %+v, err = %v", res.Plan, err)
+	}
+}

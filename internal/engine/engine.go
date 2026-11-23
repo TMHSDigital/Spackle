@@ -46,6 +46,10 @@ type Options struct {
 	Confirm func(Estimate) bool
 	// ProviderFactory overrides how model providers are built, for tests.
 	ProviderFactory func(config.Model) (llm.Provider, error)
+	// DryRun stops after mapping and seeding: Result.Plan says what would
+	// be scanned and what it would cost. No model is called and no run
+	// directory is written.
+	DryRun bool
 	// Ref is the branch or tag to scan for a git URL target. Empty means
 	// the remote's default branch.
 	Ref string
@@ -68,6 +72,31 @@ type Result struct {
 	RunID  string
 	RunDir string
 	Run    report.Run
+	// Plan is set, and nothing else is, for a dry run.
+	Plan *Plan
+}
+
+// Plan is what a dry run reports: what a scan of the target would read and
+// do, without doing the part that costs money or writes a run.
+type Plan struct {
+	Target     string        `json:"target"`
+	TargetKind string        `json:"target_kind"`
+	Mode       string        `json:"mode"` // deterministic|agentic
+	Files      int           `json:"files"`
+	Languages  []string      `json:"languages"`
+	NotRead    []string      `json:"not_read"`
+	Seeders    []seed.Status `json:"seeders"`
+	Leads      int           `json:"leads"`
+	// LeadsByClass and LeadsBySeverity count the leads; the severity is
+	// the seeder's hint, not a computed score.
+	LeadsByClass    map[string]int `json:"leads_by_class"`
+	LeadsBySeverity map[string]int `json:"leads_by_severity"`
+	// Investigations is how many the planner would be asked for at most.
+	// It is 0 in deterministic mode.
+	Investigations int      `json:"investigations"`
+	Model          string   `json:"model,omitempty"`
+	Estimate       string   `json:"estimate"`
+	Notes          []string `json:"notes"`
 }
 
 // RunsDir returns the directory that holds runs for a state directory.
