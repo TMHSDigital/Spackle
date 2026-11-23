@@ -153,12 +153,19 @@ func TestRunsCompare(t *testing.T) {
 	write("a.py", "import subprocess\n\ndef run(cmd):\n    return subprocess.run(\"sh -c \" + cmd, shell=True)\n")
 	write("b.py", "import hashlib\n\ndef digest(pw):\n    return hashlib.md5(pw.encode()).hexdigest()\n")
 	scan()
+	first := runsIn(t, state)
 	write("a.py", "def run(cmd):\n    return None\n")
 	write("c.py", "import yaml\n\ndef load(f):\n    return yaml.load(f)\n")
 	scan()
-	names := runsIn(t, state)
-	if len(names) != 2 {
-		t.Fatalf("runs = %v", names)
+	both := runsIn(t, state)
+	if len(both) != 2 {
+		t.Fatalf("runs = %v", both)
+	}
+	// Two runs started in the same second do not sort by time, so the
+	// newer run is the one that was not there after the first scan.
+	names := []string{first[0], both[0]}
+	if both[0] == first[0] {
+		names[1] = both[1]
 	}
 	var out, errb bytes.Buffer
 	if code := Main([]string{"runs", "compare", names[0], names[1], "--config", cfg, "--format", "json"}, strings.NewReader(""), &out, &errb); code != ExitOK {
@@ -184,7 +191,7 @@ func TestRunsCompare(t *testing.T) {
 		t.Fatalf("new=%q gone=%q still=%q\n%s", where(got.New), where(got.Gone), where(got.StillPresent), out.String())
 	}
 	out.Reset()
-	if code := Main([]string{"runs", "compare", names[0], "latest", "--config", cfg}, strings.NewReader(""), &out, &errb); code != ExitOK || !strings.Contains(out.String(), "New: 1") || !strings.Contains(out.String(), "Gone: 1") || !strings.Contains(out.String(), "Still present: 1") {
+	if code := Main([]string{"runs", "compare", names[0], names[1], "--config", cfg}, strings.NewReader(""), &out, &errb); code != ExitOK || !strings.Contains(out.String(), "New: 1") || !strings.Contains(out.String(), "Gone: 1") || !strings.Contains(out.String(), "Still present: 1") {
 		t.Fatalf("exit %d: %s", code, out.String())
 	}
 	if code := Main([]string{"runs", "compare", names[0], "--config", cfg}, strings.NewReader(""), &out, &errb); code != ExitUsage {
