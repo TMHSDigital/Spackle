@@ -11,6 +11,7 @@
           "rules": [
             {
               "id": "container-runs-as-root",
+              "name": "ContainerRunsAsRoot",
               "shortDescription": {
                 "text": "container-runs-as-root"
               },
@@ -24,6 +25,7 @@
             },
             {
               "id": "reflected-xss",
+              "name": "ReflectedXss",
               "shortDescription": {
                 "text": "reflected-xss"
               },
@@ -38,8 +40,15 @@
             },
             {
               "id": "sql-injection",
+              "name": "SQLInjection",
               "shortDescription": {
-                "text": "sql-injection"
+                "text": "SQL injection"
+              },
+              "fullDescription": {
+                "text": "SQL injection. What an attacker gains: Read access to every table the database account can reach; The ability to change or delete application records."
+              },
+              "help": {
+                "text": "Use parameterized queries or prepared statements for every value, and allow-list any identifier that cannot be bound. Run the application with a least-privilege database account."
               },
               "helpUri": "https://cwe.mitre.org/data/definitions/89.html",
               "properties": {
@@ -52,8 +61,15 @@
             },
             {
               "id": "weak-hash",
+              "name": "WeakHashFunction",
               "shortDescription": {
-                "text": "weak-hash"
+                "text": "Weak hash function"
+              },
+              "fullDescription": {
+                "text": "Weak hash function. What an attacker gains: Plaintext passwords for a large share of accounts."
+              },
+              "help": {
+                "text": "Hash passwords with a slow, salted algorithm such as Argon2id, scrypt, or bcrypt. Use SHA-256 or stronger for integrity, with an HMAC when a key is involved."
               },
               "helpUri": "https://cwe.mitre.org/data/definitions/327.html",
               "properties": {
@@ -95,13 +111,76 @@
               }
             }
           ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "app/routes/orders.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 40,
+                            "endLine": 40
+                          }
+                        },
+                        "message": {
+                          "text": "source: Attacker-controlled query parameter."
+                        }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "app/routes/orders.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 42,
+                            "endLine": 42
+                          }
+                        },
+                        "message": {
+                          "text": "propagation: Interpolated without binding."
+                        }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "app/db.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 17,
+                            "endLine": 17
+                          }
+                        },
+                        "message": {
+                          "text": "sink: Executed as written."
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "partialFingerprints": {
             "spackle/v1": "SPK-D1927AC6"
           },
           "properties": {
             "security-severity": "9.3",
             "confidence": "demonstrated",
-            "proof_status": "demonstrated"
+            "proof_status": "demonstrated",
+            "verification": "verified",
+            "fix_branch": "spackle/fix-SPK-D1927AC6"
           }
         },
         {
@@ -185,7 +264,9 @@
           "properties": {
             "security-severity": "1.0",
             "confidence": "high",
-            "proof_status": "reasoned"
+            "proof_status": "reasoned",
+            "verification": "verified",
+            "fix_branch": "spackle/fix-SPK-13D0D5BE"
           }
         }
       ]

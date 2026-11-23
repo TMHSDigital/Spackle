@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spackle doctor --format json` prints the checks as JSON, with the same rows the MCP `doctor` tool returns.
 - `spackle scan <git URL> --ref <branch or tag>` scans a named branch or tag instead of the default branch. The ref is recorded in the run.
 - `spackle scan --dry-run` shows what a scan would read, each seeder and its lead count, the leads by class, the number of investigations that would be planned and the cost estimate. It calls no model and stores no run.
+- SARIF reports now carry the traced data flow of a finding as `codeFlows`, readable rule names, descriptions and remediation help from the class table, and the verification text and fix branch of a finding that has a patch.
 
 ### Changed
 

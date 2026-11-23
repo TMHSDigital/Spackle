@@ -1154,3 +1154,64 @@ func TestHTMLCleansControlAndBidiCharacters(t *testing.T) {
 		t.Error("the right-to-left override in the fixture is not shown escaped")
 	}
 }
+
+// SARIF carries the traced flow of a finding and readable rule text, so a
+// code scanning alert shows the path and names the class.
+func TestSARIFCodeFlowsAndRuleText(t *testing.T) {
+	var log struct {
+		Runs []struct {
+			Tool struct {
+				Driver struct {
+					Rules []struct {
+						ID, Name         string
+						ShortDescription struct{ Text string }
+						Help             struct{ Text string }
+					}
+				}
+			}
+			Results []struct {
+				RuleID    string
+				CodeFlows []struct {
+					ThreadFlows []struct {
+						Locations []struct {
+							Location struct {
+								Message struct{ Text string }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal(render(t, "sarif", fixtureRun()), &log); err != nil {
+		t.Fatal(err)
+	}
+	var sql bool
+	for _, r := range log.Runs[0].Tool.Driver.Rules {
+		if r.ID == "sql-injection" {
+			sql = true
+			if r.Name != "SQLInjection" || r.ShortDescription.Text != "SQL injection" || r.Help.Text == "" {
+				t.Errorf("sql-injection rule = %+v", r)
+			}
+		}
+	}
+	if !sql {
+		t.Fatal("no sql-injection rule")
+	}
+	flows := 0
+	for _, res := range log.Runs[0].Results {
+		for _, cf := range res.CodeFlows {
+			flows++
+			locs := cf.ThreadFlows[0].Locations
+			if len(locs) < 2 || !strings.HasPrefix(locs[0].Location.Message.Text, "source") {
+				t.Errorf("%s: code flow = %+v", res.RuleID, locs)
+			}
+		}
+	}
+	if flows == 0 {
+		t.Error("no result carries a code flow, although the fixture has a multi-step flow")
+	}
+	if got := sarifRuleName("Server-side request forgery (SSRF)"); got != "ServerSideRequestForgerySSRF" {
+		t.Errorf("sarifRuleName = %q", got)
+	}
+}

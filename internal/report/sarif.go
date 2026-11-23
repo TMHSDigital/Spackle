@@ -45,10 +45,35 @@ type sarifDriver struct {
 }
 
 type sarifRule struct {
-	ID               string         `json:"id"`
+	ID string `json:"id"`
+	// Name and the descriptions come from the class table, so an alert
+	// reads "SQL injection" with its standard remediation instead of the
+	// bare class id.
+	Name             string         `json:"name,omitempty"`
 	ShortDescription sarifText      `json:"shortDescription"`
+	FullDescription  *sarifText     `json:"fullDescription,omitempty"`
+	Help             *sarifText     `json:"help,omitempty"`
 	HelpURI          string         `json:"helpUri,omitempty"`
 	Properties       sarifRuleProps `json:"properties"`
+}
+
+// sarifCodeFlow carries a finding's traced data flow, source to sink, so a
+// viewer can step through it.
+type sarifCodeFlow struct {
+	ThreadFlows []sarifThreadFlow `json:"threadFlows"`
+}
+
+type sarifThreadFlow struct {
+	Locations []sarifThreadFlowLocation `json:"locations"`
+}
+
+type sarifThreadFlowLocation struct {
+	Location sarifFlowLocation `json:"location"`
+}
+
+type sarifFlowLocation struct {
+	PhysicalLocation *sarifPhysical `json:"physicalLocation,omitempty"`
+	Message          sarifText      `json:"message"`
 }
 
 type sarifRuleProps struct {
@@ -72,6 +97,7 @@ type sarifResult struct {
 	Level               string            `json:"level"`
 	Message             sarifText         `json:"message"`
 	Locations           []sarifLocation   `json:"locations"`
+	CodeFlows           []sarifCodeFlow   `json:"codeFlows,omitempty"`
 	PartialFingerprints map[string]string `json:"partialFingerprints"`
 	Properties          sarifResultProps  `json:"properties"`
 }
@@ -104,6 +130,9 @@ type sarifResultProps struct {
 	SecuritySeverity string `json:"security-severity,omitempty"`
 	Confidence       string `json:"confidence"`
 	ProofStatus      string `json:"proof_status"`
+	// Verification and FixBranch are set when the finding has a patch.
+	Verification string `json:"verification,omitempty"`
+	FixBranch    string `json:"fix_branch,omitempty"`
 }
 
 func renderSARIF(run Run, w io.Writer) error {
@@ -124,6 +153,11 @@ func renderSARIF(run Run, w io.Writer) error {
 				Confidence:  f.Confidence.Level,
 				ProofStatus: f.Proof.Status,
 			},
+		}
+		res.CodeFlows = sarifCodeFlows(f, run.RepoPrefix)
+		if f.Remediation.Patch != "" {
+			res.Properties.Verification = f.Remediation.Verification
+			res.Properties.FixBranch = f.Remediation.Branch
 		}
 		if f.Status == finding.StatusFixed {
 			// The proof no longer succeeds against the code, and the exit
@@ -190,6 +224,16 @@ func sarifRules(active []finding.Finding) ([]sarifRule, map[string]int) {
 			ID:               class,
 			ShortDescription: sarifText{Text: class},
 			Properties:       sarifRuleProps{Tags: []string{"security"}},
+		}
+		if info := finding.Info(class); info.Name != "" {
+			rule.Name = sarifRuleName(info.Name)
+			rule.ShortDescription = sarifText{Text: info.Name}
+			if len(info.Gains) > 0 {
+				rule.FullDescription = &sarifText{Text: info.Name + ". What an attacker gains: " + strings.Join(info.Gains, "; ") + "."}
+			}
+			if info.Fix != "" {
+				rule.Help = &sarifText{Text: info.Fix}
+			}
 		}
 		prev := -1
 		for _, n := range a.cwes {
@@ -293,4 +337,59 @@ func sarifURI(file string) string {
 		return "./" + strings.Join(segs, "/")
 	}
 	return strings.Join(segs, "/")
+}
+
+// sarifRuleName turns a class name into the PascalCase identifier SARIF
+// asks for in a rule's name.
+func sarifRuleName(name string) string {
+	var b strings.Builder
+	upper := true
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z' && upper:
+			b.WriteRune(r - 'a' + 'A')
+			upper = false
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			upper = false
+		default:
+			upper = true
+		}
+	}
+	return b.String()
+}
+
+// sarifCodeFlows renders a traced flow of two or more steps. A single step
+// is the finding's own location and adds nothing. Steps without a file (a
+// running-target step) are left out. The quote in each message is the one
+// stored in the finding, which was taken from the redacted view of the file.
+func sarifCodeFlows(f finding.Finding, prefix string) []sarifCodeFlow {
+	if len(f.Flaw.Flow) < 2 {
+		return nil
+	}
+	var locs []sarifThreadFlowLocation
+	for _, step := range f.Flaw.Flow {
+		if step.File == "" {
+			continue
+		}
+		file := step.File
+		if p := strings.Trim(prefix, "/"); p != "" {
+			file = p + "/" + file
+		}
+		phys := &sarifPhysical{ArtifactLocation: sarifArtifact{URI: sarifURI(file), URIBaseID: sarifSrcRoot}}
+		if step.Line > 0 {
+			phys.Region = &sarifRegion{StartLine: step.Line, EndLine: step.Line}
+		}
+		msg := step.Role
+		if note := strings.TrimSpace(step.Note); note != "" {
+			msg += ": " + note
+		} else if quote := strings.TrimSpace(step.Quote); quote != "" {
+			msg += ": " + quote
+		}
+		locs = append(locs, sarifThreadFlowLocation{Location: sarifFlowLocation{PhysicalLocation: phys, Message: sarifText{Text: normalizeNewlines(msg)}}})
+	}
+	if len(locs) < 2 {
+		return nil
+	}
+	return []sarifCodeFlow{{ThreadFlows: []sarifThreadFlow{{Locations: locs}}}}
 }
