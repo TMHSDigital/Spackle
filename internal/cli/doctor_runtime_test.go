@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -59,5 +61,37 @@ func TestDoctorUsesTheSandboxDetection(t *testing.T) {
 	}
 	if rows = runtimeChecks(context.Background(), cfg); len(rows) != 1 || rows[0].status != "warn" {
 		t.Fatalf("rows = %+v", rows)
+	}
+}
+
+func TestDoctorJSON(t *testing.T) {
+	old := detectRuntime
+	t.Cleanup(func() { detectRuntime = old })
+	detectRuntime = func(context.Context, string) (sandbox.Runtime, error) {
+		return doctorRuntime{present: map[string]bool{}}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := Main([]string{"doctor", "--format", "json", "--config", emptyConfig(t)}, strings.NewReader(""), &stdout, &stderr)
+	var got struct {
+		Version string `json:"version"`
+		Ready   bool   `json:"ready"`
+		Checks  []struct{ Area, Name, Status, Note string }
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout.String())
+	}
+	if code != ExitOK || !got.Ready || got.Version == "" || len(got.Checks) == 0 {
+		t.Fatalf("exit %d, report %+v, stderr %s", code, got, stderr.String())
+	}
+	found := false
+	for _, c := range got.Checks {
+		found = found || (c.Area == "Sandbox" && c.Name == "podman" && c.Status == "ok")
+	}
+	if !found {
+		t.Errorf("the sandbox row is missing: %+v", got.Checks)
+	}
+	stdout.Reset()
+	if code := Main([]string{"doctor", "--format", "yaml"}, strings.NewReader(""), &stdout, &stderr); code != ExitUsage {
+		t.Errorf("an unknown format exited %d", code)
 	}
 }

@@ -18,7 +18,7 @@ Rules worth knowing:
 - A flag overrides one value. The exception is `--provider`: naming a provider that differs from the one in `[model]` replaces the whole `[model]` table, so a stale model name or base URL is never sent to the new provider. Pass `--model` (and `--base-url` where needed) along with it.
 - API keys are never read from flags or from the file. The file names the environment variable that holds the key. A value in `api_key_env` that looks like a key is rejected.
 
-`spackle doctor` loads the same configuration and checks it, including a free round trip to each configured provider.
+`spackle doctor` loads the same configuration and checks it, including a free round trip to each configured provider. `spackle doctor --format json` prints the same checks for a program to read: `version`, `ready`, and `checks`, each with `area`, `name`, `status` (`ok`, `missing`, `warn` or `fail`) and `note`. The exit code is 2 when a required check failed, in either format.
 
 ## Every key and its default
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	"github.com/TMHSDigital/spackle/internal/mcp"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/version"
@@ -26,8 +28,13 @@ func runDoctor(env Env, args []string) int {
 	fs := newFlagSet(env, "doctor", "", "Check the sandbox runtime, scanners and model configuration.\nMissing optional tools are reported but do not fail the check.")
 	var g globalFlags
 	g.registerGroups(fs, flagsConfig|flagsModel|flagsOffline)
+	format := fs.String("format", "text", "output `format`: text or json")
 	if _, err := parseInterleaved(fs, args); err != nil {
 		return flagExit(err)
+	}
+	if *format != "text" && *format != "json" {
+		fmt.Fprintf(env.Stderr, "spackle doctor: unknown format %q: choose text or json\n", *format)
+		return ExitUsage
 	}
 	cfg, err := g.load()
 	if err != nil {
@@ -38,6 +45,9 @@ func runDoctor(env Env, args []string) int {
 	defer cancel()
 
 	checks := doctorChecks(ctx, cfg)
+	if *format == "json" {
+		return doctorJSON(env, checks)
+	}
 	fmt.Fprintf(env.Stdout, "spackle %s\n\n", version.Version)
 	failed := false
 	area := ""
@@ -64,6 +74,33 @@ func runDoctor(env Env, args []string) int {
 		return ExitUsage
 	}
 	fmt.Fprintln(env.Stdout, "Result: ready. Lines marked [missing] are optional and only reduce coverage.")
+	return ExitOK
+}
+
+// doctorJSON prints the checks for a program to read. The rows have the
+// same shape as the MCP doctor tool returns. The exit code is the same as
+// for the text form: 2 when a required check failed.
+func doctorJSON(env Env, checks []check) int {
+	out := struct {
+		Version string      `json:"version"`
+		Ready   bool        `json:"ready"`
+		Checks  []mcp.Check `json:"checks"`
+	}{Version: version.Version, Ready: true, Checks: []mcp.Check{}}
+	for _, c := range checks {
+		out.Checks = append(out.Checks, mcp.Check{Area: c.area, Name: c.name, Status: c.status, Note: c.note})
+		if c.status == "fail" {
+			out.Ready = false
+		}
+	}
+	enc := json.NewEncoder(env.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		fmt.Fprintf(env.Stderr, "spackle doctor: %v\n", err)
+		return ExitError
+	}
+	if !out.Ready {
+		return ExitUsage
+	}
 	return ExitOK
 }
 

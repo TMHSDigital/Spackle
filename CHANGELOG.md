@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A `[scan]` configuration table: `exclude` (also `--exclude`, repeatable) keeps paths out of the scan, `include` reads a directory that is skipped by default, and `disable_rules` drops the leads of a rule. The report lists what was excluded.
 - Action input `spackle-dir`, to run the Action with an existing binary instead of a downloaded release, and output `has-sarif`.
+- `spackle doctor --format json` prints the checks as JSON, with the same rows the MCP `doctor` tool returns.
 
 ### Changed
 
