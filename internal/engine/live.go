@@ -199,20 +199,8 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	}
 
 	findings = finding.Rank(findings)
-	if limit := cfg.Budget.MaxFindings; limit > 0 && len(findings) > limit {
-		var dropped []string
-		for _, f := range findings[limit:] {
-			dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
-		}
-		findings = findings[:limit]
-		if _, err := led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: fmt.Sprintf("max findings (%d)", limit), Skipped: dropped}); err != nil {
-			return Result{}, err
-		}
-	}
-	for _, f := range findings {
-		if _, err := led.Append(parent[f.ID], ledger.TypeFinding, f); err != nil {
-			return Result{}, err
-		}
+	if err := r.recordFindings(mapSeq, findings, parent); err != nil {
+		return Result{}, err
 	}
 	if _, err := led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: outcome}); err != nil {
 		return Result{}, err

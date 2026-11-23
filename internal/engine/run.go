@@ -281,28 +281,8 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	}
 
 	findings = finding.Rank(finding.Dedup(findings))
-	if limit := r.cfg.Budget.MaxFindings; limit > 0 && len(findings) > limit {
-		var dropped []string
-		for _, f := range findings[limit:] {
-			dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
-		}
-		findings = findings[:limit]
-		if _, err := led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: fmt.Sprintf("max findings (%d)", limit), Skipped: dropped}); err != nil {
-			return Result{}, err
-		}
-	}
-	for _, f := range findings {
-		if err := f.Validate(); err != nil {
-			// A finding that is invalid at this point is a Spackle bug, not
-			// a target problem. Record it instead of reporting it.
-			if _, aerr := led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "engine", Intent: f.ID, Reason: err.Error()}); aerr != nil {
-				return Result{}, aerr
-			}
-			continue
-		}
-		if _, err := led.Append(parent[f.ID], ledger.TypeFinding, f); err != nil {
-			return Result{}, err
-		}
+	if err := r.recordFindings(mapSeq, findings, parent); err != nil {
+		return Result{}, err
 	}
 
 	if _, err := led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: outcome}); err != nil {
@@ -312,6 +292,37 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	return finish(runDir, runID)
+}
+
+// recordFindings applies the max-findings cap and appends the findings to the
+// ledger. It is the one place a finding of a code scan or a running-target
+// scan enters the ledger. findings must be ranked: the cap keeps the first
+// ones and lists the rest in a budget skip event under mapSeq. A finding
+// that does not validate is a Spackle bug, not a target problem, and is
+// recorded as a reject instead of being reported.
+func (r *runner) recordFindings(mapSeq int64, findings []finding.Finding, parent map[string]int64) error {
+	if limit := r.cfg.Budget.MaxFindings; limit > 0 && len(findings) > limit {
+		var dropped []string
+		for _, f := range findings[limit:] {
+			dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
+		}
+		findings = findings[:limit]
+		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: fmt.Sprintf("max findings (%d)", limit), Skipped: dropped}); err != nil {
+			return err
+		}
+	}
+	for _, f := range findings {
+		if err := f.Validate(); err != nil {
+			if _, aerr := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "engine", Intent: f.ID, Reason: err.Error()}); aerr != nil {
+				return aerr
+			}
+			continue
+		}
+		if _, err := r.led.Append(parent[f.ID], ledger.TypeFinding, f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // networkSeeders are the external scanners that download rules or a

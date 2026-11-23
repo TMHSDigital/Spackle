@@ -246,6 +246,40 @@ func TestLiveModelAssessmentCannotLeaveScope(t *testing.T) {
 	}
 }
 
+func TestLiveMaxFindingsIsRecordedAsSkipped(t *testing.T) {
+	outside, _ := outsideServer(t)
+	app, _ := flawedApp(t, outside.URL)
+	all := liveOpts(t, app.URL)
+	all.ScopeFile = scopeFile(t, app.URL)
+	full, err := Run(context.Background(), all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(full.Run.Findings) < 2 || len(full.Run.Skipped) != 0 {
+		t.Fatalf("the uncapped scan gave %d finding(s) and %d skip entries, the test needs at least 2 and none", len(full.Run.Findings), len(full.Run.Skipped))
+	}
+
+	o := liveOpts(t, app.URL)
+	o.ScopeFile = scopeFile(t, app.URL)
+	o.Config.Budget.MaxFindings = 1
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The cap keeps the first finding in rank order and lists the others.
+	if len(res.Run.Findings) != 1 || res.Run.Findings[0].ID != full.Run.Findings[0].ID {
+		t.Fatalf("kept = %+v, want only %s", res.Run.Findings, full.Run.Findings[0].ID)
+	}
+	if len(res.Run.Skipped) != 1 || res.Run.Skipped[0].Cap != "max findings (1)" || len(res.Run.Skipped[0].Skipped) != len(full.Run.Findings)-1 {
+		t.Fatalf("skipped = %+v, want one entry listing %d finding(s)", res.Run.Skipped, len(full.Run.Findings)-1)
+	}
+	for _, line := range res.Run.Skipped[0].Skipped {
+		if !strings.HasPrefix(line, "SPK-") {
+			t.Errorf("a skipped finding is listed without its id: %q", line)
+		}
+	}
+}
+
 func TestLiveAssessmentReportsARequestCapHitByTheModel(t *testing.T) {
 	outside, _ := outsideServer(t)
 	app, hits := flawedApp(t, outside.URL)
