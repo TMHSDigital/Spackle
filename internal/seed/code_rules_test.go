@@ -145,8 +145,15 @@ var ruleCases = map[string]ruleCase{
 		safe:  []string{`path = os.path.join(UPLOADS, secure_filename(request.files["f"].filename))`, `path = os.path.join(UPLOADS, "report.pdf")`},
 	},
 	"go-file-from-request": {
-		match: []string{`http.ServeFile(w, r, "/data/" + r.URL.Query().Get("file"))`, `f, err := os.Open(r.FormValue("path"))`},
-		safe:  []string{`http.ServeFile(w, r, "static/index.html")`, `http.ServeFile(w, r, filepath.Join(base, filepath.Base(r.URL.Query().Get("file"))))`},
+		match: []string{
+			`http.ServeFile(w, r, "/data/" + r.URL.Query().Get("file"))`, `f, err := os.Open(r.FormValue("path"))`,
+			// filepath.Clean keeps a leading "../", so this still escapes base.
+			`data, err := os.ReadFile(filepath.Join(base, filepath.Clean(r.URL.Query().Get("f"))))`,
+		},
+		safe: []string{
+			`http.ServeFile(w, r, "static/index.html")`, `http.ServeFile(w, r, filepath.Join(base, filepath.Base(r.URL.Query().Get("file"))))`,
+			`data, err := os.ReadFile(filepath.Join(base, filepath.Clean("/"+r.URL.Query().Get("f"))))`,
+		},
 	},
 	"js-file-from-request": {
 		match: []string{`res.sendFile(req.query.file)`, `fs.readFile(req.params.name, cb)`},

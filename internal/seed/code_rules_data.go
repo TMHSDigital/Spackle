@@ -236,7 +236,10 @@ var codeRules = []Rule{
 	{
 		ID: "go-file-from-request", Langs: langGo,
 		Pattern: re(`\bhttp\.ServeFile\(\s*\w+\s*,\s*\w+\s*,[^)]*` + reqGo + `|\bos\.(?:Open|ReadFile|OpenFile|Create|Remove)\([^)]*` + reqGo),
-		Exclude: re(`\bfilepath\.(?:Base|Clean)\(|\bpath\.(?:Base|Clean)\(|(?i:securejoin)`),
+		// Base drops every directory part. Clean does not: it keeps a
+		// leading "../", so it is a sanitizer only in the rooted idiom
+		// Clean("/" + p), which cannot climb above the root.
+		Exclude: re(`\b(?:file)?path\.Base\(|\b(?:file)?path\.Clean\(\s*"/"\s*\+|(?i:securejoin)`),
 		Title:   "File path built from request data",
 		Class:   "path-traversal", CWE: "CWE-22", OWASP: owaspAccess, Severity: "high",
 		Detail: "A file path is built from request data without cleaning. Segments such as ../ let the caller reach files outside the intended directory.",
