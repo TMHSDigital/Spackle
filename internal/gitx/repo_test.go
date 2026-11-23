@@ -61,7 +61,12 @@ func TestCloneIsShallowAndLeavesSubmodulesOut(t *testing.T) {
 	if got := git(t, dest, "rev-parse", "--is-shallow-repository"); got != "true" {
 		t.Fatalf("is-shallow-repository = %s, want true", got)
 	}
-	assertFile(t, filepath.Join(dest, "a.txt"), "three\n")
+	// Clone checks out with the machine's own git configuration, so with
+	// core.autocrlf on (the default on Windows runners) the file has CRLF.
+	cloned, rerr := os.ReadFile(filepath.Join(dest, "a.txt"))
+	if rerr != nil || strings.ReplaceAll(string(cloned), "\r\n", "\n") != "three\n" {
+		t.Fatalf("cloned a.txt = %q, %v", cloned, rerr)
+	}
 	if _, err := os.Stat(filepath.Join(dest, ".gitmodules")); err != nil {
 		t.Fatalf("the clone has no .gitmodules, the submodule check proves nothing: %v", err)
 	}

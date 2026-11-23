@@ -158,7 +158,9 @@ func TestEditOfAnEmptyFileIsAModificationThatApplies(t *testing.T) {
 	if err := os.WriteFile(patchFile, []byte(patch+emptied), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("git", "apply", "--whitespace=nowarn", patchFile)
+	// autocrlf is forced off so the result holds the bytes of the patch,
+	// whatever the machine-wide git configuration says.
+	cmd := exec.Command("git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn", patchFile)
 	cmd.Dir = dir
 	// Keep git from treating the temp directory as part of an outer repository.
 	cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+filepath.Dir(dir))

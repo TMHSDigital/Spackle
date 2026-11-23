@@ -26,7 +26,7 @@ func newRepo(t *testing.T) string {
 
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false"}, args...)
+	full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"}, args...)
 	cmd := exec.Command("git", full...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
