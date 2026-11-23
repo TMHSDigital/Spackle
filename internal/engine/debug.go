@@ -630,6 +630,9 @@ func (d *debugRun) probe(ctx context.Context, rep reproduction, rev string) (bad
 	if err != nil {
 		return false, err
 	}
+	if rep.poc != nil && res.Inconclusive() {
+		return false, fmt.Errorf("the reproduction script %s at commit %s, which shows neither that the failure is there nor that it is not", inconclusiveWhy(res), shortRev(rev))
+	}
 	bad = d.stillFails(rep, res)
 	verdict := "does not show the failure"
 	if bad {
@@ -710,6 +713,9 @@ func (d *debugRun) check(rep reproduction) agent.Check {
 		res, _, rerr := d.rerun(ctx, "fix-verify", rep, files, d.root)
 		if rerr != nil {
 			return "", "", false, rerr
+		}
+		if rep.poc != nil && res.Inconclusive() {
+			return "the reproduction script " + inconclusiveWhy(res) + " against the patched code, so it does not show that the cause is gone. The patch must leave the program running normally", "", false, nil
 		}
 		if d.stillFails(rep, res) {
 			if rep.poc != nil {

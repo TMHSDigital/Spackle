@@ -47,17 +47,22 @@ func runVerify(env Env, args []string) int {
 		}
 		return ExitError
 	}
-	still := 0
+	still, unknown := 0, 0
 	for _, o := range outcomes {
 		state := "fixed"
-		if o.Reproduces {
+		switch {
+		case o.Inconclusive:
+			state = "NOT VERIFIED"
+			unknown++
+		case o.Reproduces:
 			state = "STILL REPRODUCES"
 			still++
 		}
 		fmt.Fprintf(env.Stdout, "%s  %-17s %s\n    %s\n", o.FindingID, state, o.Title, o.Note)
 	}
-	fmt.Fprintf(env.Stdout, "\n%d proof(s) re-run: %d still reproduce, %d no longer do.\n", len(outcomes), still, len(outcomes)-still)
-	if still > 0 {
+	fmt.Fprintf(env.Stdout, "\n%d proof(s) re-run: %d still reproduce, %d no longer do, %d could not be verified.\n", len(outcomes), still, len(outcomes)-still-unknown, unknown)
+	// A proof that could not be verified is not a pass.
+	if still > 0 || unknown > 0 {
 		return ExitFindings
 	}
 	return ExitOK

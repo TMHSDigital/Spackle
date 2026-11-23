@@ -112,6 +112,13 @@ type Result struct {
 	Argv      []string // the runtime command line that was executed
 }
 
+// Inconclusive reports whether the run ended without the program deciding
+// its own outcome: it hit the time limit or was killed (exit code 137, which
+// is what the memory limit and a forced stop produce). Such a run says
+// nothing about what the code under test does, so a caller must not read it
+// as "the failure is gone".
+func (r Result) Inconclusive() bool { return r.TimedOut || r.ExitCode == 137 }
+
 // Runtime is a container engine that can run a Spec.
 type Runtime interface {
 	Name() string // "docker" or "podman"

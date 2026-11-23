@@ -248,7 +248,13 @@ func verifyFix(ctx context.Context, box *Box, in FixInput, replyText string) (pr
 		if rerr != nil {
 			return "", nil, "", "", false, rerr
 		}
-		if !run.TimedOut && strings.Contains(run.Stdout+run.Stderr, in.PoC.Marker) {
+		if run.Inconclusive() {
+			// A proof that hangs or is killed shows nothing either way.
+			// Counting it as "no longer succeeds" would accept a patch
+			// that merely breaks the program.
+			return "the proof of concept timed out or was killed against the patched code, so it does not show that the flaw is closed. The patch must leave the program running normally", nil, "", "", false, nil
+		}
+		if strings.Contains(run.Stdout+run.Stderr, in.PoC.Marker) {
 			return "the proof of concept still succeeds against the patched code, so the flaw is still there", nil, "", "", false, nil
 		}
 		proofClosed = true

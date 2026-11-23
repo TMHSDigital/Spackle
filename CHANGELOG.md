@@ -10,11 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A `[scan]` configuration table: `exclude` (also `--exclude`, repeatable) keeps paths out of the scan, `include` reads a directory that is skipped by default, and `disable_rules` drops the leads of a rule. The report lists what was excluded.
 
+### Changed
+
+- `spackle verify` re-runs proofs against the directory that was scanned, which is now recorded as an absolute path, instead of resolving the target as typed against the current directory.
+
 ### Fixed
 
 - Different rules of the same class that fire at one place (several container hardening rules on one line, several advisories on one lockfile, several missing headers on one page) are now reported as separate findings instead of one. Finding ids of uninvestigated leads change as a result.
 - Findings in files whose name contains two dots, such as the Next.js catch-all route `pages/api/auth/[...nextauth].js`, are no longer dropped. Only a real `..` path segment is refused.
 - A conversation that uses all its turns now ends with a final answer on the Anthropic provider. The last request used to drop the tool list, which the API refuses when the history holds tool calls, so the investigation was recorded as failed.
+- A proof of concept that times out or is killed is no longer read as "the flaw is gone". The fixer rejects such a patch attempt, `spackle verify` keeps the finding status and reports the proof as not verified (and exits 1), and a debug bisect stops instead of counting the commit as good.
 
 ## [0.1.0] - 2026-11-22
 

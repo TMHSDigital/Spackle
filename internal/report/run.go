@@ -17,11 +17,14 @@ import (
 
 // Run is everything a renderer needs.
 type Run struct {
-	ID          string
-	Version     string
-	Command     string
-	Target      string
-	TargetKind  string
+	ID         string
+	Version    string
+	Command    string
+	Target     string
+	TargetKind string
+	// TargetPath is the absolute directory a path target was scanned in.
+	// It is empty for runs stored before it was recorded.
+	TargetPath  string
 	Commit      string
 	Mode        string // deterministic|agentic
 	Provider    string
@@ -140,7 +143,7 @@ func Load(runDir string) (Run, error) {
 			}
 			if !sawStart {
 				run.ID, run.Version, run.Command = d.RunID, d.Version, d.Command
-				run.Target, run.TargetKind, run.Commit = d.Target, d.TargetKind, d.Commit
+				run.Target, run.TargetKind, run.Commit, run.TargetPath = d.Target, d.TargetKind, d.Commit, d.TargetPath
 				run.Mode, run.Provider, run.Model, run.Offline = d.Mode, d.Provider, d.Model, d.Offline
 				run.Scope, run.ScopeSource, run.Isolation = d.Scope, d.ScopeSource, d.Isolation
 				run.StartedAt = ev.TS

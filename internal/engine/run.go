@@ -158,6 +158,9 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		Mode: "deterministic", Offline: r.cfg.Offline,
 		Isolation: "not used: no proof of concept was run",
 	}
+	if tgt.Kind == target.KindPath {
+		start.TargetPath = root
+	}
 	if agentic {
 		start.Mode, start.Provider, start.Model = "agentic", defaultProv.Name(), defaultProv.Model()
 		start.Isolation = r.lab.isolation()

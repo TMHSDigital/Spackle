@@ -34,7 +34,11 @@ type VerifyOutcome struct {
 	FindingID  string
 	Title      string
 	Reproduces bool
-	Note       string
+	// Inconclusive is true when the proof could not be run to an answer
+	// (it timed out, was killed, or the sandbox failed). The finding's
+	// status is then left as it was.
+	Inconclusive bool
+	Note         string
 }
 
 // Verify re-runs every stored proof of concept of a run against the target
@@ -50,8 +54,18 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 	if run.TargetKind != "path" {
 		return nil, fmt.Errorf("%w: run %s scanned a %s target. Verify re-runs proofs against a local directory; scan the directory to verify it", ErrRefused, run.ID, run.TargetKind)
 	}
-	if st, serr := os.Stat(run.Target); serr != nil || !st.IsDir() {
-		return nil, fmt.Errorf("%w: the target of run %s (%s) is no longer a directory here. Run verify from the directory the scan was run from", ErrRefused, run.ID, run.Target)
+	// Proofs run against the directory that was scanned. A run stored
+	// before the absolute path was recorded only has the target as it was
+	// typed, which is resolved against the current directory.
+	targetDir := run.TargetPath
+	if targetDir == "" {
+		targetDir = run.Target
+		if !filepath.IsAbs(targetDir) && opts.Progress != nil {
+			fmt.Fprintf(opts.Progress, "Run %s recorded its target as %q, relative to where the scan was run. Verify uses that path relative to the current directory: run it from the directory the scan was run from.\n", run.ID, run.Target)
+		}
+	}
+	if st, serr := os.Stat(targetDir); serr != nil || !st.IsDir() {
+		return nil, fmt.Errorf("%w: the target of run %s (%s) is no longer a directory here. Run verify where the scanned directory still exists, or scan again", ErrRefused, run.ID, targetDir)
 	}
 	detect := opts.DetectRuntime
 	if detect == nil {
@@ -116,7 +130,7 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 				return outcomes, fmt.Errorf("sandbox image %s is not available: %w", j.man.Image, perr)
 			}
 		}
-		spec := sandbox.Spec{Image: j.man.Image, Cmd: j.man.Command, SourceDir: run.Target, Files: files, Profile: profile}
+		spec := sandbox.Spec{Image: j.man.Image, Cmd: j.man.Command, SourceDir: targetDir, Files: files, Profile: profile}
 		res, rerr := rt.Run(ctx, spec)
 		if rerr != nil {
 			var note string
@@ -124,7 +138,7 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 				return outcomes, rerr
 			}
 			note = "The proof could not be run: " + clipText(rerr.Error(), 200)
-			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Note: note})
+			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
 			continue
 		}
 		seq, aerr := led.Append(0, ledger.TypeSandboxRun, ledger.SandboxRun{
@@ -134,7 +148,17 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		if aerr != nil {
 			return outcomes, aerr
 		}
-		reproduces := !res.TimedOut && res.ExitCode == 0 && strings.Contains(res.Stdout+res.Stderr, j.man.Marker)
+		if res.Inconclusive() {
+			// A proof that hangs or is killed shows nothing either way:
+			// keep the finding as it is and say so.
+			note := fmt.Sprintf("The proof could not be verified: it %s before it finished, so the finding keeps its status (%s). Raise the [sandbox] timeout or memory limit and run verify again.", inconclusiveWhy(res), j.f.Status)
+			if _, err := led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: j.f.ID, Stage: "verify", Outcome: "inconclusive", Reason: note}); err != nil {
+				return outcomes, err
+			}
+			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
+			continue
+		}
+		reproduces := res.ExitCode == 0 && strings.Contains(res.Stdout+res.Stderr, j.man.Marker)
 		f := j.f
 		out := VerifyOutcome{FindingID: f.ID, Title: f.Title, Reproduces: reproduces}
 		output, _ := redact.Apply(strings.TrimSpace(res.Stdout + "\n" + res.Stderr))
@@ -173,4 +197,11 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		return outcomes, err
 	}
 	return outcomes, WriteArtifacts(opts.RunDir, updated)
+}
+
+func inconclusiveWhy(res sandbox.Result) string {
+	if res.TimedOut {
+		return "timed out"
+	}
+	return "was killed (exit code 137, usually the memory limit)"
 }

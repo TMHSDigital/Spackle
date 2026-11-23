@@ -11,6 +11,9 @@ type RunStart struct {
 	Command    string `json:"command"`     // scan|debug|verify
 	Target     string `json:"target"`      // as the operator gave it, with credentials removed
 	TargetKind string `json:"target_kind"` // path|git|url
+	// TargetPath is the absolute directory that was scanned, for a path
+	// target. Verify re-runs proofs against it, wherever it is run from.
+	TargetPath string `json:"target_path,omitempty"`
 	Commit     string `json:"commit,omitempty"`
 	Mode       string `json:"mode"` // deterministic|agentic
 	Provider   string `json:"provider,omitempty"`

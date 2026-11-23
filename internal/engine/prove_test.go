@@ -34,6 +34,11 @@ type fakeRuntime struct {
 	compileFails bool
 	// proofGone makes every proof fail, as if the code had been fixed.
 	proofGone bool
+	// patchHangs makes the proof time out once app.py is patched, as a
+	// patch that breaks the program would.
+	patchHangs bool
+	// proofHangs makes every proof time out.
+	proofHangs bool
 }
 
 func (f *fakeRuntime) Name() string                              { return "fake-runtime" }
@@ -54,9 +59,12 @@ func (f *fakeRuntime) Run(_ context.Context, spec sandbox.Spec) (sandbox.Result,
 	case hasPoC:
 		// The "proof" prints its own content, which holds the marker,
 		// unless the patch is in place and is effective.
-		if (patched && f.fixClosesProof) || f.proofGone {
+		switch {
+		case (patched && f.patchHangs) || f.proofHangs:
+			res.TimedOut, res.ExitCode = true, -1
+		case (patched && f.fixClosesProof) || f.proofGone:
 			res.ExitCode, res.Stdout = 1, "AssertionError: the injected row was not returned"
-		} else {
+		default:
 			res.Stdout = poc
 		}
 	}
@@ -435,5 +443,55 @@ func TestPRFlagOpensADraftPullRequestOnlyWhenAsked(t *testing.T) {
 		if !strings.Contains(strings.Join(res.Run.Notes, "|"), "Draft pull request opened: https://example.test/pr/1") {
 			t.Fatalf("notes = %v", res.Run.Notes)
 		}
+	}
+}
+
+func TestPatchThatMakesTheProofHangIsRejected(t *testing.T) {
+	rt := &fakeRuntime{patchHangs: true}
+	res, err := Run(context.Background(), labOpts(t, rt))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := res.Run.Findings[0]
+	if f.Status != finding.StatusOpen || f.Remediation.Patch != "" {
+		t.Fatalf("a patch whose proof run timed out was accepted: status=%s patch=%q", f.Status, f.Remediation.Patch)
+	}
+	if !strings.Contains(f.Remediation.Verification, "timed out or was killed") {
+		t.Fatalf("verification = %q", f.Remediation.Verification)
+	}
+}
+
+func TestVerifyKeepsTheStatusWhenAProofTimesOut(t *testing.T) {
+	rt := &fakeRuntime{}
+	o := labOpts(t, rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(res.Run.TargetPath) {
+		t.Fatalf("the run did not record an absolute target path: %q", res.Run.TargetPath)
+	}
+	rt.proofHangs = true
+	detect := func(context.Context, string) (sandbox.Runtime, error) { return rt, nil }
+	out, err := Verify(context.Background(), VerifyOptions{Config: o.Config, RunDir: res.RunDir, DetectRuntime: detect})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || !out[0].Inconclusive || !out[0].Reproduces || !strings.Contains(out[0].Note, "timed out") {
+		t.Fatalf("outcomes = %+v", out)
+	}
+	run, err := report.Load(res.RunDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := run.Findings[0].Status; got != finding.StatusOpen {
+		t.Fatalf("a timed-out proof changed the status to %s", got)
+	}
+	// The proofs run against the scanned directory, not the current one.
+	last := rt.runs[len(rt.runs)-1]
+	if last.SourceDir != res.Run.TargetPath {
+		t.Fatalf("verify ran against %q, want %q", last.SourceDir, res.Run.TargetPath)
 	}
 }
