@@ -38,6 +38,8 @@ type debugRuntime struct {
 	suiteFails bool
 	// extra is appended to the output of a failing run.
 	extra string
+	// noMatch makes the named test select nothing, as pytest reports it.
+	noMatch bool
 }
 
 func (d *debugRuntime) Name() string                              { return "fake-runtime" }
@@ -65,6 +67,8 @@ func (d *debugRuntime) Run(_ context.Context, spec sandbox.Spec) (sandbox.Result
 		} else {
 			res.ExitCode, res.Stderr = 1, "AssertionError: add returned the right sum"
 		}
+	case cmd == debugRepr && d.noMatch:
+		res.ExitCode, res.Stdout = 5, "no tests ran in 0.01s"
 	case cmd == debugRepr:
 		if buggy {
 			res.ExitCode, res.Stderr = 1, "FAILED test_calc.py::T::test_add - AssertionError: -1 != 3\n"+d.extra
@@ -683,8 +687,8 @@ func TestDebugBisectFindsTheCommitThatIntroducedTheBug(t *testing.T) {
 		}
 	}
 	dirs := bisectDirs(o.Target, rt)
-	if probes != 3 || probes > maxBisectProbes || len(dirs) != probes {
-		t.Fatalf("bisect probes = %d (%d exported directories), want 3: the good revision, then two halvings", probes, len(dirs))
+	if probes != 4 || probes > maxBisectProbes || len(dirs) != probes {
+		t.Fatalf("bisect probes = %d (%d exported directories), want 4: HEAD, the good revision, then two halvings", probes, len(dirs))
 	}
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); err == nil {
@@ -724,7 +728,8 @@ func TestDebugBisectWithAGoodRevisionThatIsBad(t *testing.T) {
 	if !strings.Contains(notes, "The given good revision "+hashes[2]+" also shows the failure, so it is not good") {
 		t.Fatalf("notes = %v", res.Run.Notes)
 	}
-	if strings.Contains(f.Flaw.Description, "first appears") || len(bisectDirs(o.Target, rt)) != 1 {
+	// Two probes: HEAD, then the revision that was called good.
+	if strings.Contains(f.Flaw.Description, "first appears") || len(bisectDirs(o.Target, rt)) != 2 {
 		t.Fatalf("bisect went on after the good revision failed: %q", f.Flaw.Description)
 	}
 	for _, dir := range bisectDirs(o.Target, rt) {
@@ -815,5 +820,80 @@ func TestDebugNoFixStopsAfterTheRootCause(t *testing.T) {
 	}
 	if res.Run.Outcome != "completed" {
 		t.Fatalf("outcome = %s", res.Run.Outcome)
+	}
+}
+
+// When the failure comes from edits that are not committed, no commit
+// introduced it. Bisect must say so and not blame HEAD.
+func TestDebugBisectDoesNotBlameHeadForUncommittedChanges(t *testing.T) {
+	rt := &debugRuntime{}
+	o := debugOpts(t, debugModel{fix: fixedCalc}.provider(), rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	hashes, git := debugRepo(t, o.Target)
+	// HEAD is good again; the bug is only in the working tree.
+	calc := filepath.Join(o.Target, "calc.py")
+	if err := os.WriteFile(calc, []byte(fixedCalc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "-q", "-m", "fix add")
+	if err := os.WriteFile(calc, []byte(buggyCalc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.Good = hashes[0]
+	res, err := Debug(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := oneFinding(t, res)
+	notes := strings.Join(res.Run.Notes, "|")
+	if !strings.Contains(notes, "changes in the working tree that are not committed") {
+		t.Fatalf("notes = %v", res.Run.Notes)
+	}
+	if strings.Contains(notes, "first appears") || strings.Contains(f.Flaw.Description, "first appears") {
+		t.Fatalf("a commit was blamed for an uncommitted change: %v", res.Run.Notes)
+	}
+	if got := len(bisectDirs(o.Target, rt)); got != 1 {
+		t.Fatalf("bisect probes = %d, want only the probe of HEAD", got)
+	}
+}
+
+// A test name that selects nothing is neither a failure nor a pass. The run
+// is refused before any model is asked about it.
+func TestDebugRefusesATestNameThatMatchesNothing(t *testing.T) {
+	rt := &debugRuntime{noMatch: true}
+	fake := debugModel{fix: fixedCalc}.provider()
+	_, err := Debug(context.Background(), debugOpts(t, fake, rt))
+	if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), `no test named "test_add" was found`) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(fake.Requests) != 0 {
+		t.Fatalf("%d model calls were made for a test that does not exist", len(fake.Requests))
+	}
+}
+
+func TestNoTestMatched(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  []string
+		res  sandbox.Result
+		want bool
+	}{
+		{"go nothing ran", []string{"go", "test", "-run", "^X$", "./..."}, sandbox.Result{Stdout: "ok  \ta/b\t0.1s [no tests to run]\nok  \ta/c\t0.1s [no tests to run]\n"}, true},
+		{"go one package ran", []string{"go", "test", "-run", "^X$", "./..."}, sandbox.Result{Stdout: "ok  \ta/b\t0.1s [no tests to run]\nok  \ta/c\t0.2s\n"}, false},
+		{"go failure", []string{"go", "test", "-run", "^X$", "./..."}, sandbox.Result{ExitCode: 1, Stdout: "--- FAIL: X\nok  \ta/b\t0.1s [no tests to run]\n"}, false},
+		{"pytest none collected", []string{"python", "-m", "pytest", "-q", "-k", "x"}, sandbox.Result{ExitCode: 5}, true},
+		{"pytest failure", []string{"python", "-m", "pytest", "-q", "-k", "x"}, sandbox.Result{ExitCode: 1}, false},
+		{"unittest none", []string{"python", "-m", "unittest", "-k", "x"}, sandbox.Result{ExitCode: 5, Stderr: "Ran 0 tests in 0.000s\n\nNO TESTS RAN\n"}, true},
+		{"unittest pass", []string{"python", "-m", "unittest", "-k", "x"}, sandbox.Result{Stderr: "Ran 2 tests in 0.001s\n\nOK\n"}, false},
+		{"node none", []string{"node", "--test", "--test-name-pattern", "x"}, sandbox.Result{Stdout: "# tests 0\n# pass 0\n"}, true},
+		{"node some", []string{"node", "--test", "--test-name-pattern", "x"}, sandbox.Result{Stdout: "# tests 2\n# pass 2\n"}, false},
+		{"timeout", []string{"python", "-m", "pytest", "-q", "-k", "x"}, sandbox.Result{ExitCode: -1, TimedOut: true}, false},
+	}
+	for _, c := range cases {
+		if got := noTestMatched(c.cmd, c.res); got != c.want {
+			t.Errorf("%s: noTestMatched = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

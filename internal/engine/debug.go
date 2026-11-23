@@ -417,6 +417,41 @@ func sandboxResult(res sandbox.Result) string {
 	return fmt.Sprintf("exit code %d", res.ExitCode)
 }
 
+// noTestMatched reports whether a test run selected no test at all, going by
+// what each supported runner prints or returns in that case.
+func noTestMatched(cmd []string, res sandbox.Result) bool {
+	if res.TimedOut || len(cmd) == 0 {
+		return false
+	}
+	out := res.Stdout + "\n" + res.Stderr
+	switch {
+	case cmd[0] == "go":
+		// go test prints "[no tests to run]" for each package where the
+		// pattern matched nothing, and exits 0. One package that ran a
+		// test has a plain "ok" line or a failure.
+		if res.ExitCode != 0 || !strings.Contains(out, "[no tests to run]") {
+			return false
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "ok ") && !strings.Contains(line, "[no tests to run]") {
+				return false
+			}
+		}
+		return true
+	case len(cmd) > 2 && cmd[2] == "pytest":
+		return res.ExitCode == 5 // pytest: no tests were collected
+	case len(cmd) > 2 && cmd[2] == "unittest":
+		return strings.Contains(out, "NO TESTS RAN") || strings.Contains(out, "Ran 0 tests")
+	case cmd[0] == "node":
+		for _, line := range strings.Split(out, "\n") {
+			if t := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#")); t == "tests 0" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // stillFails reports whether a run of the reproduction shows the failure.
 // For a test that is a non-zero exit or a timeout. For an issue script it is
 // the marker, which the script prints only when it observed the problem.
@@ -534,6 +569,12 @@ func (d *debugRun) reproduce(ctx context.Context, reproCmd []string, prover *age
 		if err != nil {
 			return reproduction{}, err
 		}
+		if noTestMatched(reproCmd, res) {
+			// The runner found no test by that name. Its exit status says
+			// nothing about the code, so neither "fails" nor "passes" would
+			// be true. Stop before a model is asked about it.
+			return reproduction{}, fmt.Errorf("%w: no test named %q was found when running %q in the sandbox. Check the spelling of --test; it must name a test the project's own runner can select", ErrRefused, d.test, strings.Join(reproCmd, " "))
+		}
 		rep := reproduction{command: reproCmd, output: sandboxOutput(res, 4000), result: sandboxResult(res), isolation: res.Isolation, attempts: 1}
 		rep.reproduced = d.stillFails(rep, res)
 		rep.passes = !rep.reproduced
@@ -585,7 +626,18 @@ func (d *debugRun) bisect(ctx context.Context, rep reproduction) (string, error)
 		}
 		return "", d.note("Bisect stopped early (%s), so the first bad commit was not found.", clipText(perr.Error(), 300))
 	}
-	bad, perr := d.probe(ctx, rep, d.good)
+	// The failure was reproduced in the working tree, which may hold
+	// uncommitted changes. The search below takes HEAD as bad without
+	// running it, so check that first: if the committed code is fine, no
+	// commit is to blame.
+	bad, perr := d.probe(ctx, rep, "HEAD")
+	if perr != nil {
+		return stopped(perr)
+	}
+	if !bad {
+		return "", d.note("The committed code at HEAD does not show the failure, so it comes from changes in the working tree that are not committed. Bisect was skipped: no commit introduced it.")
+	}
+	bad, perr = d.probe(ctx, rep, d.good)
 	if perr != nil {
 		return stopped(perr)
 	}
