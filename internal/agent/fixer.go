@@ -14,6 +14,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/diffx"
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
@@ -73,23 +74,6 @@ files, and only files that already exist.`
 type fixerReply struct {
 	Files map[string]string `json:"files"`
 	Why   string            `json:"why"`
-}
-
-// compileCheck returns a cheap command that fails when a changed file no
-// longer compiles or parses. It guards against a "fix" that only stops the
-// proof by breaking the program.
-func compileCheck(language string, changed []string) []string {
-	switch language {
-	case "python":
-		return append([]string{"python", "-m", "py_compile"}, changed...)
-	case "go":
-		return []string{"go", "build", "./..."}
-	case "javascript":
-		if len(changed) == 1 {
-			return []string{"node", "--check", changed[0]}
-		}
-	}
-	return nil
 }
 
 // loadOriginals validates the fixer's files and returns the original content
@@ -222,7 +206,10 @@ func verifyFix(ctx context.Context, box *Box, in FixInput, replyText string) (pr
 	}
 
 	var checked []string
-	if cmd := compileCheck(in.Language, names); cmd != nil {
+	// A cheap compile check guards against a "fix" that only stops the
+	// proof by breaking the program.
+	proofLang, _ := lang.Lookup(in.Language)
+	if cmd := proofLang.CompileCheck(names); cmd != nil {
 		run, rerr := box.run(ctx, "fix-compile", in.Image, cmd, files)
 		if rerr != nil {
 			return "", nil, "", "", false, rerr

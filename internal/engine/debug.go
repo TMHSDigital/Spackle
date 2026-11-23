@@ -19,6 +19,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	proglang "github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/mapper"
@@ -60,41 +61,6 @@ const maxBisectProbes = 12
 const maxIssueBytes = 64 << 10
 
 var debugTestName = regexp.MustCompile(`^[A-Za-z0-9_./:\[\]-]{1,200}$`)
-
-var debugLanguages = []string{"go", "python", "javascript", "typescript"}
-
-// debugReproCommand builds the command that runs one named test. The vector
-// is assembled here from a validated name; a model never supplies it.
-func debugReproCommand(lang, testCommand, name string) []string {
-	switch lang {
-	case "go":
-		return []string{"go", "test", "-count=1", "-run", "^" + name + "$", "./..."}
-	case "python":
-		if strings.Contains(testCommand, "pytest") {
-			return []string{"python", "-m", "pytest", "-q", "-k", name}
-		}
-		return []string{"python", "-m", "unittest", "-k", name}
-	case "javascript", "typescript":
-		return []string{"node", "--test", "--test-name-pattern", name}
-	}
-	return nil
-}
-
-// debugCompileCheck mirrors the fixer's compile check: a cheap command that
-// fails when a changed file no longer compiles or parses.
-func debugCompileCheck(lang string, changed []string) []string {
-	switch lang {
-	case "python":
-		return append([]string{"python", "-m", "py_compile"}, changed...)
-	case "go":
-		return []string{"go", "build", "./..."}
-	case "javascript":
-		if len(changed) == 1 {
-			return []string{"node", "--check", changed[0]}
-		}
-	}
-	return nil
-}
 
 // reproduction is what the reproduce step learned.
 type reproduction struct {
@@ -182,16 +148,17 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 	lang := m.Tests.Language
-	if debugReproCommand(lang, "", "x") == nil {
+	proofLang, supported := proglang.Lookup(lang)
+	if !supported {
 		found := "no supported language was found"
 		if names := m.LanguageNames(); len(names) > 0 {
 			found = "the target is mostly " + names[0]
 		}
-		return Result{}, fmt.Errorf("%w: debug mode supports %s, and %s in %s. Point it at the directory that holds the project's source", ErrRefused, strings.Join(debugLanguages, ", "), found, tgt.Display)
+		return Result{}, fmt.Errorf("%w: debug mode supports %s, and %s in %s. Point it at the directory that holds the project's source", ErrRefused, strings.Join(proglang.Names(), ", "), found, tgt.Display)
 	}
 	var reproCmd []string
 	if test != "" {
-		reproCmd = debugReproCommand(lang, m.Tests.TestCommand, test)
+		reproCmd = proofLang.SingleTest(m.Tests.TestCommand, test)
 	}
 
 	// Debug needs a model and a container runtime. Both are checked before a
@@ -758,7 +725,8 @@ func (d *debugRun) check(rep reproduction) agent.Check {
 		}
 		sort.Strings(names)
 		var checked []string
-		if cmd := debugCompileCheck(d.lang, names); cmd != nil {
+		proofLang, _ := proglang.Lookup(d.lang)
+		if cmd := proofLang.CompileCheck(names); cmd != nil {
 			res, _, rerr := d.run(ctx, "fix-compile", cmd, files, d.root)
 			if rerr != nil {
 				return "", "", false, rerr

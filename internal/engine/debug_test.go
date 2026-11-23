@@ -584,33 +584,6 @@ func TestDebugRefusesAnUnsupportedLanguage(t *testing.T) {
 	}
 }
 
-func TestDebugReproCommand(t *testing.T) {
-	for _, c := range []struct{ lang, testCmd, want string }{
-		{"go", "go test ./...", "go test -count=1 -run ^TestAdd$ ./..."},
-		{"python", "python -m pytest -q", "python -m pytest -q -k TestAdd"},
-		{"python", "python -m unittest discover", "python -m unittest -k TestAdd"},
-		{"python", "", "python -m unittest -k TestAdd"},
-		{"javascript", "npm test", "node --test --test-name-pattern TestAdd"},
-		{"typescript", "", "node --test --test-name-pattern TestAdd"},
-		{"ruby", "", ""},
-	} {
-		if got := strings.Join(debugReproCommand(c.lang, c.testCmd, "TestAdd"), " "); got != c.want {
-			t.Errorf("%s with %q: %q, want %q", c.lang, c.testCmd, got, c.want)
-		}
-	}
-	for _, lang := range debugLanguages {
-		if debugReproCommand(lang, "", "x") == nil {
-			t.Errorf("%s is listed as supported and has no reproduction command", lang)
-		}
-	}
-	if got := strings.Join(debugCompileCheck("python", []string{"a.py", "b.py"}), " "); got != "python -m py_compile a.py b.py" {
-		t.Errorf("python compile check = %q", got)
-	}
-	if debugCompileCheck("go", nil) == nil || debugCompileCheck("javascript", []string{"a.js"}) == nil || debugCompileCheck("typescript", []string{"a.ts"}) != nil {
-		t.Error("compile checks differ from the fixer's")
-	}
-}
-
 // debugRepo turns the target into a git repository of five commits where the
 // third introduces the bug. It returns the commit hashes, oldest first.
 func debugRepo(t *testing.T, root string) (hashes []string, git func(args ...string) string) {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/mcp"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/seed"
@@ -151,12 +152,12 @@ func runtimeChecks(ctx context.Context, cfg config.Config) []check {
 		return []check{{"Sandbox", "runtime", status, err.Error() + ". Findings are still reported"}}
 	}
 	checks := []check{{"Sandbox", rt.Name(), "ok", "engine is answering, default network: none"}}
-	for _, lang := range []string{"go", "python", "javascript", "typescript"} {
-		img := cfg.Sandbox.Images[lang]
+	for _, name := range lang.Names() {
+		img := cfg.Sandbox.Images[name]
 		if rt.ImagePresent(cctx, img) {
-			checks = append(checks, check{"Sandbox", "image " + lang, "ok", img})
+			checks = append(checks, check{"Sandbox", "image " + name, "ok", img})
 		} else {
-			checks = append(checks, check{"Sandbox", "image " + lang, "missing", img + " is not pulled; it is fetched on first use, or run: " + rt.Name() + " pull " + img})
+			checks = append(checks, check{"Sandbox", "image " + name, "missing", img + " is not pulled; it is fetched on first use, or run: " + rt.Name() + " pull " + img})
 		}
 	}
 	return checks

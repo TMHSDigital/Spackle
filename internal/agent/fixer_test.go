@@ -340,26 +340,6 @@ func TestVerifyFixSkipsTheCompileCheckForUnknownLanguages(t *testing.T) {
 	}
 }
 
-func TestCompileCheckCommands(t *testing.T) {
-	cases := []struct {
-		lang    string
-		changed []string
-		want    string
-	}{
-		{"python", []string{"a.py", "pkg/b.py"}, "python -m py_compile a.py pkg/b.py"},
-		{"go", []string{"main.go"}, "go build ./..."},
-		{"javascript", []string{"index.js"}, "node --check index.js"},
-		{"javascript", []string{"a.js", "b.js"}, ""},
-		{"typescript", []string{"a.ts"}, ""},
-		{"", []string{"a.rb"}, ""},
-	}
-	for _, tc := range cases {
-		if got := strings.Join(compileCheck(tc.lang, tc.changed), " "); got != tc.want {
-			t.Errorf("compileCheck(%q, %v) = %q, want %q", tc.lang, tc.changed, got, tc.want)
-		}
-	}
-}
-
 func TestVerifyFixKeepsTheFilesLineEndings(t *testing.T) {
 	f := setup(t, budget.Caps{})
 	crlf := strings.ReplaceAll(appPy, "\n", "\r\n")

@@ -15,6 +15,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/budget"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	proglang "github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/mapper"
 	"github.com/TMHSDigital/spackle/internal/redact"
@@ -186,8 +187,8 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 		f.Proof.Reason = "Traced by reading the code. No container runtime was available, so no proof of concept was run and no fix was verified."
 		return f, nil
 	}
-	if !mapper.ProofLanguages[lang] {
-		f.Proof.Reason = "Traced by reading the code. Proofs are run automatically for Go, Python and TypeScript/JavaScript only in this version."
+	if !proglang.Supported(lang) {
+		f.Proof.Reason = "Traced by reading the code. Proofs are run automatically for " + proglang.DisplayList() + " only in this version."
 		return f, nil
 	}
 	image, err := l.image(ctx, lang)

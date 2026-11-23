@@ -14,6 +14,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	proglang "github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/mapper"
@@ -242,8 +243,8 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		}
 	}
 	for _, l := range m.Languages {
-		if !mapper.ProofLanguages[l.Lang] && l.Files > 0 && isAppLanguage(l.Lang) {
-			note := fmt.Sprintf("%s (%d files): findings and analysis only. Proofs are auto-run for Go, Python and TypeScript/JavaScript in this version.", l.Lang, l.Files)
+		if !proglang.Supported(l.Lang) && l.Files > 0 && isAppLanguage(l.Lang) {
+			note := fmt.Sprintf("%s (%d files): findings and analysis only. Proofs are auto-run for %s in this version.", l.Lang, l.Files, proglang.DisplayList())
 			if _, err := led.Append(mapSeq, ledger.TypeNote, note); err != nil {
 				return Result{}, err
 			}

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
+	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -65,10 +66,6 @@ type Harness struct {
 	BuildCommand string `json:"build_command,omitempty"`
 	HasTests     bool   `json:"has_tests"`
 }
-
-// ProofLanguages are the languages with full find, demonstrate and fix
-// support in v0.1. Other languages get findings and analysis only.
-var ProofLanguages = map[string]bool{"go": true, "python": true, "javascript": true, "typescript": true}
 
 // LanguageNames returns the language names, most files first.
 func (m Map) LanguageNames() []string {
@@ -132,7 +129,7 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 		if isManifest(f.Rel) {
 			manifests = append(manifests, f)
 		}
-		if !ProofLanguages[f.Lang] && f.Lang != "java" && f.Lang != "ruby" && f.Lang != "php" && f.Lang != "csharp" {
+		if !lang.Supported(f.Lang) && f.Lang != "java" && f.Lang != "ruby" && f.Lang != "php" && f.Lang != "csharp" {
 			continue
 		}
 		text, rerr := walk.ReadText(f.Abs)
@@ -383,7 +380,7 @@ func chooseHarness(m *Map, files []walk.File) {
 	}
 	primary := ""
 	for _, l := range m.Languages {
-		if ProofLanguages[l.Lang] {
+		if lang.Supported(l.Lang) {
 			primary = l.Lang
 			break
 		}

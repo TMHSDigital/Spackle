@@ -15,6 +15,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/budget"
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/walk"
@@ -82,16 +83,6 @@ func (b *Box) run(ctx context.Context, purpose, image string, cmd []string, file
 // pocPrefix is where a proof's files must live. A proof may add files; it
 // may never replace a file of the target.
 const pocPrefix = "spackle_poc"
-
-// allowedPrograms lists what a proof's command may start with, by language.
-// There is no shell here: a proof is one program run with an argument
-// vector.
-var allowedPrograms = map[string][]string{
-	"python":     {"python", "python3"},
-	"go":         {"go"},
-	"javascript": {"node"},
-	"typescript": {"node"},
-}
 
 // NewMarker returns the random token a proof must print to count as a
 // demonstration. It is unguessable so that a proof cannot "succeed" by
@@ -181,7 +172,10 @@ func validatePoC(root, language string, reply proverReply) (map[string]string, [
 	if len(reply.Command) == 0 || len(reply.Command) > 16 {
 		return nil, nil, errors.New("the command must have between 1 and 16 arguments")
 	}
-	allowed := allowedPrograms[language]
+	// What a proof may start comes from the language table. There is no
+	// shell here: a proof is one program run with an argument vector.
+	proofLang, _ := lang.Lookup(language)
+	allowed := proofLang.Programs
 	if !containsStr(allowed, reply.Command[0]) {
 		return nil, nil, fmt.Errorf("the command must start with one of %v for a %s target, not %q", allowed, language, reply.Command[0])
 	}

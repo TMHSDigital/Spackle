@@ -118,6 +118,7 @@ go test ./internal/report -update
 | `envelope` | Wraps untrusted content in nonce-delimited data blocks and neutralizes delimiter forgery |
 | `finding` | The finding schema, validation, CVSS 4.0 scoring, class defaults, dedup, and ranking |
 | `gitx` | Git through its command line with hooks disabled: commit lookup, clone, worktree, commit, archive, draft pull request |
+| `lang` | The table of languages with proof and fix support: the programs a proof may start, the default sandbox image, the compile check and the single-test command |
 | `ledger` | The append-only `ledger.jsonl` writer and reader, and the event payload types |
 | `llm` | The provider interface and its implementations (`anthropic`, `openai`, `ollama`, `fake`), pricing, the redacting wrapper, the offline guard |
 | `mapper` | The target map, built with no model: languages, frameworks, entry points, trust boundaries, test command |

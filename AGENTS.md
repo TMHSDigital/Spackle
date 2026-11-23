@@ -37,7 +37,7 @@ Read the diff of every golden file you update. A golden change you cannot explai
 ## Layout
 
 - `cmd/spackle/main.go` only calls `cli.Main`.
-- `internal/` holds every package: `agent` (with `agent/tools`), `authz`, `bench`, `budget`, `cli`, `config`, `dast`, `diffx`, `engine`, `envelope`, `finding`, `gitx`, `ledger`, `llm`, `mapper`, `mcp`, `policy`, `redact`, `report`, `sandbox`, `seed`, `target`, `version`, `walk`. The table with one line per package is in [CONTRIBUTING.md](CONTRIBUTING.md) and in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- `internal/` holds every package: `agent` (with `agent/tools`), `authz`, `bench`, `budget`, `cli`, `config`, `dast`, `diffx`, `engine`, `envelope`, `finding`, `gitx`, `lang`, `ledger`, `llm`, `mapper`, `mcp`, `policy`, `redact`, `report`, `sandbox`, `seed`, `target`, `version`, `walk`. The table with one line per package is in [CONTRIBUTING.md](CONTRIBUTING.md) and in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - `bench/corpus/` and `examples/demo-app/` hold fixtures that are vulnerable on purpose. Do not fix them and do not lint them.
 - `bench/results/` holds committed benchmark results. Never edit one by hand.
 - `docs/superpowers/` holds the design specification (`specs/`) and the implementation plan (`plans/`). Read the spec before you change behavior.

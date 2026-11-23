@@ -13,6 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
@@ -163,12 +164,7 @@ func Default() Config {
 		Sandbox: Sandbox{
 			Runtime: "auto", Network: "none", MemoryMB: 1024, CPUs: 2, PIDs: 256,
 			Timeout: Duration{2 * time.Minute},
-			Images: map[string]string{
-				"go":         "golang:1.27",
-				"python":     "python:3.13-slim",
-				"javascript": "node:22-slim",
-				"typescript": "node:22-slim",
-			},
+			Images:  lang.DefaultImages(),
 		},
 		Fix:      Fix{MaxAttempts: 3},
 		Output:   Output{Formats: []string{"terminal"}, FailOn: "high"},
