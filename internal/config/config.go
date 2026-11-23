@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
 // DefaultFile is the config file looked up in the working directory.
@@ -36,6 +38,7 @@ type Config struct {
 	Scope   Scope            `toml:"scope"`
 	Sandbox Sandbox          `toml:"sandbox"`
 	Fix     Fix              `toml:"fix"`
+	Scan    Scan             `toml:"scan"`
 	Output  Output           `toml:"output"`
 	Pricing map[string]Price `toml:"pricing"`
 	Offline bool             `toml:"offline"`
@@ -92,6 +95,18 @@ type Sandbox struct {
 	PIDs     int               `toml:"pids"`
 	Timeout  Duration          `toml:"timeout"`
 	Images   map[string]string `toml:"images"`
+}
+
+// Scan controls what a code scan covers.
+type Scan struct {
+	// Exclude lists forward-slash globs, relative to the target root, of
+	// paths that are not read ("bench/corpus/**", "*.min.js").
+	Exclude []string `toml:"exclude"`
+	// Include lists directories to read although their name is skipped by
+	// default ("build", "vendor/internal/**").
+	Include []string `toml:"include"`
+	// DisableRules lists rule ids whose leads are dropped.
+	DisableRules []string `toml:"disable_rules"`
 }
 
 // Fix configures the fixer.
@@ -268,6 +283,15 @@ func (c *Config) merge(file Config) {
 		c.Fix.MaxAttempts = file.Fix.MaxAttempts
 	}
 	c.Fix.PR = file.Fix.PR
+	if len(file.Scan.Exclude) > 0 {
+		c.Scan.Exclude = file.Scan.Exclude
+	}
+	if len(file.Scan.Include) > 0 {
+		c.Scan.Include = file.Scan.Include
+	}
+	if len(file.Scan.DisableRules) > 0 {
+		c.Scan.DisableRules = file.Scan.DisableRules
+	}
 	if len(file.Output.Formats) > 0 {
 		c.Output.Formats = file.Output.Formats
 	}
@@ -376,6 +400,16 @@ func (c Config) Validate() error {
 	case "critical", "high", "medium", "low", "never":
 	default:
 		add("[output] fail_on %q is not one of critical, high, medium, low, never", c.Output.FailOn)
+	}
+	for _, p := range append(append([]string(nil), c.Scan.Exclude...), c.Scan.Include...) {
+		if err := walk.CheckPattern(p); err != nil {
+			add("[scan] %w", err)
+		}
+	}
+	for _, r := range c.Scan.DisableRules {
+		if strings.TrimSpace(r) == "" {
+			add("[scan] disable_rules has an empty rule id")
+		}
 	}
 	for _, p := range c.Scope.PathPrefixes {
 		if !strings.HasPrefix(p, "/") {

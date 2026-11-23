@@ -105,7 +105,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	// Map and seed before asking for confirmation, so the estimate reflects
 	// the real number of leads. Neither stage uses a model or costs money.
 	say("Mapping %s", tgt.Display)
-	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(stateDir, "cache")})
+	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(stateDir, "cache"), Walk: walkOptions(opts.Config)})
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
@@ -118,6 +118,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	}
 	say("Running %d seeders", len(seeders))
 	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files)
+	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 
 	if agentic {
 		est := estimate(opts.Config, defaultProv, llm.NewPricer(llm.PricesFromConfig(opts.Config.Pricing)), len(leads))
@@ -176,6 +177,11 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	}
 	for _, s := range m.Skipped {
 		if _, err := led.Append(mapSeq, ledger.TypeNote, fmt.Sprintf("Not read: %s (%s)", s.Rel, s.Reason)); err != nil {
+			return Result{}, err
+		}
+	}
+	for _, note := range scanNotes {
+		if _, err := led.Append(mapSeq, ledger.TypeNote, note); err != nil {
 			return Result{}, err
 		}
 	}

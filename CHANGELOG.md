@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- A `[scan]` configuration table: `exclude` (also `--exclude`, repeatable) keeps paths out of the scan, `include` reads a directory that is skipped by default, and `disable_rules` drops the leads of a rule. The report lists what was excluded.
+
 ### Fixed
 
 - Different rules of the same class that fire at one place (several container hardening rules on one line, several advisories on one lockfile, several missing headers on one page) are now reported as separate findings instead of one. Finding ids of uninvestigated leads change as a result.

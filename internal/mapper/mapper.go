@@ -83,13 +83,19 @@ func (m Map) LanguageNames() []string {
 type Options struct {
 	// CacheDir, when set, enables the commit-keyed cache.
 	CacheDir string
+	// Walk holds the configured path exclusions and inclusions. The cache
+	// is not used when any are set, because it is keyed by commit alone.
+	Walk walk.Options
 }
 
 // Build maps the target at root.
 func Build(ctx context.Context, root string, opts Options) (Map, error) {
-	listing, err := walk.List(root)
+	listing, err := walk.ListWith(root, opts.Walk)
 	if err != nil {
 		return Map{}, err
+	}
+	if len(opts.Walk.Exclude) > 0 || len(opts.Walk.Include) > 0 {
+		opts.CacheDir = ""
 	}
 
 	// The cache is only valid for an exact commit with no local changes.

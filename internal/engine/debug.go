@@ -177,7 +177,7 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 	}
 
 	say("Mapping %s", tgt.Display)
-	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(cfg.StateDir, "cache")})
+	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(cfg.StateDir, "cache"), Walk: walkOptions(cfg)})
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
@@ -289,7 +289,9 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 		return Result{}, r.fail(err)
 	}
 	r.sealer = sealer
-	newRegistry := func() *tools.Registry { return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer}) }
+	newRegistry := func() *tools.Registry {
+		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(cfg)})
+	}
 	runnerFor := func(stage string) (*agent.Runner, error) {
 		p, perr := provs.forStage(stage)
 		if perr != nil {

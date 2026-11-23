@@ -44,6 +44,7 @@ type Env struct {
 	Root      string           // absolute path of the target root
 	Sealer    *envelope.Sealer // wraps every result as untrusted data
 	MaxOutput int              // max bytes of content per result; 0 means 24000
+	Walk      walk.Options     // configured path exclusions and inclusions
 }
 
 // Tool is one callable tool.
@@ -249,7 +250,7 @@ func (r *Registry) files() ([]walk.File, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.listed {
-		res, err := walk.List(r.env.Root)
+		res, err := walk.ListWith(r.env.Root, r.env.Walk)
 		if err != nil {
 			err = errors.New("the target cannot be listed: " + reason(err))
 		}

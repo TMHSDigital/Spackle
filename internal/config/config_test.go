@@ -139,6 +139,9 @@ func TestValidationProblems(t *testing.T) {
 		"[scope]\npath_prefixes = [\"api\"]\n":                                         "must start with /",
 		"[budget]\nwall_time = \"soon\"\n":                                             "not a duration",
 		"[budget]\nusd = -1\n":                                                         "cannot be negative",
+		"[scan]\nexclude = [\"../other/**\"]\n":                                        ".. segment",
+		"[scan]\ninclude = [\"/abs\"]\n":                                               "relative to the target root",
+		"[scan]\ndisable_rules = [\"\"]\n":                                             "empty rule id",
 	}
 	for body, want := range cases {
 		_, _, err := Load(writeConfig(t, body))

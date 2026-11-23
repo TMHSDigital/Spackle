@@ -79,6 +79,11 @@ enabled = true
 max_attempts = 3
 pr = false              # true is the same as --pr
 
+[scan]
+exclude = []            # globs of paths not to read, for example ["bench/corpus/**"]
+include = []            # default-skipped directories to read anyway, for example ["build"]
+disable_rules = []      # rule ids whose leads are dropped
+
 [output]
 formats = ["terminal"]  # terminal, markdown, html, json, sarif
 dir = ""                # same as --out
@@ -90,7 +95,7 @@ fail_on = "high"        # critical, high, medium, low or never
 # output_per_mtok = 0.0
 ```
 
-Flags that map onto these keys: `--provider`, `--model`, `--base-url`, `--budget-tokens`, `--budget-usd`, `--max-findings`, `--offline`, `--fix`, `--no-fix`, `--pr`, `--format`, `--out`, `--fail-on`. `--authorize` names a scope file and `--yes` turns off every prompt. There is no flag for `state_dir`, the sandbox settings, `wall_time`, `sandbox_runs` or `max_turns`: set those in the file.
+Flags that map onto these keys: `--provider`, `--model`, `--base-url`, `--budget-tokens`, `--budget-usd`, `--max-findings`, `--offline`, `--fix`, `--no-fix`, `--pr`, `--format`, `--out`, `--fail-on`, `--exclude` (repeatable, adds to `[scan] exclude`). `--authorize` names a scope file and `--yes` turns off every prompt. There is no flag for `state_dir`, the sandbox settings, `wall_time`, `sandbox_runs` or `max_turns`: set those in the file.
 
 ## Providers
 
@@ -417,6 +422,22 @@ Things to know:
 - With no network, a proof can use only the language's standard library and what is already in your repository. Nothing can be installed.
 - `network = "scope"` gives the container the runtime's ordinary bridge network. Spackle does not filter that traffic to your scope: only the container runtime's own networking applies. Leave it at `none` unless you have a specific reason.
 - An image that is not present is pulled on first use. `spackle doctor` shows which images are local.
+
+## Scan coverage
+
+| Key | Flag | Default | Meaning |
+| :--- | :--- | :--- | :--- |
+| `exclude` | `--exclude` (repeatable) | none | Paths that are not read and whose scanner leads are dropped |
+| `include` | none | none | Directories to read although their name is skipped by default |
+| `disable_rules` | none | none | Rule ids whose leads are dropped |
+
+Patterns are forward-slash globs relative to the target root. `*` and `?` match within one path segment and `**` matches any number of segments, so `bench/corpus/**` excludes that tree and `**/testdata/**` excludes every `testdata` directory. A pattern with no slash, such as `*.min.js`, is also matched against the file or directory name alone.
+
+Directories named `.git`, `node_modules`, `vendor`, `dist`, `build`, `target`, `coverage` and similar are not read by default. Name one in `include` (for example `build` or `services/api/vendor/**`) when it holds source you answer for.
+
+A rule id is the part after the colon in a finding's origin (`builtin-code:py-sql-fstring` is rule `py-sql-fstring`). Write `source:rule` to disable a rule for one scanner only.
+
+Every excluded path is listed in the report as "Not read", and the report notes the configured exclusions, inclusions and disabled rules with the number of leads each removed, so a reader can see what the scan did not cover. The map cache is not used while `exclude` or `include` is set.
 
 ## Fixes
 

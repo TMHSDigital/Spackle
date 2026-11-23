@@ -369,3 +369,35 @@ func TestFindingJSONRoundTrips(t *testing.T) {
 		t.Fatalf("round trip changed the finding")
 	}
 }
+
+func TestScanConfigExcludesPathsAndDisablesRules(t *testing.T) {
+	inFixture, noisy := sqlLead(), sqlLead()
+	inFixture.File = "fixtures/vuln/app.py"
+	noisy.RuleID, noisy.Line = "noisy-rule", 1
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), inFixture, noisy}})
+	if err := os.MkdirAll(filepath.Join(o.Target, "fixtures", "vuln"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(o.Target, "fixtures", "vuln", "app.py"), []byte("x = 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.Config.Scan.Exclude = []string{"fixtures/**"}
+	o.Config.Scan.DisableRules = []string{"noisy-rule"}
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Run.Findings) != 1 || res.Run.Findings[0].Location.File != "app.py" {
+		t.Fatalf("findings = %+v", res.Run.Findings)
+	}
+	notes := strings.Join(res.Run.Notes, " | ")
+	for _, want := range []string{
+		"Not read: fixtures (excluded by configuration)",
+		"Excluded by configuration: fixtures/** (1 scanner leads dropped)",
+		"Rules disabled by configuration: noisy-rule (1 leads dropped)",
+	} {
+		if !strings.Contains(notes, want) {
+			t.Errorf("notes lack %q: %s", want, notes)
+		}
+	}
+}

@@ -143,3 +143,61 @@ func TestLangOf(t *testing.T) {
 		}
 	}
 }
+
+func TestListWithExcludesAndIncludes(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{
+		"main.go", "bench/corpus/a/app.py", "build/gen.go", "src/build/x.go",
+		"web/app.min.js", "web/app.js", "pkg/testdata/fixture.go", "vendor/lib/lib.go",
+	} {
+		write(t, root, rel, "x")
+	}
+	res, err := ListWith(root, Options{
+		Exclude: []string{"bench/corpus/**", "*.min.js", "**/testdata/**"},
+		Include: []string{"build"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := rels(res), "build/gen.go,main.go,src/build/x.go,web/app.js"; got != want {
+		t.Errorf("files = %s, want %s", got, want)
+	}
+	var skipped []string
+	for _, s := range res.Skipped {
+		if s.Reason != "excluded by configuration" {
+			t.Errorf("skip %s has reason %q", s.Rel, s.Reason)
+		}
+		skipped = append(skipped, s.Rel)
+	}
+	if got, want := strings.Join(skipped, ","), "bench/corpus,pkg/testdata,web/app.min.js"; got != want {
+		t.Errorf("skipped = %s, want %s", got, want)
+	}
+}
+
+func TestMatch(t *testing.T) {
+	cases := []struct {
+		pattern, rel string
+		want         bool
+	}{
+		{"bench/corpus/**", "bench/corpus/a/b.py", true},
+		{"bench/corpus/**", "bench/corpus", true},
+		{"bench/corpus/**", "bench/corpusx/a.py", false},
+		{"bench/corpus", "bench/corpus/a/b.py", true},
+		{"**/gen/*.go", "a/b/gen/x.go", true},
+		{"**/gen/*.go", "gen/x.go", true},
+		{"*.pb.go", "api/v1/svc.pb.go", true},
+		{"docs", "src/docs/a.md", true},
+		{"src/*.go", "src/sub/a.go", false},
+		{"./examples/", "examples/demo/app.py", true},
+	}
+	for _, c := range cases {
+		if got := Match([]string{c.pattern}, c.rel); got != c.want {
+			t.Errorf("Match(%q, %q) = %v, want %v", c.pattern, c.rel, got, c.want)
+		}
+	}
+	for _, bad := range []string{"", "../x", "/abs", "a" + string(rune(92)) + "b", "[z"} {
+		if CheckPattern(bad) == nil {
+			t.Errorf("CheckPattern(%q) accepted a bad pattern", bad)
+		}
+	}
+}

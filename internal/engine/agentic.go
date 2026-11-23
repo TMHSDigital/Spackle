@@ -124,7 +124,9 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		return nil, nil, "", err
 	}
 	r.sealer = sealer
-	newRegistry := func() *tools.Registry { return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer}) }
+	newRegistry := func() *tools.Registry {
+		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(r.cfg)})
+	}
 	runnerFor := func(stage string) (*agent.Runner, error) {
 		prov, err := r.provs.forStage(stage)
 		if err != nil {

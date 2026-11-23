@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -75,10 +76,94 @@ type Result struct {
 	Skipped []Skip
 }
 
+// Options narrow or widen what List reads. Patterns are forward-slash globs
+// relative to the root: "*" and "?" match within one path segment and "**"
+// matches any number of segments. A pattern with no slash is also matched
+// against the file or directory name alone, so "*.min.js" works anywhere.
+type Options struct {
+	// Exclude lists paths that are not read. A pattern that matches a
+	// directory excludes everything beneath it.
+	Exclude []string
+	// Include lists directories that are read although their name is one
+	// of the default skips (build, dist, vendor and so on).
+	Include []string
+}
+
+// CheckPattern reports whether p is a usable Options pattern.
+func CheckPattern(p string) error {
+	if strings.TrimSpace(p) == "" {
+		return errors.New("pattern is empty")
+	}
+	if strings.Contains(p, `\`) || strings.HasPrefix(p, "/") {
+		return fmt.Errorf("pattern %q must be a forward-slash path relative to the target root", p)
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == ".." {
+			return fmt.Errorf("pattern %q must not contain a .. segment", p)
+		}
+		if _, err := path.Match(seg, ""); err != nil {
+			return fmt.Errorf("pattern %q: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// Match reports whether the forward-slash relative path rel matches one of
+// the patterns, either itself or through one of its parent directories.
+func Match(patterns []string, rel string) bool {
+	segs := strings.Split(rel, "/")
+	for _, p := range patterns {
+		p = strings.TrimSuffix(strings.TrimPrefix(p, "./"), "/")
+		for n := 1; n <= len(segs); n++ {
+			if matchOne(p, segs[:n]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchOne matches one pattern against a whole path given as segments.
+func matchOne(p string, segs []string) bool {
+	if !strings.Contains(p, "/") && p != "**" {
+		ok, _ := path.Match(p, segs[len(segs)-1])
+		return ok
+	}
+	// "dir/**" also matches dir itself, so a directory can be cut off
+	// without walking into it.
+	return matchSegs(strings.Split(p, "/"), segs) || (strings.HasSuffix(p, "/**") && matchSegs(strings.Split(strings.TrimSuffix(p, "/**"), "/"), segs))
+}
+
+func matchSegs(pat, segs []string) bool {
+	if len(pat) == 0 {
+		return len(segs) == 0
+	}
+	if pat[0] == "**" {
+		for i := 0; i <= len(segs); i++ {
+			if matchSegs(pat[1:], segs[i:]) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(segs) == 0 {
+		return false
+	}
+	if ok, _ := path.Match(pat[0], segs[0]); !ok {
+		return false
+	}
+	return matchSegs(pat[1:], segs[1:])
+}
+
 // List returns every readable text file under root, sorted by relative path.
 // Problems with individual files are recorded in Skipped; only a problem with
 // root itself is an error.
-func List(root string) (Result, error) {
+func List(root string) (Result, error) { return ListWith(root, Options{}) }
+
+// ListWith is List with configured exclusions and inclusions. Every
+// excluded path is recorded in Skipped, so a report can say what was not
+// covered.
+func ListWith(root string, opts Options) (Result, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve target %s: %w", root, err)
@@ -98,10 +183,10 @@ func List(root string) (Result, error) {
 	var res Result
 	skip := func(rel, reason string) { res.Skipped = append(res.Skipped, Skip{Rel: rel, Reason: reason}) }
 
-	err = filepath.WalkDir(realRoot, func(path string, d fs.DirEntry, werr error) error {
+	err = filepath.WalkDir(realRoot, func(abs string, d fs.DirEntry, werr error) error {
 		rel := "."
-		if path != realRoot {
-			r, rerr := filepath.Rel(realRoot, path)
+		if abs != realRoot {
+			r, rerr := filepath.Rel(realRoot, abs)
 			if rerr != nil {
 				return rerr
 			}
@@ -114,8 +199,15 @@ func List(root string) (Result, error) {
 			}
 			return nil
 		}
+		if abs != realRoot && Match(opts.Exclude, rel) {
+			skip(rel, "excluded by configuration")
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
-			if path != realRoot && skipDirs[d.Name()] {
+			if abs != realRoot && skipDirs[d.Name()] && !Match(opts.Include, rel) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -123,7 +215,7 @@ func List(root string) (Result, error) {
 		if d.Type()&fs.ModeSymlink != 0 {
 			// WalkDir does not follow symlinks. Resolve it ourselves and
 			// accept only regular files that stay inside the root.
-			resolved, rerr := filepath.EvalSymlinks(path)
+			resolved, rerr := filepath.EvalSymlinks(abs)
 			if rerr != nil {
 				skip(rel, "broken symlink")
 				return nil
@@ -141,7 +233,7 @@ func List(root string) (Result, error) {
 			skip(rel, "not a regular file")
 			return nil
 		}
-		fi, ierr := os.Stat(path)
+		fi, ierr := os.Stat(abs)
 		if ierr != nil {
 			skip(rel, "unreadable: "+ierr.Error())
 			return nil
@@ -150,7 +242,7 @@ func List(root string) (Result, error) {
 			skip(rel, fmt.Sprintf("larger than %d bytes", MaxFileSize))
 			return nil
 		}
-		binary, berr := looksBinary(path)
+		binary, berr := looksBinary(abs)
 		if berr != nil {
 			skip(rel, "unreadable: "+berr.Error())
 			return nil
@@ -158,7 +250,7 @@ func List(root string) (Result, error) {
 		if binary {
 			return nil // binaries are expected and not worth a note
 		}
-		res.Files = append(res.Files, File{Rel: rel, Abs: path, Size: fi.Size(), Lang: LangOf(rel)})
+		res.Files = append(res.Files, File{Rel: rel, Abs: abs, Size: fi.Size(), Lang: LangOf(rel)})
 		return nil
 	})
 	if err != nil {

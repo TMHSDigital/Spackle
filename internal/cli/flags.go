@@ -30,7 +30,14 @@ type globalFlags struct {
 	out          string
 	yes          bool
 	failOn       string
+	exclude      listFlag
 }
+
+// listFlag collects the values of a flag that may be given more than once.
+type listFlag []string
+
+func (l *listFlag) String() string     { return strings.Join(*l, ",") }
+func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }
 
 func (g *globalFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&g.configPath, "config", "", "`file` to read instead of ./spackle.toml")
@@ -48,6 +55,7 @@ func (g *globalFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&g.format, "format", "", "report `formats`, comma separated: terminal, markdown, html, json, sarif")
 	fs.StringVar(&g.out, "out", "", "`directory` to write reports into")
 	fs.BoolVar(&g.yes, "yes", false, "do not prompt; authorization and budgets must come from flags or config")
+	fs.Var(&g.exclude, "exclude", "`glob` of paths not to scan, relative to the target; may be repeated")
 	fs.StringVar(&g.failOn, "fail-on", "", "lowest `severity` that makes the command exit 1: critical, high, medium, low or never")
 }
 
@@ -97,6 +105,7 @@ func (g *globalFlags) load() (config.Config, error) {
 	if g.pr {
 		cfg.Fix.PR = true
 	}
+	cfg.Scan.Exclude = append(cfg.Scan.Exclude, g.exclude...)
 	if g.format != "" {
 		cfg.Output.Formats = splitList(g.format)
 	}
