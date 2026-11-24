@@ -205,6 +205,16 @@ func (s *server) buildTools() []tool {
 
 	return []tool{
 		{
+			Name: "compare_runs", Title: "Compare two stored runs",
+			Description: "Join two stored runs on finding id and list the findings that are new in the newer run, gone from it, and present in both (with any change of status or severity). Dismissed findings are left out. A finding id includes the line, so code that moved shows as one gone and one new.",
+			InputSchema: schema(`{"type":"object","properties":{` +
+				`"older":{"type":"string","description":"The earlier run: a run id, a unique prefix of one, or \"latest\"."},` +
+				`"newer":{"type":"string","description":"The later run: a run id, a unique prefix of one, or \"latest\"."}},` +
+				`"required":["older","newer"],"additionalProperties":false}`),
+			Annotations: annotations{ReadOnlyHint: true},
+			call:        s.compareRuns,
+		},
+		{
 			Name: "doctor", Title: "Check the Spackle environment",
 			Description: "Report what this machine has for Spackle to use: git, the container runtime and sandbox images, the built-in and external scanners, and the model configuration. Each row has an area, a name, a status (ok, missing, warn or fail) and a note. Rows marked missing are optional and only reduce coverage.",
 			InputSchema: schema(`{"type":"object","properties":{},"additionalProperties":false}`),
@@ -244,7 +254,9 @@ func (s *server) buildTools() []tool {
 			Description: scanDesc,
 			InputSchema: schema(`{"type":"object","properties":{` +
 				`"path":{"type":"string","description":"The directory to scan: absolute and inside an allowed root, or relative to the first root. Use \".\" for the first root itself."},` +
-				`"max_findings":{"type":"integer","minimum":1,"maximum":100,"description":"Report at most this many findings, highest severity first. It can lower the operator's limit, never raise it."}},` +
+				`"max_findings":{"type":"integer","minimum":1,"maximum":100,"description":"Report at most this many findings, highest severity first. It can lower the operator's limit, never raise it."},` +
+				`"since":{"type":"string","description":"Report only on files changed since this git revision (a branch, tag or commit of the directory's repository), for example the base of your branch."},` +
+				`"changed":{"type":"boolean","description":"Report only on files that differ from the last commit, staged or not, and new files git does not ignore: the edits you have not committed. Cannot be combined with since."}},` +
 				`"required":["path"],"additionalProperties":false}`),
 			// A scan writes a run directory, and with a remote model allowed
 			// it sends redacted excerpts to the provider.
@@ -252,6 +264,29 @@ func (s *server) buildTools() []tool {
 			call:        s.scan,
 		},
 	}
+}
+
+// compareRuns returns the comparison spackle runs compare prints as JSON.
+func (s *server) compareRuns(_ context.Context, raw json.RawMessage) result {
+	var a struct {
+		Older *string `json:"older"`
+		Newer *string `json:"newer"`
+	}
+	if err := decodeArgs("compare_runs", raw, &a, "older and newer (both required)"); err != nil {
+		return errorf("%v", err)
+	}
+	if a.Older == nil || a.Newer == nil {
+		return errorf("compare_runs needs older and newer: run ids from list_runs or scan, or \"latest\"")
+	}
+	older, err := s.loadRun(*a.Older)
+	if err != nil {
+		return errorf("compare_runs: older: %v", err)
+	}
+	newer, err := s.loadRun(*a.Newer)
+	if err != nil {
+		return errorf("compare_runs: newer: %v", err)
+	}
+	return jsonResult(report.Compare(older, newer))
 }
 
 // decodeArgs decodes a tool's arguments strictly. An argument the tool does
@@ -311,8 +346,10 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 	var a struct {
 		Path        *string `json:"path"`
 		MaxFindings *int    `json:"max_findings"`
+		Since       *string `json:"since"`
+		Changed     *bool   `json:"changed"`
 	}
-	if err := decodeArgs("scan", raw, &a, "path (required) and max_findings"); err != nil {
+	if err := decodeArgs("scan", raw, &a, "path (required), max_findings, since and changed"); err != nil {
 		return errorf("%v", err)
 	}
 	if a.Path == nil {
@@ -333,7 +370,14 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 	s.logf("spackle mcp: scanning %q", dir)
 	// Confirm stays nil: there is no person on this channel to ask, and the
 	// operator already consented to model spend with --allow-model.
-	res, err := s.scanFn(ctx, engine.Options{Target: dir, Config: cfg, Progress: s.progress()})
+	opts := engine.Options{Target: dir, Config: cfg, Progress: s.progress()}
+	if a.Since != nil {
+		opts.Since = strings.TrimSpace(*a.Since)
+	}
+	if a.Changed != nil {
+		opts.Changed = *a.Changed
+	}
+	res, err := s.scanFn(ctx, opts)
 	if err != nil {
 		switch {
 		case ctx.Err() != nil:

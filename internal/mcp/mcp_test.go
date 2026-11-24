@@ -421,7 +421,7 @@ func TestToolsListShape(t *testing.T) {
 			t.Errorf("%s: tool names are lowercase snake_case with no server prefix", tl.Name)
 		}
 	}
-	want := []string{"doctor", "get_finding", "get_report", "list_runs", "scan"}
+	want := []string{"compare_runs", "doctor", "get_finding", "get_report", "list_runs", "scan"}
 	if !slices.Equal(names, want) {
 		t.Errorf("tools = %v, want %v", names, want)
 	}
@@ -1214,4 +1214,44 @@ func TestRunSummaryShortcutAgreesWithTheLedger(t *testing.T) {
 	if listSlow, findingSlow := ask(); listSlow != listFast || findingSlow != findingFast {
 		t.Errorf("list_runs or get_finding differs between the summary and the ledger:\n%s\nwant\n%s", listSlow, listFast)
 	}
+}
+
+// scan passes since and changed through to the engine, and compare_runs
+// returns the comparison of two stored runs.
+func TestScanSinceAndCompareRuns(t *testing.T) {
+	fx := newFixture(t)
+	c := start(t, fx.opts)
+	if tr := c.tool("scan", map[string]any{"path": ".", "since": "main"}); tr.IsError {
+		t.Logf("scan with since: %s", tr.text())
+	}
+	if tr := c.tool("scan", map[string]any{"path": ".", "changed": true}); tr.IsError {
+		t.Logf("scan with changed: %s", tr.text())
+	}
+	seen := *fx.seen
+	if len(seen) != 2 || seen[0].Since != "main" || seen[0].Changed || !seen[1].Changed || seen[1].Since != "" {
+		t.Fatalf("engine options = %+v", seen)
+	}
+	*fx.seen = nil
+	for i := 0; i < 2; i++ {
+		if tr := c.tool("scan", map[string]any{"path": "."}); tr.IsError {
+			t.Fatal(tr.text())
+		}
+	}
+	tr := c.tool("compare_runs", map[string]any{"older": "latest", "newer": "latest"})
+	if tr.IsError {
+		t.Fatal(tr.text())
+	}
+	var cmp struct {
+		New          []map[string]any `json:"new"`
+		Gone         []map[string]any `json:"gone"`
+		StillPresent []map[string]any `json:"still_present"`
+	}
+	if err := json.Unmarshal(tr.Structured, &cmp); err != nil {
+		t.Fatal(err)
+	}
+	if len(cmp.New) != 0 || len(cmp.Gone) != 0 || len(cmp.StillPresent) == 0 {
+		t.Fatalf("a run compared with itself: %+v", cmp)
+	}
+	c.refused("compare_runs", map[string]any{"older": "latest"}, "older and newer")
+	c.refused("compare_runs", map[string]any{"older": "../x", "newer": "latest"}, "path separator")
 }

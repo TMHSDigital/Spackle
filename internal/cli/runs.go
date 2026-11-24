@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/engine"
-	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/report"
 )
 
@@ -262,66 +261,6 @@ func runRunsPrune(env Env, args []string) int {
 	return ExitOK
 }
 
-// comparedFinding is one finding in a comparison of two runs.
-type comparedFinding struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Severity string `json:"severity"`
-	Location string `json:"location"`
-	Status   string `json:"status"`
-	// Change says what differs from the older run, for a finding in both.
-	Change string `json:"change,omitempty"`
-}
-
-// runComparison joins two runs on finding id.
-type runComparison struct {
-	Older        string            `json:"older"`
-	Newer        string            `json:"newer"`
-	New          []comparedFinding `json:"new"`
-	Gone         []comparedFinding `json:"gone"`
-	StillPresent []comparedFinding `json:"still_present"`
-}
-
-// compareRuns reports which findings are only in the newer run, only in the
-// older run, or in both. Dismissed findings are left out on both sides. A
-// finding id is made from the class, the place and, for a rule finding, the
-// rule, so code that moved to another line shows as one gone and one new.
-func compareRuns(older, newer report.Run) runComparison {
-	row := func(f finding.Finding) comparedFinding {
-		return comparedFinding{ID: f.ID, Title: f.Title, Severity: f.Severity.Label, Location: f.Location.String(), Status: f.Status}
-	}
-	before := map[string]finding.Finding{}
-	for _, f := range older.Active() {
-		before[f.ID] = f
-	}
-	c := runComparison{Older: older.ID, Newer: newer.ID, New: []comparedFinding{}, Gone: []comparedFinding{}, StillPresent: []comparedFinding{}}
-	seen := map[string]bool{}
-	for _, f := range newer.Active() {
-		seen[f.ID] = true
-		old, ok := before[f.ID]
-		if !ok {
-			c.New = append(c.New, row(f))
-			continue
-		}
-		r := row(f)
-		var changes []string
-		if old.Status != f.Status {
-			changes = append(changes, "status "+old.Status+" to "+f.Status)
-		}
-		if old.Severity.Label != f.Severity.Label {
-			changes = append(changes, "severity "+old.Severity.Label+" to "+f.Severity.Label)
-		}
-		r.Change = strings.Join(changes, ", ")
-		c.StillPresent = append(c.StillPresent, r)
-	}
-	for _, f := range older.Active() {
-		if !seen[f.ID] {
-			c.Gone = append(c.Gone, row(f))
-		}
-	}
-	return c
-}
-
 func runRunsCompare(env Env, args []string) int {
 	fs := newFlagSet(env, "runs compare", "<older-run-id> <newer-run-id>", "Compare the findings of two stored runs: new in the newer run, gone from it, and in both.\nA run id may be a unique prefix, or \"latest\". Findings are matched by id, which includes the\nline, so code that moved shows as one finding gone and one new.")
 	var g globalFlags
@@ -356,7 +295,7 @@ func runRunsCompare(env Env, args []string) int {
 			return ExitError
 		}
 	}
-	c := compareRuns(loaded[0], loaded[1])
+	c := report.Compare(loaded[0], loaded[1])
 	if *format == "json" {
 		enc := json.NewEncoder(env.Stdout)
 		enc.SetIndent("", "  ")
@@ -372,7 +311,7 @@ func runRunsCompare(env Env, args []string) int {
 	}
 	for _, group := range []struct {
 		label string
-		rows  []comparedFinding
+		rows  []report.ComparedFinding
 	}{{"New", c.New}, {"Gone", c.Gone}, {"Still present", c.StillPresent}} {
 		fmt.Fprintf(env.Stdout, "\n%s: %d\n", group.label, len(group.rows))
 		for _, r := range group.rows {
