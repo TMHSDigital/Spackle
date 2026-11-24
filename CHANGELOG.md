@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `spackle rules [--format text|json]` lists every built-in rule with its source, id, class, severity, CWE and the files it reads. A scan warns, on the terminal and in the report, when `[scan] disable_rules` names something that looks like a built-in id but matches none, such as a typo.
 - `[output] fail_on_confidence` (also `--fail-on-confidence` and the Action input `fail-on-confidence`) sets the lowest confidence a finding needs to count toward `fail_on`: `plausible` (the default, every finding, as before), `high` or `demonstrated`. Unconfirmed leads can then be reported without failing CI.
 - `spackle report <run> --finding <id>` (repeatable) renders only the named findings, in any format. An id that is not in the run exits 2.
 - A `[scan]` configuration table: `exclude` (also `--exclude`, repeatable) keeps paths out of the scan, `include` reads a directory that is skipped by default, and `disable_rules` drops the leads of a rule. The report lists what was excluded.

@@ -18,6 +18,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/report"
+	"github.com/TMHSDigital/spackle/internal/seed"
 )
 
 func runScan(env Env, args []string) int {
@@ -41,6 +42,9 @@ func runScan(env Env, args []string) int {
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
 		return ExitUsage
+	}
+	if unknown := seed.UnknownBuiltinRules(cfg.Scan.DisableRules); len(unknown) > 0 {
+		fmt.Fprintf(env.Stderr, "Warning: [scan] disable_rules names %s, which is no built-in rule, so it disables nothing. `spackle rules` lists the built-in ids.\n", strings.Join(unknown, ", "))
 	}
 	tgt := "."
 	if len(pos) == 1 {

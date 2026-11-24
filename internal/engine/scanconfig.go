@@ -24,6 +24,10 @@ func applyScanConfig(leads []seed.Lead, sc config.Scan) ([]seed.Lead, []string) 
 	if len(sc.Exclude) == 0 && len(sc.Include) == 0 && len(sc.DisableRules) == 0 {
 		return leads, nil
 	}
+	var notes []string
+	if unknown := seed.UnknownBuiltinRules(sc.DisableRules); len(unknown) > 0 {
+		notes = append(notes, fmt.Sprintf("disable_rules names %s, which is no built-in rule, so it disables nothing. Check the spelling against `spackle rules`.", strings.Join(unknown, ", ")))
+	}
 	disabled := map[string]bool{}
 	for _, r := range sc.DisableRules {
 		disabled[strings.TrimSpace(r)] = true
@@ -41,7 +45,6 @@ func applyScanConfig(leads []seed.Lead, sc config.Scan) ([]seed.Lead, []string) 
 			kept = append(kept, l)
 		}
 	}
-	var notes []string
 	if len(sc.Exclude) > 0 {
 		notes = append(notes, fmt.Sprintf("Excluded by configuration: %s (%d scanner leads dropped)", strings.Join(sc.Exclude, ", "), excluded))
 	}

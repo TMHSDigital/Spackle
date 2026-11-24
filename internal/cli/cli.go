@@ -46,6 +46,7 @@ func commands() []command {
 		{"verify", "<run-id>", "Re-run stored proofs against the current target", runVerify},
 		{"report", "<run-id>", "Render a stored run in any format", runReport},
 		{"runs", "[prune|compare]", "List stored runs, delete old ones, or compare two", runRuns},
+		{"rules", "", "List the built-in rules that [scan] disable_rules can name", runRules},
 		{"doctor", "", "Check the sandbox runtime, scanners and model configuration", runDoctor},
 		{"mcp", "", "Serve Spackle tools over MCP on stdin and stdout", runMCP},
 		{"version", "", "Print version information", runVersion},

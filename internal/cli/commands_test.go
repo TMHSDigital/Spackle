@@ -597,3 +597,30 @@ func TestWantColorOnlyOnATerminal(t *testing.T) {
 		t.Error("color although TERM is dumb")
 	}
 }
+
+// spackle rules lists every built-in rule, and a scan warns about a
+// disable_rules entry that looks like a built-in id but names none.
+func TestRulesListAndDisableRulesTypo(t *testing.T) {
+	code, stdout, _ := run("rules", "--format", "json")
+	var got struct {
+		Rules []seed.RuleInfo `json:"rules"`
+	}
+	if code != ExitOK || json.Unmarshal([]byte(stdout), &got) != nil || len(got.Rules) != len(seed.BuiltinRules()) {
+		t.Fatalf("rules: code=%d, %d rules", code, len(got.Rules))
+	}
+	if code, stdout, _ := run("rules"); code != ExitOK || !strings.Contains(stdout, "py-sql-fstring") {
+		t.Fatalf("rules text: code=%d", code)
+	}
+	cfg, _ := stateConfig(t, "none")
+	body, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, append(body, []byte("\n[scan]\ndisable_rules = [\"py-sql-fstrng\", \"semgrep:some.rule\"]\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, stderr := run("scan", plantedTarget(t, criticalFlaw), "--config", cfg, "--offline", "--format", "json")
+	if !strings.Contains(stderr, "py-sql-fstrng") || strings.Contains(stderr, "semgrep:some.rule") {
+		t.Fatalf("stderr = %s", stderr)
+	}
+}

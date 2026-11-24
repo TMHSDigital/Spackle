@@ -103,7 +103,7 @@ Stored runs accumulate under `state_dir`. `spackle runs` lists them, newest firs
 
 `spackle runs compare <older-run-id> <newer-run-id>` joins two stored runs on finding id and lists the findings that are new in the newer run, gone from it, and present in both (with any change of status or severity), as text or with `--format json`. Dismissed findings are left out. A finding id includes the line, so code that moved to another line shows as one finding gone and one new. There is no flag for `state_dir`, the sandbox settings, `wall_time`, `sandbox_runs` or `max_turns`: set those in the file.
 
-Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr`, `--fail-on` and `--fail-on-confidence`. `report` takes `--config`, `--format`, `--out` and `--finding`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline`, `--format` and the three model flags. `runs` takes `--config` and `--format`; `runs prune` takes `--config`, `--keep`, `--older-than` and `--yes`. `spackle <command> --help` lists them.
+Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr`, `--fail-on` and `--fail-on-confidence`. `report` takes `--config`, `--format`, `--out` and `--finding`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline`, `--format` and the three model flags. `runs` and `rules` take `--format` (`runs` also `--config`); `runs prune` takes `--config`, `--keep`, `--older-than` and `--yes`. `spackle <command> --help` lists them.
 
 ## Providers
 
@@ -459,7 +459,7 @@ Some directories are not read by default, and each one that is pruned is listed 
 
 Name a pruned directory in `include` (for example `build` or `services/api/vendor/**`) when it holds source you answer for. Version control data (`.git`, `.hg`, `.svn`) and Spackle's own state directory are never read.
 
-A rule id is the part after the colon in a finding's origin (`builtin-code:py-sql-fstring` is rule `py-sql-fstring`). Write `source:rule` to disable a rule for one scanner only.
+A rule id is the part after the colon in a finding's origin (`builtin-code:py-sql-fstring` is rule `py-sql-fstring`). Write `source:rule` to disable a rule for one scanner only. `spackle rules` (or `spackle rules --format json`) lists every built-in rule with its source, id, class, severity, CWE and the files it reads. A scan warns when `disable_rules` names something that looks like a built-in id (such as `py-sql-fstrng`) but matches none; ids of external scanners are not checked.
 
 Every excluded path is listed in the report as "Not read", and the report notes the configured exclusions, inclusions and disabled rules with the number of leads each removed, so a reader can see what the scan did not cover. The map cache is not used while `exclude` or `include` is set.
 
