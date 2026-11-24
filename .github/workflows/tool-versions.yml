@@ -4,6 +4,10 @@ name: tool-versions
 # Dependabot does not read that file, so this job compares each pin with the
 # tool's latest release once a week and fails when one is behind.
 #
+# It does the same for the scanner versions pinned in
+# .github/workflows/scanners.yml (GitHub releases, and PyPI for Semgrep),
+# so the scanners job does not keep testing old releases.
+#
 # It also checks the default sandbox images, which are the DefaultImage
 # string literals in internal/lang/lang.go and so are invisible to
 # Dependabot too: the job
@@ -17,6 +21,7 @@ on:
     paths:
       - .github/tool-versions.env
       - .github/workflows/tool-versions.yml
+      - .github/workflows/scanners.yml
       - internal/lang/lang.go
 
 permissions: read-all
@@ -46,7 +51,35 @@ jobs:
           check GOLANGCI_LINT_VERSION golangci/golangci-lint "${GOLANGCI_LINT_VERSION}"
           check GORELEASER_VERSION goreleaser/goreleaser "${GORELEASER_VERSION}"
           exit "${behind}"
+      # Each check runs even when an earlier one failed, so one stale pin
+      # does not hide another.
+      - name: Compare scanner pins with the latest releases
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wf=.github/workflows/scanners.yml
+          # pin <NAME>: the value of NAME in the env block of scanners.yml.
+          pin() { sed -n "s/^ *$1: *//p" "${wf}" | head -n 1; }
+          behind=0
+          report() {
+            if [ "$2" = "$3" ]; then
+              echo "$1 is pinned at $2, the latest release."
+            else
+              echo "::error file=${wf}::$1 is pinned at $2 and the latest release is $3. Update the version (and its hash) in ${wf}."
+              behind=1
+            fi
+          }
+          release() { gh release view --repo "$1" --json tagName --jq .tagName | sed 's/^v//'; }
+          report GITLEAKS_VERSION "$(pin GITLEAKS_VERSION)" "$(release gitleaks/gitleaks)"
+          report HADOLINT_VERSION "$(pin HADOLINT_VERSION)" "$(release hadolint/hadolint)"
+          report OSV_SCANNER_VERSION "$(pin OSV_SCANNER_VERSION)" "$(release google/osv-scanner)"
+          report TRIVY_VERSION "$(pin TRIVY_VERSION)" "$(release aquasecurity/trivy)"
+          report SEMGREP_VERSION "$(pin SEMGREP_VERSION)" "$(curl -fsSL https://pypi.org/pypi/semgrep/json | jq -r .info.version)"
+          exit "${behind}"
       - name: Default sandbox images are not near end of life
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           # End-of-life dates of the default sandbox images, from each

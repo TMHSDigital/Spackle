@@ -5,10 +5,14 @@ name: scanners
 # tests, so a scanner release that renames a flag or a field would not be
 # noticed there: the adapter would return nothing and CI would stay green.
 #
-# The five scanners are installed at the versions pinned below, each release
-# file checked against the SHA-256 recorded here. To move to a newer release,
-# change the version and the hash together (the hash is in the checksum file
-# of the release). Nothing updates these pins automatically.
+# The five scanners are installed at the versions pinned below. gitleaks,
+# hadolint, osv-scanner and Trivy are release files checked against the
+# SHA-256 recorded here; to move to a newer release, change the version and
+# the hash together (the hash is in the checksum file of the release).
+# Semgrep is installed from PyPI by version with pipx, which checks no hash
+# and resolves its Python dependencies afresh on each run. Nothing updates
+# these pins automatically: the weekly tool-versions job reports a pin that
+# is behind the latest release.
 
 on:
   schedule:
