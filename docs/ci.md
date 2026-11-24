@@ -53,7 +53,7 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `version` | `latest` | Spackle release to install, for example `v0.1.0`. `latest` resolves the newest release |
 | `fail-on` | `high` | Lowest severity that fails the job: `critical`, `high`, `medium`, `low` or `never` |
 | `upload-sarif` | `true` | Upload the SARIF report to code scanning. Needs `security-events: write` |
-| `provider` | empty | Model provider: `anthropic`, `openai`, `openai-compatible` or `ollama`. Empty runs the deterministic stages only |
+| `provider` | empty | Model provider: `anthropic`, `openai`, `openai-compatible` or `ollama`. Empty runs the deterministic stages only, unless a committed `spackle.toml` has a `[model]` table (see below) |
 | `model` | empty | Model name for the provider |
 | `base-url` | empty | Endpoint for the `openai-compatible` provider |
 | `budget-usd` | `2` | Hard cap on model spend for the run, in USD. Used only when `provider` is set |
@@ -107,6 +107,8 @@ The variable depends on the provider:
 With a model, the run spends money, up to `budget-usd`. The action passes `--yes`, so nobody is asked to confirm the estimate: setting `provider` is the consent. If Spackle has no price for the model (every `openai` model, and most `openai-compatible` endpoints other than OpenRouter), the dollar cap cannot be enforced, so the scan is refused with exit code 2 and the message shows the `[pricing]` table to commit in `spackle.toml`. To run under the token cap alone, set `args: --allow-unpriced`. See [config.md](config.md#pricing).
 
 A committed `spackle.toml` in the scanned repository's working directory is read as usual. Use it for per-stage models, budgets other than the dollar cap, or pricing. Point at a file elsewhere with `args: --config path/to/spackle.toml`.
+
+That file is read even when `provider` is empty. If it has a `[model]` table, the action runs that model, with `--yes`, under the file's `[budget]` (`usd` defaults to 5) instead of `budget-usd`, which is passed only when `provider` is set. The key variable for that provider must then be in the job's `env`, or every run exits 2 because the variable is not set. To keep a job free of model calls in a repository that commits a model, point `args: --config` at a file without a `[model]` table.
 
 ### Scan only what a pull request changed
 

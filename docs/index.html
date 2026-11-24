@@ -485,7 +485,7 @@ jobs:
       - uses: TMHSDigital/Spackle@v0.1.0
         with:
           fail-on: high</code></pre>
-    <p>The action installs a release, verifies its checksum and build provenance, runs the scan, and uploads SARIF so findings appear in GitHub code scanning. By default it runs the deterministic stages, which need no key and cost nothing. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/ci.md">docs/ci.md</a> shows how to add a model and lists every input.</p>
+    <p>The action installs a release, verifies its checksum and build provenance, runs the scan, and uploads SARIF so findings appear in GitHub code scanning. By default it runs the deterministic stages, which need no key and cost nothing; a <code>spackle.toml</code> committed with a <code>[model]</code> table changes that. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/ci.md">docs/ci.md</a> shows how to add a model and lists every input.</p>
   </div>
 </section>
 

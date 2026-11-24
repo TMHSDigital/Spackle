@@ -280,7 +280,7 @@ jobs:
           fail-on: high
 ```
 
-The action installs a release, verifies its checksum and build provenance, runs the scan, and uploads SARIF so findings appear in GitHub code scanning. By default it runs the deterministic stages, which need no key and cost nothing. [docs/ci.md](docs/ci.md) shows how to add a model and lists every input.
+The action installs a release, verifies its checksum and build provenance, runs the scan, and uploads SARIF so findings appear in GitHub code scanning. By default it runs the deterministic stages, which need no key and cost nothing; a `spackle.toml` committed with a `[model]` table changes that. [docs/ci.md](docs/ci.md) shows how to add a model and lists every input.
 
 ## MCP
 

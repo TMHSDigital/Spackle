@@ -25,7 +25,7 @@ inputs:
     required: false
     default: 'true'
   provider:
-    description: Model provider (anthropic, openai, openai-compatible or ollama). Leave empty to run the deterministic stages only, which need no key and cost nothing.
+    description: Model provider (anthropic, openai, openai-compatible or ollama). Leave empty to run the deterministic stages only, which need no key and cost nothing, unless a committed spackle.toml in the working directory has a [model] table; then that model runs, under that file's budget, without confirmation.
     required: false
     default: ''
   model:
