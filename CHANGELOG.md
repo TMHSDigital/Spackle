@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The Semgrep adapter runs Semgrep with the `p/default` rule set instead of `--config auto`, which Semgrep refuses with metrics off. It used to fail on every run, so a scan got no Semgrep leads. Metrics stay off.
 - The lead count shown for each seeder is now the number of its leads the scan reports. In a diff scan (`--since`), and with `[scan] exclude` or `disable_rules`, it used to be the count for the whole target, so the seeder lines did not add up to the lead total.
 - A scan that is cancelled no longer hands further files to the built-in seeders, and a cancelled scan of a small target is reported as stopped early instead of complete.
 - Different rules of the same class that fire at one place (several container hardening rules on one line, several advisories on one lockfile, several missing headers on one page) are now reported as separate findings instead of one. Finding ids of uninvestigated leads change as a result.

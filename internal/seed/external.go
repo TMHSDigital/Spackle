@@ -99,8 +99,11 @@ func External() []Seeder {
 	return []Seeder{
 		&external{
 			name: "semgrep", bin: "semgrep", network: netDownloads, site: "semgrep.dev", leads: semgrepLeads,
+			// A named rule set, not "auto": semgrep refuses --config auto
+			// with metrics off, and metrics stay off so that nothing about
+			// the scanned project is sent. The rules are still downloaded.
 			args: func(root string, _ []walk.File) ([]string, bool) {
-				return []string{"scan", "--json", "--quiet", "--config", "auto", "--metrics", "off", root}, true
+				return []string{"scan", "--json", "--quiet", "--config", "p/default", "--metrics", "off", root}, true
 			},
 		},
 		&external{

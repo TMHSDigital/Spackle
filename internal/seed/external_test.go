@@ -380,7 +380,7 @@ func TestExternalUnavailableNote(t *testing.T) {
 func TestExternalArgs(t *testing.T) {
 	root, files := writeTree(t, map[string]string{"a.py": "x=1\n", "svc/Dockerfile": "FROM a:1\n", "Dockerfile": "FROM a:1\n"})
 	want := map[string]string{
-		"semgrep":     "scan --json --quiet --config auto --metrics off " + root,
+		"semgrep":     "scan --json --quiet --config p/default --metrics off " + root,
 		"gitleaks":    "dir --report-format json --report-path - --redact --no-banner --exit-code 0 " + root,
 		"osv-scanner": "scan source --format json -r " + root,
 		"trivy":       "fs --format json --quiet --scanners vuln,misconfig " + root,
