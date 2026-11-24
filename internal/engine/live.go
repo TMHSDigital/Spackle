@@ -15,7 +15,6 @@ import (
 	"github.com/TMHSDigital/spackle/internal/authz"
 	"github.com/TMHSDigital/spackle/internal/budget"
 	"github.com/TMHSDigital/spackle/internal/dast"
-	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
@@ -37,17 +36,16 @@ var observedClasses = map[string]bool{
 	"cors-misconfiguration": true, "information-disclosure": true,
 }
 
+// liveMaxTurns is how many model turns the assessment of one running-target
+// finding gets. It is fixed: [budget] max_turns does not apply to it.
+const liveMaxTurns = 8
+
 // unauthenticatedNote is recorded in every running-target run.
 const unauthenticatedNote = "Requests were sent without credentials: no login was performed and no session cookie was kept. Pages and endpoints behind a login were not examined."
 
 // runLive scans a running application. The authorized-scope gate comes
 // first: nothing is sent, and no run directory is created, until it passes.
 func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() time.Time) (_ Result, err error) {
-	say := func(format string, a ...any) {
-		if opts.Progress != nil {
-			fmt.Fprintf(opts.Progress, format+"\n", a...)
-		}
-	}
 	cfg := opts.Config
 	grant, err := authz.Gate(tgt.URL, authz.Options{
 		ScopeFile: opts.ScopeFile, Config: cfg.Scope, Yes: opts.Yes,
@@ -69,44 +67,37 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	provs := newProviders(cfg, opts.ProviderFactory)
 	var defaultProv llm.Provider
 	if agentic {
-		if err := provs.checkAll(); err != nil {
-			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
-		}
-		if defaultProv, err = provs.forStage("investigator"); err != nil {
+		if defaultProv, err = preflightModel(provs, "investigator"); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 		est := estimate(cfg, defaultProv, llm.NewPricer(llm.PricesFromConfig(cfg.Pricing)), 12)
-		say("%s", est.String())
+		progressf(opts.Progress, "%s", est.String())
 		if err := confirmEstimate(cfg, cfg.ForStage("investigator"), est, opts.Confirm); err != nil {
 			return Result{}, err
 		}
 	}
 
-	runID := opts.RunID
-	if runID == "" {
-		if runID, err = NewRunID(opts.Config.StateDir, clock()); err != nil {
-			return Result{}, err
-		}
-	}
-	runDir := filepath.Join(RunsDir(cfg.StateDir), runID)
-	led, err := ledger.Create(runDir, clock)
+	runID, err := runIDFor(opts.RunID, cfg.StateDir, clock)
 	if err != nil {
 		return Result{}, err
 	}
-	r := &runner{opts: opts, cfg: cfg, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs}
-	defer func() { _ = led.Close() }()
-	defer r.endOnError(&err)
+	r, err := newRun(opts, cfg, runID, clock, provs)
+	if err != nil {
+		return Result{}, err
+	}
+	defer r.done(&err)
+	led, runDir := r.led, r.runDir
 
 	start := ledger.RunStart{
-		RunID: runID, Version: version.Version, Command: "scan",
-		Target: tgt.Display, TargetKind: string(tgt.Kind), Mode: "deterministic", Offline: cfg.Offline,
+		Command: "scan",
+		Target:  tgt.Display, TargetKind: string(tgt.Kind), Mode: "deterministic",
 		Scope: grant.Summary(), ScopeSource: grant.Source(),
 		Isolation: "not used: running-target findings are demonstrated by recorded requests, not by sandboxed code",
 	}
 	if agentic {
 		start.Mode, start.Provider, start.Model = "agentic", defaultProv.Name(), defaultProv.Model()
 	}
-	startSeq, err := led.Append(0, ledger.TypeRunStart, start)
+	startSeq, err := r.begin(start)
 	if err != nil {
 		return Result{}, err
 	}
@@ -151,7 +142,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 		return Result{}, r.fail(err)
 	}
 
-	say("Probing %s within the authorized scope (%s)", tgt.Display, grant.Summary())
+	r.say("Probing %s within the authorized scope (%s)", tgt.Display, grant.Summary())
 	base, err := dast.Baseline(ctx, client, tgt.URL, dast.Options{})
 	if err != nil {
 		return Result{}, r.fail(fmt.Errorf("the target could not be probed: %w. Check that it is running and reachable from this machine", err))
@@ -251,32 +242,24 @@ func liveFinding(l seed.Lead) finding.Finding {
 // assessLive has a model confirm and explain each running-target finding,
 // with a scope-bound http_request tool for follow-up requests.
 func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, parent map[string]int64, mapSeq int64, client *dast.Client, tgt target.Target) ([]finding.Finding, string, error) {
-	pricer := llm.NewPricer(llm.PricesFromConfig(r.cfg.Pricing))
-	bud, err := budget.New(budget.Caps{
-		Tokens: r.cfg.Budget.Tokens, USD: r.cfg.Budget.USD,
-		Wall: r.cfg.Budget.WallTime.Duration, SandboxRuns: r.cfg.Budget.SandboxRuns,
-	}, r.clock)
+	if err := r.startAgents(); err != nil {
+		return nil, "", err
+	}
+	bud, sealer := r.budget, r.sealer
+	run, err := r.runnerFor("investigator")
 	if err != nil {
 		return nil, "", err
 	}
-	sealer, err := envelope.New()
-	if err != nil {
-		return nil, "", err
-	}
-	prov, err := r.provs.forStage("investigator")
-	if err != nil {
-		return nil, "", err
-	}
-	run := &agent.Runner{Provider: prov, Pricer: pricer, Budget: bud, Ledger: r.led, Stage: "investigator", MaxTurns: 8, MaxTokens: r.cfg.ForStage("investigator").MaxOutputTokens}
+	run.MaxTurns = liveMaxTurns
 	known := func(id string) bool { _, ok := client.Exchange(id); return ok }
 
-	outcome := "completed"
-	var skipped []string
-	capNote := ""
-	notAssessed := func(rest []finding.Finding) {
+	st := capState{outcome: "completed"}
+	notAssessed := func(rest []finding.Finding) []string {
+		var out []string
 		for _, f := range rest {
-			skipped = append(skipped, "Not assessed by a model: "+f.Title+" ("+f.Location.String()+")")
+			out = append(out, "Not assessed by a model: "+f.Title+" ("+f.Location.String()+")")
 		}
+		return out
 	}
 	requestCap := fmt.Sprintf("request cap reached: all %d requests the scope allows for this run have been sent. Raise max_requests in the scope to assess the rest", client.MaxRequests())
 	for i := range findings {
@@ -286,17 +269,11 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 		f := findings[i]
 		if client.AtCap() {
 			// No request is left to probe this finding or any after it.
-			capNote = requestCap
-			notAssessed(findings[i:])
-			outcome = "budget-exhausted"
+			st.exhaust(requestCap, notAssessed(findings[i:])...)
 			break
 		}
 		if berr := bud.Check(); berr != nil {
-			capNote = berr.Error()
-			for _, rest := range findings[i:] {
-				skipped = append(skipped, "Not assessed by a model: "+rest.Title+" ("+rest.Location.String()+")")
-			}
-			outcome = "budget-exhausted"
+			st.exhaust(berr.Error(), notAssessed(findings[i:])...)
 			break
 		}
 		r.say("Assessing %d/%d: %s", i+1, len(findings), f.Title)
@@ -315,11 +292,7 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 		rev, aerr := agent.InvestigateEndpoint(ctx, run, parent[f.ID], sealer, reg, f, text.String(), known)
 		if aerr != nil {
 			if errors.Is(aerr, budget.ErrExhausted) || errors.Is(aerr, dast.ErrRequestCap) {
-				capNote = aerr.Error()
-				for _, rest := range findings[i:] {
-					skipped = append(skipped, "Not assessed by a model: "+rest.Title+" ("+rest.Location.String()+")")
-				}
-				outcome = "budget-exhausted"
+				st.exhaust(aerr.Error(), notAssessed(findings[i:])...)
 				break
 			}
 			if ctx.Err() != nil {
@@ -338,9 +311,7 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 			// The model ran out of requests while it assessed this
 			// finding. What it concluded without them is not a verdict:
 			// the finding keeps its standing and is listed as not assessed.
-			capNote = requestCap
-			notAssessed(findings[i : i+1])
-			outcome = "budget-exhausted"
+			st.exhaust(requestCap, notAssessed(findings[i:i+1])...)
 		case rev.Rejected != "":
 			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: f.ID, Reason: rev.Rejected}); err != nil {
 				return nil, "", err
@@ -358,10 +329,10 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 			}
 		}
 	}
-	if len(skipped) > 0 {
-		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: capNote, Skipped: skipped}); err != nil {
+	if len(st.skipped) > 0 {
+		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: st.capNote, Skipped: st.skipped}); err != nil {
 			return nil, "", err
 		}
 	}
-	return findings, outcome, nil
+	return findings, st.outcome, nil
 }

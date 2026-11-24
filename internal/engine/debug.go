@@ -16,7 +16,6 @@ import (
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
 	"github.com/TMHSDigital/spackle/internal/budget"
 	"github.com/TMHSDigital/spackle/internal/config"
-	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	proglang "github.com/TMHSDigital/spackle/internal/lang"
@@ -27,7 +26,6 @@ import (
 	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/target"
 	"github.com/TMHSDigital/spackle/internal/textx"
-	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -103,15 +101,8 @@ type debugRun struct {
 // revision is given), writes a fix and verifies it. Nothing is executed
 // outside the sandbox and the working tree is never modified.
 func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
-	clock := opts.Clock
-	if clock == nil {
-		clock = time.Now
-	}
-	say := func(format string, a ...any) {
-		if opts.Progress != nil {
-			fmt.Fprintf(opts.Progress, format+"\n", a...)
-		}
-	}
+	clock := clockOr(opts.Clock)
+	say := func(format string, a ...any) { progressf(opts.Progress, format, a...) }
 	cfg := opts.Config
 	test, issue := strings.TrimSpace(opts.Test), strings.TrimSpace(opts.Issue)
 	switch {
@@ -172,9 +163,8 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	case !cfg.Model.Configured():
 		missing = append(missing, "no model is configured (set [model] in spackle.toml, or pass --provider and --model)")
 	default:
-		if perr := provs.checkAll(); perr != nil {
-			missing = append(missing, "the configured model cannot be used ("+perr.Error()+")")
-		} else if prov, perr = provs.forStage("fixer"); perr != nil {
+		var perr error
+		if prov, perr = preflightModel(provs, "fixer"); perr != nil {
 			missing = append(missing, "the configured model cannot be used ("+perr.Error()+")")
 		}
 	}
@@ -204,81 +194,48 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 		return Result{}, err
 	}
 
-	runID := opts.RunID
-	if runID == "" {
-		if runID, err = NewRunID(opts.Config.StateDir, clock()); err != nil {
-			return Result{}, err
-		}
-	}
-	runDir := filepath.Join(RunsDir(cfg.StateDir), runID)
-	led, err := ledger.Create(runDir, clock)
+	runID, err := runIDFor(opts.RunID, cfg.StateDir, clock)
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() { _ = led.Close() }()
-	r := &runner{
-		opts: Options{Target: opts.Target, Config: cfg, Progress: opts.Progress},
-		cfg:  cfg, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs,
+	// The runner's options are the part of a scan's options debug has.
+	r, err := newRun(Options{Target: opts.Target, Config: cfg, Progress: opts.Progress}, cfg, runID, clock, provs)
+	if err != nil {
+		return Result{}, err
 	}
+	defer r.done(&err)
+	led := r.led
 	r.lab = r.newLab(root, m.Tests, rt, "")
-	defer r.endOnError(&err)
 
 	commit := ""
 	if gitx.HasTracked(ctx, root) {
 		commit, _ = gitx.HeadSHA(ctx, root)
 	}
-	startSeq, err := led.Append(0, ledger.TypeRunStart, ledger.RunStart{
-		RunID: runID, Version: version.Version, Command: "debug",
-		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit,
-		Mode: "agentic", Provider: prov.Name(), Model: prov.Model(), Offline: cfg.Offline,
+	startSeq, err := r.begin(ledger.RunStart{
+		Command: "debug",
+		Target:  tgt.Display, TargetKind: string(tgt.Kind), Commit: commit,
+		Mode: "agentic", Provider: prov.Name(), Model: prov.Model(),
 		Isolation: r.lab.isolation(),
 	})
 	if err != nil {
 		return Result{}, err
 	}
-	mapSeq, err := led.Append(startSeq, ledger.TypeMap, ledger.MapSummary{
-		Files: m.FileCount, Skipped: len(m.Skipped), Languages: m.LanguageNames(),
-		Frameworks: m.Frameworks, EntryPoints: len(m.Entry), InfraFiles: len(m.InfraFiles),
-		TestCommand: m.Tests.TestCommand,
-	})
+	mapSeq, err := led.Append(startSeq, ledger.TypeMap, mapSummary(m))
 	if err != nil {
 		return Result{}, err
 	}
 
-	bud, err := budget.New(budget.Caps{
-		Tokens: cfg.Budget.Tokens, USD: cfg.Budget.USD,
-		Wall: cfg.Budget.WallTime.Duration, SandboxRuns: cfg.Budget.SandboxRuns,
-	}, clock)
+	if err := r.startAgents(); err != nil {
+		return Result{}, err
+	}
+	newRegistry := r.registries(root, m.Files)
+	prover, err := r.runnerFor("prover")
 	if err != nil {
-		return Result{}, r.fail(err)
+		return Result{}, err
 	}
-	r.budget = bud
-	sealer, err := envelope.New()
+	fixer, err := r.runnerFor("fixer")
 	if err != nil {
-		return Result{}, r.fail(err)
-	}
-	r.sealer = sealer
-	toolCache := tools.NewCache(m.Files)
-	newRegistry := func() *tools.Registry {
-		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(cfg), Cache: toolCache})
-	}
-	runnerFor := func(stage string) (*agent.Runner, error) {
-		p, perr := provs.forStage(stage)
-		if perr != nil {
-			return nil, perr
-		}
-		return &agent.Runner{
-			Provider: p, Pricer: pricer, Budget: bud, Ledger: led, Stage: stage,
-			MaxTurns: cfg.Budget.MaxTurns, MaxTokens: cfg.ForStage(stage).MaxOutputTokens,
-		}, nil
-	}
-	prover, err := runnerFor("prover")
-	if err != nil {
-		return Result{}, r.fail(err)
-	}
-	fixer, err := runnerFor("fixer")
-	if err != nil {
-		return Result{}, r.fail(err)
+		return Result{}, err
 	}
 
 	d := &debugRun{r: r, l: r.lab, root: root, lang: lang, m: m, test: test, issue: issue, good: opts.Good, seq: mapSeq}

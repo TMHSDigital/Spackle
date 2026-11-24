@@ -22,7 +22,6 @@ import (
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
 	"github.com/TMHSDigital/spackle/internal/textx"
-	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -37,6 +36,7 @@ type runner struct {
 	provs    *providers
 	budget   *budget.Budget
 	sealer   *envelope.Sealer
+	pricer   llm.Pricer
 	lab      *lab
 	// changed is the file set of a diff scan (--since); nil for a full scan.
 	changed map[string]bool
@@ -54,15 +54,8 @@ func (r *runner) say(format string, a ...any) {
 
 // Run executes the pipeline.
 func Run(ctx context.Context, opts Options) (_ Result, err error) {
-	clock := opts.Clock
-	if clock == nil {
-		clock = time.Now
-	}
-	say := func(format string, a ...any) {
-		if opts.Progress != nil {
-			fmt.Fprintf(opts.Progress, format+"\n", a...)
-		}
-	}
+	clock := clockOr(opts.Clock)
+	say := func(format string, a ...any) { progressf(opts.Progress, format, a...) }
 	tgt, err := target.Classify(opts.Target)
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
@@ -87,19 +80,14 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	provs := newProviders(opts.Config, opts.ProviderFactory)
 	var defaultProv llm.Provider
 	if agentic {
-		if err := provs.checkAll(); err != nil {
-			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
-		}
-		if defaultProv, err = provs.forStage("investigator"); err != nil {
+		if defaultProv, err = preflightModel(provs, "investigator"); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 	}
 
-	runID := opts.RunID
-	if runID == "" {
-		if runID, err = NewRunID(opts.Config.StateDir, clock()); err != nil {
-			return Result{}, err
-		}
+	runID, err := runIDFor(opts.RunID, opts.Config.StateDir, clock)
+	if err != nil {
+		return Result{}, err
 	}
 	stateDir := opts.Config.StateDir
 
@@ -233,15 +221,14 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		}
 	}
 
-	runDir := filepath.Join(RunsDir(stateDir), runID)
-	led, err := ledger.Create(runDir, clock)
+	r, err := newRun(opts, opts.Config, runID, clock, provs)
 	if err != nil {
 		return Result{}, err
 	}
 	runCreated = true
-	r := &runner{opts: opts, cfg: opts.Config, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs, changed: changed, resume: resume}
-	defer func() { _ = led.Close() }()
-	defer r.endOnError(&err)
+	defer r.done(&err)
+	r.changed, r.resume = changed, resume
+	led := r.led
 	if agentic {
 		detect := opts.DetectRuntime
 		if detect == nil {
@@ -261,9 +248,9 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		repoPrefix, _ = gitx.Prefix(ctx, root)
 	}
 	start := ledger.RunStart{
-		RunID: runID, Version: version.Version, Command: "scan",
-		Target: tgt.Display, TargetKind: string(tgt.Kind), Commit: commit, Ref: opts.Ref, RepoPrefix: repoPrefix,
-		Mode: "deterministic", Offline: r.cfg.Offline,
+		Command: "scan",
+		Target:  tgt.Display, TargetKind: string(tgt.Kind), Commit: commit, Ref: opts.Ref, RepoPrefix: repoPrefix,
+		Mode:      "deterministic",
 		Isolation: "not used: no proof of concept was run",
 	}
 	if tgt.Kind == target.KindPath {
@@ -276,16 +263,12 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		start.Mode, start.Provider, start.Model = "agentic", defaultProv.Name(), defaultProv.Model()
 		start.Isolation = r.lab.isolation()
 	}
-	startSeq, err := led.Append(0, ledger.TypeRunStart, start)
+	startSeq, err := r.begin(start)
 	if err != nil {
 		return Result{}, err
 	}
 
-	mapSeq, err := led.Append(startSeq, ledger.TypeMap, ledger.MapSummary{
-		Files: m.FileCount, Skipped: len(m.Skipped), Languages: m.LanguageNames(),
-		Frameworks: m.Frameworks, EntryPoints: len(m.Entry), InfraFiles: len(m.InfraFiles),
-		TestCommand: m.Tests.TestCommand,
-	})
+	mapSeq, err := led.Append(startSeq, ledger.TypeMap, mapSummary(m))
 	if err != nil {
 		return Result{}, err
 	}

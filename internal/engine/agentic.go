@@ -11,7 +11,6 @@ import (
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
 	"github.com/TMHSDigital/spackle/internal/budget"
 	"github.com/TMHSDigital/spackle/internal/config"
-	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
@@ -128,41 +127,78 @@ func estimate(cfg config.Config, prov llm.Provider, pricer llm.Pricer, leads int
 	return Estimate{Investigations: n, Model: prov.Model(), USD: usd, CostKnown: known, Local: prov.Local(), CapUSD: cfg.Budget.USD, CapTokens: cfg.Budget.Tokens}
 }
 
+// fateKind says what a run did with a lead.
+type fateKind int
+
+const (
+	fateNone       fateKind = iota // not selected for investigation in this run
+	fateFound                      // an investigated finding stands for the lead
+	fateDismissed                  // investigated and not confirmed
+	fateIncomplete                 // the investigation gave no usable result
+)
+
+// leadFate is the fate of one lead. reason is the investigator's reason for
+// a dismissal, or what went wrong for an incomplete investigation.
+type leadFate struct {
+	kind   fateKind
+	reason string
+}
+
+// agenticState is what the investigations of one run build up.
+type agenticState struct {
+	capState
+	findings []finding.Finding
+	// parent maps a finding id to the ledger event the finding descends from.
+	parent map[string]int64
+	// fates maps a lead id to what happened to the lead.
+	fates map[string]leadFate
+	// interrupted is set when the operator cancels the run. The loop then
+	// stops, and everything found so far is still reported.
+	interrupted bool
+}
+
+func newAgenticState() *agenticState {
+	return &agenticState{capState: capState{outcome: "completed"}, parent: map[string]int64{}, fates: map[string]leadFate{}}
+}
+
+// settle records one fate for every lead of an investigation.
+func (st *agenticState) settle(leadIDs []string, kind fateKind, reason string) {
+	for _, id := range leadIDs {
+		st.fates[id] = leadFate{kind: kind, reason: reason}
+	}
+}
+
+// agenticStages is what one investigation needs besides its intent: the
+// target, the leads, the runner of each stage, and the tool registry maker.
+type agenticStages struct {
+	root                                  string
+	leads                                 []seed.Lead
+	investigator, reviewer, prover, fixer *agent.Runner
+	newRegistry                           func() *tools.Registry
+}
+
+// nextStep says how the investigation loop goes on after one investigation.
+type nextStep int
+
+const (
+	// goOn: take the next investigation.
+	goOn nextStep = iota
+	// stopBefore: this investigation did not finish. It and the ones after
+	// it are listed as not investigated.
+	stopBefore
+	// stopAfter: this investigation is finished, and the ones after it are
+	// listed as not investigated.
+	stopAfter
+)
+
 // agentic runs the model-driven stages and returns the findings, the ledger
 // event each finding descends from, and the run outcome.
 func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads []seed.Lead, leadSeq map[string]int64, mapSeq int64) ([]finding.Finding, map[string]int64, string, error) {
-	parent := map[string]int64{}
-	pricer := llm.NewPricer(llm.PricesFromConfig(r.cfg.Pricing))
-	bud, err := budget.New(budget.Caps{
-		Tokens: r.cfg.Budget.Tokens, USD: r.cfg.Budget.USD,
-		Wall: r.cfg.Budget.WallTime.Duration, SandboxRuns: r.cfg.Budget.SandboxRuns,
-	}, r.clock)
-	if err != nil {
+	if err := r.startAgents(); err != nil {
 		return nil, nil, "", err
 	}
-	r.budget = bud
-	sealer, err := envelope.New()
-	if err != nil {
-		return nil, nil, "", err
-	}
-	r.sealer = sealer
-	// One cache for the whole run: every stage of every investigation gets
-	// its own registry, and without it each would list the target and scan
-	// its files for secrets again.
-	toolCache := tools.NewCache(m.Files)
-	newRegistry := func() *tools.Registry {
-		return tools.NewRegistry(tools.Env{Root: root, Sealer: sealer, Walk: walkOptions(r.cfg), Cache: toolCache})
-	}
-	runnerFor := func(stage string) (*agent.Runner, error) {
-		prov, err := r.provs.forStage(stage)
-		if err != nil {
-			return nil, err
-		}
-		return &agent.Runner{
-			Provider: prov, Pricer: pricer, Budget: bud, Ledger: r.led, Stage: stage,
-			MaxTurns: r.cfg.Budget.MaxTurns, MaxTokens: r.cfg.ForStage(stage).MaxOutputTokens,
-		}, nil
-	}
+	st := newAgenticState()
+	sg := agenticStages{root: root, leads: leads, newRegistry: r.registries(root, m.Files)}
 
 	limit := maxIntents
 	if mf := r.cfg.Budget.MaxFindings; mf > 0 && mf < limit {
@@ -172,14 +208,10 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	// Plan.
 	r.say("Planning investigations")
 	var intents []agent.Intent
-	planner, err := runnerFor("planner")
+	planner, err := r.runnerFor("planner")
 	if err != nil {
 		return nil, nil, "", err
 	}
-	// interrupted is set when the operator cancels the run. The loop then
-	// stops, and everything found so far is still reported.
-	interrupted := false
-	planCap := ""
 	// In a diff scan the planner sees the entry points and trust boundaries
 	// of the changed files only, and may plan for those files only. The
 	// investigators still read the whole tree.
@@ -193,14 +225,15 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	if r.resume != nil {
 		intents = agent.ResumePlan(r.resume.intents, planMap, leads, limit)
 	} else {
-		intents, perr = agent.Plan(ctx, planner, mapSeq, sealer, planMap, leads, limit)
+		intents, perr = agent.Plan(ctx, planner, mapSeq, r.sealer, planMap, leads, limit)
 	}
 	if r.resume == nil && (perr != nil || len(intents) == 0) {
 		switch {
 		case ctx.Err() != nil:
-			intents, interrupted = nil, true
+			intents, st.interrupted = nil, true
 		case errors.Is(perr, budget.ErrExhausted):
-			intents, planCap = nil, perr.Error()
+			intents = nil
+			st.exhaust(perr.Error(), "Planning did not finish, so no lead was investigated.")
 		default:
 			note := "The planner returned no usable plan, so investigations were planned directly from scanner leads."
 			if perr != nil {
@@ -222,154 +255,48 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	}
 
 	// Investigate, then review each result while its context is cheap.
-	investigator, err := runnerFor("investigator")
-	if err != nil {
-		return nil, nil, "", err
+	for _, s := range []struct {
+		stage string
+		into  **agent.Runner
+	}{{"investigator", &sg.investigator}, {"reviewer", &sg.reviewer}, {"prover", &sg.prover}, {"fixer", &sg.fixer}} {
+		if *s.into, err = r.runnerFor(s.stage); err != nil {
+			return nil, nil, "", err
+		}
 	}
-	reviewer, err := runnerFor("reviewer")
-	if err != nil {
-		return nil, nil, "", err
-	}
-	prover, err := runnerFor("prover")
-	if err != nil {
-		return nil, nil, "", err
-	}
-	fixer, err := runnerFor("fixer")
-	if err != nil {
-		return nil, nil, "", err
-	}
-	invProv := investigator.Provider
-	estUSD, _ := pricer.EstimateCost(invProv.Model(), invProv.Local(), estInputPerIntent/2, estOutputPerIntent/2)
+	invProv := sg.investigator.Provider
+	estUSD, _ := r.pricer.EstimateCost(invProv.Model(), invProv.Local(), estInputPerIntent/2, estOutputPerIntent/2)
 
-	var findings []finding.Finding
-	leadState := map[string]string{} // lead id -> "found" | "dismissed:<reason>" | "incomplete:<reason>"
-	outcome := "completed"
-	var skipped []string
-	capNote := planCap
-	if planCap != "" {
-		outcome = "budget-exhausted"
-		skipped = append(skipped, "Planning did not finish, so no lead was investigated.")
-	}
 	// notInvestigated records the intents from i on as skipped.
 	notInvestigated := func(i int) {
 		for _, rest := range intents[i:] {
-			skipped = append(skipped, fmt.Sprintf(notInvestigatedPrefix+"%s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
+			st.skipped = append(st.skipped, fmt.Sprintf(notInvestigatedPrefix+"%s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
 		}
 	}
-	// record appends a finished finding to the ledger at once, so an
-	// interrupt or a later failure cannot lose it. The ranked findings are
-	// appended again at the end of the run; the ledger keeps the latest
-	// event per id.
-	record := func(f finding.Finding, seq int64) error {
-		if f.Validate() != nil {
-			return nil // reported as a reject when the run ends
-		}
-		_, err := r.led.Append(seq, ledger.TypeFinding, f)
-		return err
-	}
-
 	for i, it := range intents {
+		var step nextStep
 		if ctx.Err() != nil {
-			interrupted = true
+			st.interrupted, step = true, stopBefore
+		} else if berr := r.budget.CanAfford(estInputPerIntent/2, estUSD); berr != nil {
+			st.exhaust(berr.Error())
+			step = stopBefore
+		} else {
+			r.say("Investigating %d/%d: %s", i+1, len(intents), it.Title)
+			if step, err = r.investigateOne(ctx, st, sg, it, intentSeq[it.ID]); err != nil {
+				return nil, nil, "", err
+			}
+		}
+		if step == stopBefore {
 			notInvestigated(i)
 			break
 		}
-		if berr := bud.CanAfford(estInputPerIntent/2, estUSD); berr != nil {
-			capNote = berr.Error()
-			notInvestigated(i)
-			outcome = "budget-exhausted"
-			break
-		}
-		r.say("Investigating %d/%d: %s", i+1, len(intents), it.Title)
-		inv, ierr := agent.Investigate(ctx, investigator, intentSeq[it.ID], root, sealer, newRegistry(), it, leads)
-		if ierr != nil {
-			if errors.Is(ierr, budget.ErrExhausted) {
-				capNote = ierr.Error()
-				notInvestigated(i)
-				outcome = "budget-exhausted"
-				break
-			}
-			if ctx.Err() != nil {
-				interrupted = true
-				notInvestigated(i)
-				break
-			}
-			// A provider failure on one investigation should not discard
-			// the rest of the run. Record it and move on.
-			reason := "the investigation failed: " + textx.Clip(ierr.Error(), 300)
-			if _, err := r.led.Append(intentSeq[it.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: it.ID + " " + it.Title, Reason: reason}); err != nil {
-				return nil, nil, "", err
-			}
-			for _, id := range it.LeadIDs {
-				leadState[id] = "incomplete:" + reason
-			}
-			continue
-		}
-		switch {
-		case inv.Finding != nil:
-			f := *inv.Finding
-			vseq := intentSeq[it.ID]
-			rev, rerr := agent.ReviewFinding(ctx, reviewer, vseq, sealer, newRegistry(), f)
-			switch {
-			case rerr == nil:
-				f = agent.ApplyReview(f, rev)
-				outcomeName := rev.Verdict
-				if rev.Verdict == agent.ReviewRefuted {
-					outcomeName = "dismissed"
-				}
-				if _, err := r.led.Append(vseq, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "reviewer", Outcome: outcomeName, Reason: rev.Reason}); err != nil {
-					return nil, nil, "", err
-				}
-			case errors.Is(rerr, budget.ErrExhausted):
-				f.Confidence.Reason += " Not reviewed: the budget ran out first."
-				capNote = rerr.Error()
-			default:
-				f.Confidence.Reason += " Not reviewed: the review call failed."
-			}
-			if f.Status == finding.StatusOpen {
-				var perr error
-				f, perr = r.lab.proveAndFix(ctx, f, vseq, prover, fixer, newRegistry)
-				switch {
-				case perr == nil:
-				case errors.Is(perr, budget.ErrExhausted):
-					capNote = perr.Error()
-				case ctx.Err() != nil:
-					// The finding itself is complete; only its proof or
-					// fix was cut short. Keep it.
-					interrupted = true
-					notInvestigated(i + 1)
-				default:
-					// One failed proof or fix step must not end the run.
-					// The finding stays as it was traced.
-					if _, err := r.led.Append(vseq, ledger.TypeReject, ledger.Reject{Stage: "prover", Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + textx.Clip(perr.Error(), 300)}); err != nil {
-						return nil, nil, "", err
-					}
-				}
-			}
-			parent[f.ID] = vseq
-			findings = append(findings, f)
-			if err := record(f, vseq); err != nil {
-				return nil, nil, "", err
-			}
-			for _, id := range it.LeadIDs {
-				leadState[id] = "found"
-			}
-		case inv.NoFinding != "":
-			for _, id := range it.LeadIDs {
-				leadState[id] = "dismissed:" + inv.NoFinding
-			}
-		default:
-			for _, id := range it.LeadIDs {
-				leadState[id] = "incomplete:" + inv.Rejected
-			}
-		}
-		if interrupted {
+		if step == stopAfter {
+			notInvestigated(i + 1)
 			break
 		}
 	}
-	if interrupted {
-		outcome = "interrupted"
-		capNote = "interrupted by the operator"
+	if st.interrupted {
+		st.outcome = "interrupted"
+		st.capNote = "interrupted by the operator"
 		r.say("Interrupted: writing the findings produced so far")
 		// The run's context is cancelled. The remaining steps are local and
 		// short, so they get a fresh context with its own limit.
@@ -378,12 +305,137 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		defer cancel()
 	}
 
-	// Leads that did not become an investigated finding are still reported,
-	// labelled for exactly what happened to them.
+	if err := r.leftoverFindings(st, leads, leadSeq, mapSeq); err != nil {
+		return nil, nil, "", err
+	}
+	if err := r.publishFixes(ctx, st, mapSeq); err != nil {
+		return nil, nil, "", err
+	}
+
+	// Look for chains across confirmed findings. Optional: skip when the
+	// budget is gone, and never fail the run over it.
+	if !st.interrupted && r.budget.Check() == nil {
+		if mech, merr := r.runnerFor("mechanical"); merr == nil {
+			if linked, cerr := agent.Correlate(ctx, mech, mapSeq, r.sealer, st.findings); cerr == nil {
+				st.findings = linked
+			} else if errors.Is(cerr, budget.ErrExhausted) {
+				st.capNote = cerr.Error()
+			}
+		}
+	}
+
+	if len(st.skipped) > 0 || st.capNote != "" {
+		if st.capNote == "" {
+			st.capNote = "budget"
+		}
+		if len(st.skipped) == 0 {
+			st.skipped = []string{"Later optional stages (review or chain analysis) were cut short."}
+		}
+		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: st.capNote, Skipped: st.skipped}); err != nil {
+			return nil, nil, "", err
+		}
+	}
+	return st.findings, st.parent, st.outcome, nil
+}
+
+// investigateOne runs one planned investigation: the investigator, then for
+// a finding the reviewer, the proof and the fix. seq is the ledger event of
+// the intent. It records in st what became of the intent's leads and any
+// finding, and returns how the loop goes on. A cap that is reached or an
+// interrupt is not an error: it is recorded in st. The error is for a
+// ledger that cannot be written.
+func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenticStages, it agent.Intent, seq int64) (nextStep, error) {
+	inv, ierr := agent.Investigate(ctx, sg.investigator, seq, sg.root, r.sealer, sg.newRegistry(), it, sg.leads)
+	if ierr != nil {
+		if errors.Is(ierr, budget.ErrExhausted) {
+			st.exhaust(ierr.Error())
+			return stopBefore, nil
+		}
+		if ctx.Err() != nil {
+			st.interrupted = true
+			return stopBefore, nil
+		}
+		// A provider failure on one investigation should not discard
+		// the rest of the run. Record it and move on.
+		reason := "the investigation failed: " + textx.Clip(ierr.Error(), 300)
+		if _, err := r.led.Append(seq, ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: it.ID + " " + it.Title, Reason: reason}); err != nil {
+			return goOn, err
+		}
+		st.settle(it.LeadIDs, fateIncomplete, reason)
+		return goOn, nil
+	}
+	if inv.Finding == nil {
+		if inv.NoFinding != "" {
+			st.settle(it.LeadIDs, fateDismissed, inv.NoFinding)
+		} else {
+			st.settle(it.LeadIDs, fateIncomplete, inv.Rejected)
+		}
+		return goOn, nil
+	}
+
+	f := *inv.Finding
+	step := goOn
+	rev, rerr := agent.ReviewFinding(ctx, sg.reviewer, seq, r.sealer, sg.newRegistry(), f)
+	switch {
+	case rerr == nil:
+		f = agent.ApplyReview(f, rev)
+		outcomeName := rev.Verdict
+		if rev.Verdict == agent.ReviewRefuted {
+			outcomeName = "dismissed"
+		}
+		if _, err := r.led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "reviewer", Outcome: outcomeName, Reason: rev.Reason}); err != nil {
+			return goOn, err
+		}
+	case errors.Is(rerr, budget.ErrExhausted):
+		f.Confidence.Reason += " Not reviewed: the budget ran out first."
+		st.capNote = rerr.Error()
+	default:
+		f.Confidence.Reason += " Not reviewed: the review call failed."
+	}
+	if f.Status == finding.StatusOpen {
+		var perr error
+		f, perr = r.lab.proveAndFix(ctx, f, seq, sg.prover, sg.fixer, sg.newRegistry)
+		switch {
+		case perr == nil:
+		case errors.Is(perr, budget.ErrExhausted):
+			st.capNote = perr.Error()
+		case ctx.Err() != nil:
+			// The finding itself is complete; only its proof or fix was
+			// cut short. Keep it.
+			st.interrupted = true
+			step = stopAfter
+		default:
+			// One failed proof or fix step must not end the run. The
+			// finding stays as it was traced.
+			if _, err := r.led.Append(seq, ledger.TypeReject, ledger.Reject{Stage: "prover", Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + textx.Clip(perr.Error(), 300)}); err != nil {
+				return goOn, err
+			}
+		}
+	}
+	st.parent[f.ID] = seq
+	st.findings = append(st.findings, f)
+	// The finished finding goes into the ledger at once, so an interrupt or
+	// a later failure cannot lose it. The ranked findings are appended again
+	// at the end of the run; the ledger keeps the latest event per id. One
+	// that does not validate is reported as a reject when the run ends.
+	if f.Validate() == nil {
+		if _, err := r.led.Append(seq, ledger.TypeFinding, f); err != nil {
+			return goOn, err
+		}
+	}
+	st.settle(it.LeadIDs, fateFound, "")
+	return step, nil
+}
+
+// leftoverFindings adds what the investigations did not turn into a finding
+// of their own. Leads that did not become an investigated finding are still
+// reported, labelled for exactly what happened to them, and in a resumed run
+// the findings of the earlier run are carried over.
+func (r *runner) leftoverFindings(st *agenticState, leads []seed.Lead, leadSeq map[string]int64, mapSeq int64) error {
 	investigated := map[string]int{}
-	for i := range findings {
-		if _, seen := investigated[findings[i].ID]; !seen {
-			investigated[findings[i].ID] = i
+	for i := range st.findings {
+		if _, seen := investigated[st.findings[i].ID]; !seen {
+			investigated[st.findings[i].ID] = i
 		}
 	}
 	// In a resumed run the earlier run's findings stand unless this run
@@ -397,27 +449,27 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		for _, f := range r.resume.findings {
 			carried[f.ID] = true
 		}
-		for i := range findings {
-			decided[findings[i].ID] = true
+		for i := range st.findings {
+			decided[st.findings[i].ID] = true
 		}
 	}
 	for _, l := range leads {
-		state := leadState[l.ID]
+		fate := st.fates[l.ID]
 		var f finding.Finding
-		switch {
-		case state == "found":
+		switch fate.kind {
+		case fateFound:
 			// The investigated finding stands for this lead, also where
 			// the earlier run reported the lead by itself.
 			if r.resume != nil {
 				decided[FromLead(l, "").ID] = true
 			}
 			continue
-		case strings.HasPrefix(state, "dismissed:"):
+		case fateDismissed:
 			f = FromLead(l, "Investigated by reading the code and not confirmed.")
 			f.Status = finding.StatusDismissed
-			f.DismissReason = "Investigated and not confirmed: " + strings.TrimPrefix(state, "dismissed:")
-		case strings.HasPrefix(state, "incomplete:"):
-			f = FromLead(l, "The investigation of this lead did not produce a usable result ("+textx.Clip(strings.TrimPrefix(state, "incomplete:"), 200)+"), so it is reported as an unconfirmed lead.")
+			f.DismissReason = "Investigated and not confirmed: " + fate.reason
+		case fateIncomplete:
+			f = FromLead(l, "The investigation of this lead did not produce a usable result ("+textx.Clip(fate.reason, 200)+"), so it is reported as an unconfirmed lead.")
 		default:
 			f = FromLead(l, "This lead was not selected for investigation in this run, so it is reported as an unconfirmed lead.")
 			// This run did not look at the lead. When the earlier run
@@ -430,77 +482,60 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		decided[f.ID] = true
 		if verr := f.Validate(); verr != nil {
 			if _, err := r.led.Append(leadSeq[l.ID], ledger.TypeReject, ledger.Reject{Stage: "seed", Intent: l.ID, Reason: verr.Error()}); err != nil {
-				return nil, nil, "", err
+				return err
 			}
 			continue
 		}
 		// An investigated finding of the same class at the same place
 		// already covers this lead: keep the lead as one of its origins.
 		if i, ok := investigated[finding.MakeID(l.Class, f.Location)]; ok {
-			findings[i].Origin = finding.UnionOrigins(findings[i].Origin, f.Origin)
+			st.findings[i].Origin = finding.UnionOrigins(st.findings[i].Origin, f.Origin)
 			continue
 		}
-		if _, seen := parent[f.ID]; !seen {
-			parent[f.ID] = leadSeq[l.ID]
+		if _, seen := st.parent[f.ID]; !seen {
+			st.parent[f.ID] = leadSeq[l.ID]
 		}
-		findings = append(findings, f)
+		st.findings = append(st.findings, f)
 	}
 	if r.resume != nil {
 		for _, f := range r.resume.findings {
 			if decided[f.ID] {
 				continue
 			}
-			if _, seen := parent[f.ID]; !seen {
-				parent[f.ID] = mapSeq
+			if _, seen := st.parent[f.ID]; !seen {
+				st.parent[f.ID] = mapSeq
 			}
-			findings = append(findings, f)
+			st.findings = append(st.findings, f)
 		}
 	}
-	findings = finding.Dedup(findings)
+	st.findings = finding.Dedup(st.findings)
+	return nil
+}
 
-	// Put accepted fixes on a branch of their own.
-	if branch, note := r.lab.branchFixes(ctx); note != "" {
-		if _, err := r.led.Append(mapSeq, ledger.TypeNote, note); err != nil {
-			return nil, nil, "", err
-		}
-		if branch != "" {
-			var fixed []finding.Finding
-			for i := range findings {
-				if findings[i].Remediation.Patch != "" && r.lab.branched[findings[i].ID] {
-					findings[i].Remediation.Branch = branch
-					fixed = append(fixed, findings[i])
-				}
-			}
-			if r.cfg.Fix.PR && !interrupted {
-				if _, err := r.led.Append(mapSeq, ledger.TypeNote, r.lab.openPR(ctx, branch, fixed)); err != nil {
-					return nil, nil, "", err
-				}
-			}
+// publishFixes puts the accepted fixes on a branch of their own and, with
+// --pr, opens the pull request for it.
+func (r *runner) publishFixes(ctx context.Context, st *agenticState, mapSeq int64) error {
+	branch, note := r.lab.branchFixes(ctx)
+	if note == "" {
+		return nil
+	}
+	if _, err := r.led.Append(mapSeq, ledger.TypeNote, note); err != nil {
+		return err
+	}
+	if branch == "" {
+		return nil
+	}
+	var fixed []finding.Finding
+	for i := range st.findings {
+		if st.findings[i].Remediation.Patch != "" && r.lab.branched[st.findings[i].ID] {
+			st.findings[i].Remediation.Branch = branch
+			fixed = append(fixed, st.findings[i])
 		}
 	}
-
-	// Look for chains across confirmed findings. Optional: skip when the
-	// budget is gone, and never fail the run over it.
-	if !interrupted && bud.Check() == nil {
-		if mech, merr := runnerFor("mechanical"); merr == nil {
-			if linked, cerr := agent.Correlate(ctx, mech, mapSeq, sealer, findings); cerr == nil {
-				findings = linked
-			} else if errors.Is(cerr, budget.ErrExhausted) {
-				capNote = cerr.Error()
-			}
+	if r.cfg.Fix.PR && !st.interrupted {
+		if _, err := r.led.Append(mapSeq, ledger.TypeNote, r.lab.openPR(ctx, branch, fixed)); err != nil {
+			return err
 		}
 	}
-
-	if len(skipped) > 0 || capNote != "" {
-		if capNote == "" {
-			capNote = "budget"
-		}
-		if len(skipped) == 0 {
-			skipped = []string{"Later optional stages (review or chain analysis) were cut short."}
-		}
-		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: capNote, Skipped: skipped}); err != nil {
-			return nil, nil, "", err
-		}
-	}
-	return findings, parent, outcome, nil
+	return nil
 }
