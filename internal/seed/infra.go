@@ -2,7 +2,6 @@ package seed
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/finding"
@@ -30,8 +29,14 @@ func isTerraformPath(rel string) bool {
 	return strings.HasSuffix(low, ".tf") || strings.HasSuffix(low, ".tfvars")
 }
 
-func (infraSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
-	return eachFile(ctx, "built-in infrastructure checks", files, func(f walk.File) ([]Lead, error) {
+func (s infraSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
+	return runAlone(ctx, s, files)
+}
+
+func (infraSeeder) label() string { return "built-in infrastructure checks" }
+
+func (infraSeeder) checks() func(walk.File) func(string) []Lead {
+	return func(f walk.File) func(string) []Lead {
 		var check func(rel, text string) []Lead
 		switch {
 		case f.Lang == "dockerfile":
@@ -43,14 +48,10 @@ func (infraSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead
 		case f.Lang == "yaml":
 			check = k8sLeads
 		default:
-			return nil, nil
+			return nil
 		}
-		text, err := walk.ReadText(f.Abs)
-		if err != nil {
-			return nil, fmt.Errorf("built-in infrastructure checks could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
-		}
-		return check(f.Rel, text), nil
-	})
+		return func(text string) []Lead { return check(f.Rel, text) }
+	}
 }
 
 // infraCheck is the fixed part of an infrastructure lead.

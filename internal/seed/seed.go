@@ -78,15 +78,40 @@ type Status struct {
 
 // RunAll runs every available seeder and returns the merged, sorted leads.
 // One failing seeder does not stop the others: its error is recorded in its
-// Status and the run continues.
-func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.File) ([]Lead, []Status) {
+// Status and the run continues. texts may hold file texts that an earlier
+// stage already read; nil means every file is read here.
+func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.File, texts *walk.Texts) ([]Lead, []Status) {
+	// The built-in seeders that work file by file share one pass, so a
+	// file is read once for all of them.
+	var shared []fileSeeder
+	var sharedAt []int
+	for i, s := range seeders {
+		if fs, ok := s.(fileSeeder); ok {
+			if avail, _ := s.Available(); avail {
+				shared, sharedAt = append(shared, fs), append(sharedAt, i)
+			}
+		}
+	}
+	sharedRun := map[int]fileRun{}
+	if len(shared) > 0 {
+		for j, r := range runFiles(ctx, shared, files, texts) {
+			sharedRun[sharedAt[j]] = r
+		}
+	}
+
 	var leads []Lead
 	var statuses []Status
-	for _, s := range seeders {
+	for i, s := range seeders {
 		st := Status{Name: s.Name()}
 		st.Available, st.Note = s.Available()
 		if st.Available {
-			got, err := s.Run(ctx, root, files)
+			var got []Lead
+			var err error
+			if r, ok := sharedRun[i]; ok {
+				got, err = r.leads, r.err
+			} else {
+				got, err = s.Run(ctx, root, files)
+			}
 			if err != nil {
 				st.Error = err.Error()
 			}
@@ -191,18 +216,101 @@ func Sort(leads []Lead) []Lead {
 	return leads
 }
 
-// eachFile runs check over files in a worker pool sized to the machine and
-// returns the leads in file order, so the result does not depend on
-// scheduling. check returns nil leads for a file it does not handle. The
-// first error in file order is returned with the leads of the other files:
-// one unreadable file must not hide the rest. what names the seeder in the
-// message for a cancelled run.
-func eachFile(ctx context.Context, what string, files []walk.File, check func(f walk.File) ([]Lead, error)) ([]Lead, error) {
-	type result struct {
-		leads []Lead
-		err   error
+// fileSeeder is a built-in seeder that examines one file at a time. RunAll
+// runs all of them in one pass over the files, so a file is read once
+// however many seeders want it.
+type fileSeeder interface {
+	Seeder
+	// label names the seeder in messages, for example "built-in code rules".
+	label() string
+	// checks returns the function that picks the check for one file: nil
+	// for a file the seeder does not handle, otherwise the function that
+	// turns the text of that file into leads.
+	checks() func(f walk.File) func(text string) []Lead
+}
+
+// fileRun is what one file seeder produced in a shared pass.
+type fileRun struct {
+	leads []Lead
+	err   error
+}
+
+// runAlone runs one file seeder by itself, for its Run method.
+func runAlone(ctx context.Context, s fileSeeder, files []walk.File) ([]Lead, error) {
+	r := runFiles(ctx, []fileSeeder{s}, files, nil)[0]
+	return r.leads, r.err
+}
+
+// runFiles runs the seeders over files in one pass and returns one result
+// per seeder, in the order given. A file is read once, and only when a
+// seeder handles it; a text an earlier stage already read is taken from
+// texts. Each seeder gets its leads in file order and its first read error
+// in file order, with the leads of the other files: one unreadable file
+// must not hide the rest. A cancelled run returns the leads found so far
+// and an error that says it stopped early.
+func runFiles(ctx context.Context, seeders []fileSeeder, files []walk.File, texts *walk.Texts) []fileRun {
+	pick := make([]func(walk.File) func(string) []Lead, len(seeders))
+	for i, s := range seeders {
+		pick[i] = s.checks()
 	}
-	results := make([]result, len(files))
+	type result struct {
+		leads [][]Lead // per seeder; nil when no seeder handled the file
+		err   error    // the read error, for the seeders in wants
+		wants []bool
+	}
+	results, covered := eachFile(ctx, files, func(f walk.File) result {
+		checks := make([]func(string) []Lead, len(seeders))
+		wants := make([]bool, len(seeders))
+		handled := false
+		for i := range seeders {
+			checks[i] = pick[i](f)
+			wants[i] = checks[i] != nil
+			handled = handled || wants[i]
+		}
+		if !handled {
+			return result{}
+		}
+		text, ok := texts.Take(f.Abs)
+		if !ok {
+			var err error
+			if text, err = walk.ReadText(f.Abs); err != nil {
+				return result{err: err, wants: wants}
+			}
+		}
+		leads := make([][]Lead, len(seeders))
+		for i, check := range checks {
+			if check != nil {
+				leads[i] = check(text)
+			}
+		}
+		return result{leads: leads}
+	})
+
+	runs := make([]fileRun, len(seeders))
+	for n, r := range results {
+		for i, s := range seeders {
+			if r.leads != nil {
+				runs[i].leads = append(runs[i].leads, r.leads[i]...)
+			}
+			if r.err != nil && r.wants[i] && runs[i].err == nil {
+				runs[i].err = fmt.Errorf("%s could not read %s: %w; check the file's permissions and rerun", s.label(), files[n].Rel, r.err)
+			}
+		}
+	}
+	if !covered {
+		for i, s := range seeders {
+			runs[i].err = fmt.Errorf("%s stopped early: %w; rerun the scan to cover the remaining files", s.label(), ctx.Err())
+		}
+	}
+	return runs
+}
+
+// eachFile runs check over files in a worker pool sized to the machine and
+// returns the results in file order, so the outcome does not depend on
+// scheduling. covered is false when the run was cancelled before every file
+// was handed to a worker; a file that was not keeps the zero result.
+func eachFile[T any](ctx context.Context, files []walk.File, check func(f walk.File) T) (results []T, covered bool) {
+	results = make([]T, len(files))
 	next := make(chan int)
 	var wg sync.WaitGroup
 	workers := min(runtime.GOMAXPROCS(0), len(files))
@@ -211,7 +319,7 @@ func eachFile(ctx context.Context, what string, files []walk.File, check func(f 
 		go func() {
 			defer wg.Done()
 			for i := range next {
-				results[i].leads, results[i].err = check(files[i])
+				results[i] = check(files[i])
 			}
 		}()
 	}
@@ -235,21 +343,5 @@ feed:
 	wg.Wait()
 	// Every file that was handed out has been checked, so the run stopped
 	// early exactly when some file was never handed out.
-	var stopped error
-	if handed < len(files) {
-		stopped = fmt.Errorf("%s stopped early: %w; rerun the scan to cover the remaining files", what, ctx.Err())
-	}
-
-	var leads []Lead
-	var firstErr error
-	for _, r := range results {
-		leads = append(leads, r.leads...)
-		if r.err != nil && firstErr == nil {
-			firstErr = r.err
-		}
-	}
-	if stopped != nil {
-		return leads, stopped
-	}
-	return leads, firstErr
+	return results, handed == len(files)
 }

@@ -129,7 +129,10 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	// Map and seed before asking for confirmation, so the estimate reflects
 	// the real number of leads. Neither stage uses a model or costs money.
 	say("Mapping %s", tgt.Display)
-	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(stateDir, "cache"), Walk: walkOptions(opts.Config)})
+	// The mapper hands the text of each file it reads to the seeders, so a
+	// file is read once per scan.
+	texts := walk.NewTexts()
+	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(stateDir, "cache"), Walk: walkOptions(opts.Config), Texts: texts})
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
@@ -141,7 +144,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		seeders = offlineSeeders(seeders)
 	}
 	say("Running %d seeders", len(seeders))
-	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files)
+	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files, texts)
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 
 	if opts.DryRun {

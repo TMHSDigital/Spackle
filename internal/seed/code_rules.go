@@ -2,7 +2,6 @@ package seed
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -124,24 +123,25 @@ func inRegexLiteral(line string, i int) bool {
 }
 
 func (s codeSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
+	return runAlone(ctx, s, files)
+}
+
+func (codeSeeder) label() string { return "built-in code rules" }
+
+func (s codeSeeder) checks() func(walk.File) func(string) []Lead {
 	byLang := map[string][]*Rule{}
 	for i := range s.rules {
 		for _, l := range s.rules[i].Langs {
 			byLang[l] = append(byLang[l], &s.rules[i])
 		}
 	}
-	return eachFile(ctx, "built-in code rules", files, func(f walk.File) ([]Lead, error) {
+	return func(f walk.File) func(string) []Lead {
 		rules := byLang[f.Lang]
 		if len(rules) == 0 || walk.IsTestPath(f.Rel) {
-			return nil, nil
+			return nil
 		}
-		text, err := walk.ReadText(f.Abs)
-		if err != nil {
-			// One unreadable file must not hide the leads from the rest.
-			return nil, fmt.Errorf("built-in code rules could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
-		}
-		return matchRules(rules, f.Lang, f.Rel, text), nil
-	})
+		return func(text string) []Lead { return matchRules(rules, f.Lang, f.Rel, text) }
+	}
 }
 
 func matchRules(rules []*Rule, lang, rel, text string) []Lead {

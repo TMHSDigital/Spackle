@@ -83,6 +83,9 @@ type Options struct {
 	// Walk holds the configured path exclusions and inclusions. The cache
 	// is not used when any are set, because it is keyed by commit alone.
 	Walk walk.Options
+	// Texts, when set, receives the text of every file the mapper reads,
+	// so the seeders that run next do not read those files again.
+	Texts *walk.Texts
 }
 
 // Build maps the target at root.
@@ -135,7 +138,7 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 		if !lang.Supported(f.Lang) && f.Lang != "java" && f.Lang != "ruby" && f.Lang != "php" && f.Lang != "csharp" {
 			continue
 		}
-		text, rerr := walk.ReadText(f.Abs)
+		text, rerr := readText(opts.Texts, f)
 		if rerr != nil {
 			m.Skipped = append(m.Skipped, walk.Skip{Rel: f.Rel, Reason: "unreadable: " + rerr.Error()})
 			continue
@@ -157,7 +160,7 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 		return m.Languages[i].Lang < m.Languages[j].Lang
 	})
 
-	detectManifests(frameworks, manifests)
+	detectManifests(frameworks, manifests, opts.Texts)
 	for fw := range frameworks {
 		m.Frameworks = append(m.Frameworks, fw)
 	}
@@ -175,13 +178,27 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 		}
 		return m.Boundaries[i].Line < m.Boundaries[j].Line
 	})
-	chooseHarness(&m, listing.Files)
+	chooseHarness(&m, listing.Files, opts.Texts)
 
 	if commit != "" && opts.CacheDir != "" {
 		// A cache write failure costs time on the next run, nothing else.
 		_ = saveCache(opts.CacheDir, commit, m)
 	}
 	return m, nil
+}
+
+// readText returns the text of f. With a texts it is read from disk once:
+// the text is kept there for the mapper's own later steps and for the
+// stage that runs next.
+func readText(texts *walk.Texts, f walk.File) (string, error) {
+	if text, ok := texts.Get(f.Abs); ok {
+		return text, nil
+	}
+	text, err := walk.ReadText(f.Abs)
+	if err == nil {
+		texts.Put(f.Abs, text)
+	}
+	return text, err
 }
 
 // sameDir reports whether two paths are the same directory. It compares
@@ -352,14 +369,14 @@ func scanFile(m *Map, frameworks map[string]bool, f walk.File, text string) {
 	}
 }
 
-func detectManifests(frameworks map[string]bool, manifests []walk.File) {
+func detectManifests(frameworks map[string]bool, manifests []walk.File, texts *walk.Texts) {
 	deps := map[string]string{
 		"flask": "flask", "django": "django", "fastapi": "fastapi", "sqlalchemy": "sqlalchemy",
 		`"express"`: "express", `"next"`: "next", `"react"`: "react", `"fastify"`: "fastify", `"koa"`: "koa",
 		"gin-gonic/gin": "gin", "labstack/echo": "echo", "go-chi/chi": "chi", "gofiber/fiber": "fiber",
 	}
 	for _, f := range manifests {
-		text, err := walk.ReadText(f.Abs)
+		text, err := readText(texts, f)
 		if err != nil {
 			continue
 		}
@@ -372,7 +389,7 @@ func detectManifests(frameworks map[string]bool, manifests []walk.File) {
 	}
 }
 
-func chooseHarness(m *Map, files []walk.File) {
+func chooseHarness(m *Map, files []walk.File, texts *walk.Texts) {
 	has := func(rel string) (walk.File, bool) {
 		for _, f := range files {
 			if strings.EqualFold(f.Rel, rel) {
@@ -399,7 +416,7 @@ func chooseHarness(m *Map, files []walk.File) {
 		usesPytest := false
 		for _, name := range []string{"requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.cfg", "tox.ini", "pytest.ini"} {
 			if f, ok := has(name); ok {
-				if text, err := walk.ReadText(f.Abs); err == nil && strings.Contains(strings.ToLower(text), "pytest") {
+				if text, err := readText(texts, f); err == nil && strings.Contains(strings.ToLower(text), "pytest") {
 					usesPytest = true
 				}
 			}
@@ -412,7 +429,7 @@ func chooseHarness(m *Map, files []walk.File) {
 		}
 	case "javascript", "typescript":
 		if f, ok := has("package.json"); ok {
-			if text, err := walk.ReadText(f.Abs); err == nil {
+			if text, err := readText(texts, f); err == nil {
 				var pkg struct {
 					Scripts map[string]string `json:"scripts"`
 				}

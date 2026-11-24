@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -11,44 +13,118 @@ import (
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
-// eachFile gives the same leads in the same order however the workers are
-// scheduled, and reports the first error in file order.
-func TestEachFileIsDeterministic(t *testing.T) {
+// testSeeder is a file seeder for tests: it handles the files that wants
+// accepts and reports one lead per line of text.
+type testSeeder struct {
+	name  string
+	wants func(f walk.File) bool
+}
+
+func (s testSeeder) Name() string            { return s.name }
+func (testSeeder) Available() (bool, string) { return true, "" }
+func (s testSeeder) label() string           { return s.name }
+func (s testSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
+	return runAlone(ctx, s, files)
+}
+
+func (s testSeeder) checks() func(walk.File) func(string) []Lead {
+	return func(f walk.File) func(string) []Lead {
+		if !s.wants(f) {
+			return nil
+		}
+		return func(text string) []Lead {
+			var leads []Lead
+			for n := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+				leads = append(leads, Lead{RuleID: s.name, File: f.Rel, Line: n + 1})
+			}
+			return leads
+		}
+	}
+}
+
+// The shared pass gives each seeder the same leads in the same order
+// however the workers are scheduled, and its own first read error in file
+// order, without hiding the leads of the other files.
+func TestRunFilesIsDeterministic(t *testing.T) {
+	dir := t.TempDir()
 	files := make([]walk.File, 200)
 	for i := range files {
-		files[i] = walk.File{Rel: fmt.Sprintf("f%03d.py", i)}
-	}
-	check := func(f walk.File) ([]Lead, error) {
-		if f.Rel == "f007.py" || f.Rel == "f151.py" {
-			return nil, errors.New("cannot read " + f.Rel)
+		rel := fmt.Sprintf("f%03d.py", i)
+		files[i] = walk.File{Rel: rel, Abs: filepath.Join(dir, rel)}
+		if i == 7 || i == 151 {
+			continue // listed but gone: the read fails
 		}
-		if strings.HasSuffix(f.Rel, "0.py") {
-			return nil, nil
+		if err := os.WriteFile(files[i].Abs, []byte("a\nb\n"), 0o600); err != nil {
+			t.Fatal(err)
 		}
-		return []Lead{{File: f.Rel, Line: 1}, {File: f.Rel, Line: 2}}, nil
 	}
+	all := testSeeder{name: "all", wants: func(f walk.File) bool { return !strings.HasSuffix(f.Rel, "0.py") }}
+	late := testSeeder{name: "late", wants: func(f walk.File) bool { return f.Rel >= "f100.py" }}
+	none := testSeeder{name: "none", wants: func(walk.File) bool { return false }}
 	for round := 0; round < 5; round++ {
-		leads, err := eachFile(context.Background(), "test", files, check)
-		if err == nil || err.Error() != "cannot read f007.py" {
-			t.Fatalf("err = %v, want the first error in file order", err)
+		runs := runFiles(context.Background(), []fileSeeder{all, late, none}, files, nil)
+		if err := runs[0].err; err == nil || !strings.Contains(err.Error(), "all could not read f007.py") {
+			t.Fatalf("all: err = %v, want its first error in file order", err)
 		}
-		if len(leads) != (200-20-2)*2 {
-			t.Fatalf("leads = %d", len(leads))
+		if err := runs[1].err; err == nil || !strings.Contains(err.Error(), "late could not read f151.py") {
+			t.Fatalf("late: err = %v, want the first error among the files it handles", err)
 		}
-		for i := 1; i < len(leads); i++ {
-			a, b := leads[i-1], leads[i]
-			if a.File > b.File || (a.File == b.File && a.Line > b.Line) {
-				t.Fatalf("leads are not in file order at %d: %s:%d then %s:%d", i, a.File, a.Line, b.File, b.Line)
+		if runs[2].err != nil || len(runs[2].leads) != 0 {
+			t.Fatalf("none: leads = %d, err = %v", len(runs[2].leads), runs[2].err)
+		}
+		if n := len(runs[0].leads); n != (200-20-2)*2 {
+			t.Fatalf("all: leads = %d", n)
+		}
+		if n := len(runs[1].leads); n != (100-1)*2 {
+			t.Fatalf("late: leads = %d", n)
+		}
+		for _, r := range runs {
+			for i := 1; i < len(r.leads); i++ {
+				a, b := r.leads[i-1], r.leads[i]
+				if a.File > b.File || (a.File == b.File && a.Line > b.Line) {
+					t.Fatalf("leads are not in file order at %d: %s:%d then %s:%d", i, a.File, a.Line, b.File, b.Line)
+				}
 			}
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := eachFile(ctx, "test", files, check); err == nil || !strings.Contains(err.Error(), "stopped early") {
-		t.Fatalf("a cancelled run returned %v", err)
+	if runs := runFiles(context.Background(), []fileSeeder{all}, nil, nil); runs[0].err != nil || len(runs[0].leads) != 0 {
+		t.Fatalf("no files: leads=%d err=%v", len(runs[0].leads), runs[0].err)
 	}
-	if leads, err := eachFile(context.Background(), "test", nil, check); err != nil || len(leads) != 0 {
-		t.Fatalf("no files: leads=%d err=%v", len(leads), err)
+}
+
+// A file is read once for every seeder that handles it, a text an earlier
+// stage kept is used instead of the disk, and a file that no seeder handles
+// is not read at all.
+func TestRunFilesReadsAFileOnce(t *testing.T) {
+	dir := t.TempDir()
+	onDisk := walk.File{Rel: "disk.py", Abs: filepath.Join(dir, "disk.py")}
+	if err := os.WriteFile(onDisk.Abs, []byte("1\r\n2\r\n3\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Neither of these exists on disk, so a read of one would fail.
+	kept := walk.File{Rel: "kept.py", Abs: filepath.Join(dir, "kept.py")}
+	unwanted := walk.File{Rel: "unwanted.bin", Abs: filepath.Join(dir, "unwanted.bin")}
+	texts := walk.NewTexts()
+	texts.Put(kept.Abs, "x\ny\n")
+
+	py := func(f walk.File) bool { return strings.HasSuffix(f.Rel, ".py") }
+	a, b := testSeeder{name: "a", wants: py}, testSeeder{name: "b", wants: py}
+	leads, statuses := RunAll(context.Background(), []Seeder{a, manyLeads{[]Lead{{RuleID: "other", File: "o.py", Line: 1}}}, b}, dir, []walk.File{onDisk, kept, unwanted}, texts)
+	for _, st := range statuses {
+		if st.Error != "" {
+			t.Fatalf("%s: %s", st.Name, st.Error)
+		}
+	}
+	if statuses[0].Leads != 5 || statuses[1].Leads != 1 || statuses[2].Leads != 5 || len(leads) != 11 {
+		t.Fatalf("statuses = %+v, leads = %d", statuses, len(leads))
+	}
+	for _, l := range leads {
+		if l.Source == "" || l.ID == "" {
+			t.Fatalf("lead was not finalized: %+v", l)
+		}
+	}
+	if _, ok := texts.Get(kept.Abs); ok {
+		t.Error("the kept text was not released after it was used")
 	}
 }
 
@@ -62,16 +138,20 @@ func TestEachFileHandsOutNothingAfterCancel(t *testing.T) {
 		files := make([]walk.File, n)
 		for round := 0; round < 200; round++ {
 			var checked atomic.Int32
-			_, err := eachFile(ctx, "test", files, func(walk.File) ([]Lead, error) {
+			_, covered := eachFile(ctx, files, func(walk.File) bool {
 				checked.Add(1)
-				return nil, nil
+				return true
 			})
-			if err == nil || !strings.Contains(err.Error(), "stopped early") || !errors.Is(err, context.Canceled) {
-				t.Fatalf("%d files, round %d: err = %v, want the cancellation", n, round, err)
+			if covered {
+				t.Fatalf("%d files, round %d: a cancelled run was reported as complete", n, round)
 			}
 			if got := checked.Load(); got != 0 {
 				t.Fatalf("%d files, round %d: %d files were checked after the cancellation", n, round, got)
 			}
+		}
+		everything := testSeeder{name: "everything", wants: func(walk.File) bool { return true }}
+		if _, err := everything.Run(ctx, "", files); err == nil || !strings.Contains(err.Error(), "everything stopped early") || !errors.Is(err, context.Canceled) {
+			t.Fatalf("%d files: err = %v, want the cancellation", n, err)
 		}
 	}
 }
@@ -83,14 +163,19 @@ func TestEachFileThatCoveredEverythingIsNotStopped(t *testing.T) {
 	defer cancel()
 	files := make([]walk.File, 3)
 	var checked atomic.Int32
-	leads, err := eachFile(ctx, "test", files, func(walk.File) ([]Lead, error) {
+	results, covered := eachFile(ctx, files, func(walk.File) bool {
 		if checked.Add(1) == int32(len(files)) {
 			cancel()
 		}
-		return []Lead{{Line: 1}}, nil
+		return true
 	})
-	if err != nil || len(leads) != len(files) {
-		t.Fatalf("leads = %d, err = %v", len(leads), err)
+	if !covered || len(results) != len(files) {
+		t.Fatalf("results = %v, covered = %v", results, covered)
+	}
+	for i, done := range results {
+		if !done {
+			t.Fatalf("file %d was not checked", i)
+		}
 	}
 }
 
@@ -110,7 +195,7 @@ func TestLeadCapsAreAppliedAndReported(t *testing.T) {
 		leads = append(leads, Lead{RuleID: "noisy", Class: "debug-enabled", File: "gen/big.js", Line: line, Title: "t", Detail: "d", Fix: "f"})
 	}
 	leads = append(leads, Lead{RuleID: "real", Class: "sql-injection", File: "app.py", Line: 4, Title: "t", Detail: "d", Fix: "f"})
-	got, statuses := RunAll(context.Background(), []Seeder{manyLeads{leads}}, "", nil)
+	got, statuses := RunAll(context.Background(), []Seeder{manyLeads{leads}}, "", nil, nil)
 	if len(got) != MaxLeadsPerRuleFile+1 {
 		t.Fatalf("leads = %d, want %d", len(got), MaxLeadsPerRuleFile+1)
 	}
@@ -126,7 +211,7 @@ func TestLeadCapsAreAppliedAndReported(t *testing.T) {
 			leads = append(leads, Lead{RuleID: "r", Class: "debug-enabled", File: fmt.Sprintf("f%d.py", f), Line: line, Title: "t", Detail: "d", Fix: "f"})
 		}
 	}
-	got, statuses = RunAll(context.Background(), []Seeder{manyLeads{leads}}, "", nil)
+	got, statuses = RunAll(context.Background(), []Seeder{manyLeads{leads}}, "", nil, nil)
 	if len(got) != MaxLeadsPerSeeder || !strings.Contains(statuses[0].Note, "1000 leads were not listed: a seeder reports at most") {
 		t.Fatalf("leads = %d status = %+v", len(got), statuses[0])
 	}
@@ -172,7 +257,7 @@ func (notingSeeder) Note() string { return "3 results were skipped: no Spackle c
 // is what the report shows.
 func TestRunAllKeepsTheSeedersNote(t *testing.T) {
 	lead := Lead{RuleID: "r", Class: "sql-injection", File: "app.py", Line: 4, Title: "t", Detail: "d", Fix: "f"}
-	_, statuses := RunAll(context.Background(), []Seeder{notingSeeder{manyLeads{[]Lead{lead}}}, manyLeads{[]Lead{lead}}}, "", nil)
+	_, statuses := RunAll(context.Background(), []Seeder{notingSeeder{manyLeads{[]Lead{lead}}}, manyLeads{[]Lead{lead}}}, "", nil, nil)
 	if statuses[0].Note != "3 results were skipped: no Spackle class fits them." {
 		t.Fatalf("note = %q", statuses[0].Note)
 	}

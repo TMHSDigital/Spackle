@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
 func write(t *testing.T, root, rel, content string) {
@@ -129,6 +132,46 @@ func health(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.Join(routes, ",") != "/health,/users/:id" {
 		t.Fatalf("routes = %v", routes)
+	}
+}
+
+// The mapper hands over the text of every file it read, as ReadText gives
+// it, so the seeders do not read those files again. Files it did not read
+// are not handed over, and the map is the same with or without the handoff.
+func TestBuildHandsOverTheTextsItRead(t *testing.T) {
+	root := pyApp(t)
+	texts := walk.NewTexts()
+	with, err := Build(context.Background(), root, Options{Texts: texts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := Build(context.Background(), root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(with, without) {
+		t.Fatalf("the handoff changed the map:\n%+v\n%+v", with, without)
+	}
+	abs := func(rel string) string {
+		for _, f := range with.Files {
+			if f.Rel == rel {
+				return f.Abs
+			}
+		}
+		t.Fatalf("%s is not in the listing", rel)
+		return ""
+	}
+	for _, rel := range []string{"app.py", "tests/test_app.py", "requirements.txt", "static/site.js"} {
+		text, ok := texts.Get(abs(rel))
+		if !ok {
+			t.Errorf("%s was read by the mapper but not handed over", rel)
+		}
+		if strings.Contains(text, "\r") {
+			t.Errorf("%s was handed over without line ending normalization", rel)
+		}
+	}
+	if _, ok := texts.Get(abs("Dockerfile")); ok {
+		t.Error("Dockerfile is not read by the mapper, so there is nothing to hand over")
 	}
 }
 

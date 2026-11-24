@@ -43,17 +43,19 @@ var criticalSecretRules = map[string]bool{
 	"private-key-block": true, "aws-secret-access-key": true, "stripe-key": true,
 }
 
-func (secretsSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
-	return eachFile(ctx, "built-in secret scan", files, func(f walk.File) ([]Lead, error) {
+func (s secretsSeeder) Run(ctx context.Context, _ string, files []walk.File) ([]Lead, error) {
+	return runAlone(ctx, s, files)
+}
+
+func (secretsSeeder) label() string { return "built-in secret scan" }
+
+func (secretsSeeder) checks() func(walk.File) func(string) []Lead {
+	return func(f walk.File) func(string) []Lead {
 		if skipForSecrets(f.Rel) {
-			return nil, nil
+			return nil
 		}
-		text, err := walk.ReadText(f.Abs)
-		if err != nil {
-			return nil, fmt.Errorf("built-in secret scan could not read %s: %w; check the file's permissions and rerun", f.Rel, err)
-		}
-		return secretLeads(f.Rel, text), nil
-	})
+		return func(text string) []Lead { return secretLeads(f.Rel, text) }
+	}
 }
 
 func secretLeads(rel, text string) []Lead {

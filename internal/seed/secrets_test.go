@@ -154,7 +154,7 @@ func TestRunAllBuiltinsNeverLeakSecrets(t *testing.T) {
 		"k8s.yaml":   "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n    - name: a\n      image: a:1\n      env:\n        - name: DB_PASSWORD\n          value: \"" + testPassword + "\"\n",
 		"main.tf":    "resource \"aws_db_instance\" \"d\" {\n  password = \"" + testPassword + "\"\n}\n",
 	})
-	leads, statuses := RunAll(context.Background(), Builtin(), root, files)
+	leads, statuses := RunAll(context.Background(), Builtin(), root, files, nil)
 	for _, st := range statuses {
 		if st.Error != "" || !st.Available {
 			t.Errorf("seeder %s: available=%v error=%q", st.Name, st.Available, st.Error)
