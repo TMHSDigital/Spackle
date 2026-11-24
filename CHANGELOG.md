@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `spackle debug --test <name> --good <rev>` no longer judges a commit where the test does not exist yet. Bisect used to call such a `--good` revision bad (pytest) or blame the commit that added the test (Go, JavaScript); it now stops and says the test must exist at the `--good` revision.
 - Interrupting a running-target scan while the model assesses its findings now ends the run as `interrupted` with the probe's findings in the report, and lists the findings not yet assessed. It used to end as `failed` with no findings. An interrupt during the probe no longer tells you to check that the target is reachable.
 - With a model, the `max_findings` cap now bounds the report. An investigated finding cut by the cap used to stay in the report and be listed as skipped too, and investigated findings could be cut in favour of leads nobody investigated. They are now kept first.
 - The Semgrep adapter runs Semgrep with the `p/default` rule set instead of `--config auto`, which Semgrep refuses with metrics off. It used to fail on every run, so a scan got no Semgrep leads. Metrics stay off.

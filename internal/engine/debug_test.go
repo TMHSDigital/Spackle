@@ -41,6 +41,9 @@ type debugRuntime struct {
 	extra string
 	// noMatch makes the named test select nothing, as pytest reports it.
 	noMatch bool
+	// testFileNeeded makes the named test select nothing in a source
+	// directory without test_calc.py, as in a commit before the test existed.
+	testFileNeeded bool
 }
 
 func (d *debugRuntime) Name() string                              { return "fake-runtime" }
@@ -59,6 +62,8 @@ func (d *debugRuntime) Run(_ context.Context, spec sandbox.Spec) (sandbox.Result
 	buggy := !strings.Contains(calc, "a + b")
 	script, isScript := spec.Files[reproFile]
 	cmd := strings.Join(spec.Cmd, " ")
+	_, statErr := os.Stat(filepath.Join(spec.SourceDir, "test_calc.py"))
+	noTest := d.noMatch || (d.testFileNeeded && statErr != nil)
 	switch {
 	case strings.Contains(cmd, "py_compile"):
 	case isScript:
@@ -68,7 +73,7 @@ func (d *debugRuntime) Run(_ context.Context, spec sandbox.Spec) (sandbox.Result
 		} else {
 			res.ExitCode, res.Stderr = 1, "AssertionError: add returned the right sum"
 		}
-	case cmd == debugRepr && d.noMatch:
+	case cmd == debugRepr && noTest:
 		res.ExitCode, res.Stdout = 5, "no tests ran in 0.01s"
 	case cmd == debugRepr:
 		if buggy {
@@ -830,6 +835,39 @@ func TestDebugBisectDoesNotBlameHeadForUncommittedChanges(t *testing.T) {
 	}
 	if got := len(bisectDirs(o.Target, rt)); got != 1 {
 		t.Fatalf("bisect probes = %d, want only the probe of HEAD", got)
+	}
+}
+
+// A new failing test usually does not exist at the --good revision. A probe
+// where the test selects nothing is neither good nor bad: bisect stops and
+// says the test must exist there, instead of calling the revision bad.
+func TestDebugBisectStopsWhereTheTestDoesNotExist(t *testing.T) {
+	rt := &debugRuntime{testFileNeeded: true}
+	o := debugOpts(t, debugModel{fix: fixedCalc}.provider(), rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	test := filepath.Join(o.Target, "test_calc.py")
+	if err := os.Remove(test); err != nil {
+		t.Fatal(err)
+	}
+	hashes, git := debugRepo(t, o.Target)
+	if err := os.WriteFile(test, []byte(calcTest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "-q", "-m", "add a test for add")
+	o.Good = hashes[0]
+	res, err := Debug(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := oneFinding(t, res)
+	notes := strings.Join(res.Run.Notes, "|")
+	if strings.Contains(notes, "also shows the failure") || strings.Contains(notes, "first appears") || strings.Contains(f.Flaw.Description, "first appears") {
+		t.Fatalf("a commit without the test was judged: %v", res.Run.Notes)
+	}
+	if !strings.Contains(notes, "Bisect stopped early") || !strings.Contains(notes, "must exist at the --good revision") {
+		t.Fatalf("notes = %v", res.Run.Notes)
 	}
 }
 

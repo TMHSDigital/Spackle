@@ -611,6 +611,11 @@ func (d *debugRun) probe(ctx context.Context, rep reproduction, rev string) (bad
 	if rep.poc != nil && res.Inconclusive() {
 		return false, fmt.Errorf("the reproduction script %s at commit %s, which shows neither that the failure is there nor that it is not", agent.InconclusiveWhy(res), shortRev(rev))
 	}
+	// A commit from before the test was written has no test to run. Its exit
+	// status says nothing about the code, so it is neither good nor bad.
+	if rep.poc == nil && noTestMatched(rep.command, res) {
+		return false, fmt.Errorf("the test %s does not exist at commit %s, so that commit can be judged neither good nor bad (%s). The test must exist at the --good revision: pass a later one, or add the test to a branch based on it", d.test, shortRev(rev), ev)
+	}
 	bad = d.stillFails(rep, res)
 	verdict := "does not show the failure"
 	if bad {
