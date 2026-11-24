@@ -138,6 +138,13 @@ What a diff scan does and does not do:
 - With a model, an investigation that starts in a changed file may end in a finding located in an unchanged file that the changed code reaches. That finding is reported, at the place where the flaw is.
 - Findings that predate the change are not accepted or recorded anywhere. Run a full scan on the default branch to see them.
 
+To scan work you have not committed yet, use `spackle scan . --changed` instead of `--since`. It reports only on files that differ from the last commit, staged or not, and on new files git does not ignore; the two flags cannot be combined. As a git pre-commit hook (`.git/hooks/pre-commit`, made executable):
+
+```sh
+#!/bin/sh
+exec spackle scan . --changed --offline --fail-on high --format terminal
+```
+
 Pull requests from forks do not receive repository secrets, so a model step has no key there. Keep the deterministic default for those runs.
 
 Proofs and fix checks need a container runtime on the runner. Without one, a model run still investigates and reports, and labels its findings as traced by reading the code.

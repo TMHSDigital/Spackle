@@ -103,6 +103,56 @@ func TestSinceLimitsTheScanToChangedFiles(t *testing.T) {
 	}
 }
 
+// --changed covers what a commit made now would add: an edited file (staged
+// or not) and a new untracked file, and not the committed files.
+func TestChangedLimitsTheScanToUncommittedFiles(t *testing.T) {
+	inOld := sqlLead()
+	inOld.File, inOld.RuleID, inOld.Class, inOld.Title = "old.py", "py-os-system", "command-injection", "os.system with a variable"
+	inNew := sqlLead()
+	inNew.File = "new.py"
+	inIgnored := sqlLead()
+	inIgnored.File = "build.py"
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), inOld, inNew, inIgnored}})
+	diffTarget(t, o.Target)
+	for name, body := range map[string]string{"new.py": "x = 1\n", "build.py": "y = 2\n", ".gitignore": "build.py\n"} {
+		if err := os.WriteFile(filepath.Join(o.Target, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// app.py is edited and not committed; old.py is left as committed.
+	if err := os.WriteFile(filepath.Join(o.Target, "app.py"), append(mustReadFile(t, filepath.Join(o.Target, "app.py")), []byte("# edited\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.Changed = true
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	for _, f := range res.Run.Findings {
+		files = append(files, f.Location.File)
+	}
+	if strings.Join(files, ",") != "app.py,new.py" && strings.Join(files, ",") != "new.py,app.py" {
+		t.Fatalf("findings in %v, want app.py and new.py only", files)
+	}
+	if !containsNote(res.Run.Notes, "Diff scan against the last commit (uncommitted changes)") {
+		t.Fatalf("notes = %q", res.Run.Notes)
+	}
+	o.Since = "HEAD"
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) {
+		t.Fatalf("--since with --changed: err = %v, want a refusal", err)
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func containsNote(notes []string, want string) bool {
 	for _, n := range notes {
 		if strings.Contains(n, want) {

@@ -286,10 +286,36 @@ func ChangedSince(ctx context.Context, dir, rev string) ([]string, error) {
 	if rev == "" || strings.HasPrefix(rev, "-") {
 		return nil, fmt.Errorf("revision %q is not valid", rev)
 	}
+	return changedFiles(ctx, dir, rev+"...HEAD")
+}
+
+// ChangedUncommitted returns the files under dir, relative to it, that
+// differ from HEAD (staged or not) plus the untracked files git does not
+// ignore: what a commit made now could add. Deleted files are left out.
+func ChangedUncommitted(ctx context.Context, dir string) ([]string, error) {
+	files, err := changedFiles(ctx, dir, "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	out, err := run(ctx, dir, "ls-files", "-z", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range strings.Split(out, "\x00") {
+		if f != "" {
+			files = append(files, f)
+		}
+	}
+	return files, nil
+}
+
+// changedFiles lists the files under dir that git diff against spec reports
+// as added, copied, modified or renamed.
+func changedFiles(ctx context.Context, dir, spec string) ([]string, error) {
 	// -z keeps a file name with a quote, a newline or a non-ASCII character
 	// intact. --no-textconv and --no-ext-diff keep the repository's own
 	// configuration from starting a program.
-	out, err := run(ctx, dir, "diff", "--name-only", "-z", "--relative", "--no-textconv", "--no-ext-diff", "--diff-filter=ACMR", rev+"...HEAD", "--")
+	out, err := run(ctx, dir, "diff", "--name-only", "-z", "--relative", "--no-textconv", "--no-ext-diff", "--diff-filter=ACMR", spec, "--")
 	if err != nil {
 		return nil, err
 	}

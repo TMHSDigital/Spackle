@@ -10,17 +10,42 @@ import (
 	"github.com/TMHSDigital/spackle/internal/seed"
 )
 
+// uncommitted is the diff base of a --changed scan, as the report names it.
+const uncommitted = "the last commit (uncommitted changes)"
+
+// diffBase returns what a diff scan compares against: the --since revision,
+// uncommitted for --changed, or "" for a full scan.
+func diffBase(opts Options) string {
+	if opts.Changed {
+		return uncommitted
+	}
+	return opts.Since
+}
+
 // changedSince returns the set of files a diff scan covers: the files under
 // root that were added or changed since rev. The error says what to do,
 // because the usual cause is a CI checkout that did not fetch the base.
 func changedSince(ctx context.Context, root, rev string) (map[string]bool, error) {
-	if !gitx.HasTracked(ctx, root) {
-		return nil, fmt.Errorf("--since needs a git repository, and %s has no tracked files", root)
+	flag := "--since"
+	if rev == uncommitted {
+		flag = "--changed"
 	}
-	files, err := gitx.ChangedSince(ctx, root, rev)
+	if !gitx.HasTracked(ctx, root) {
+		return nil, fmt.Errorf("%s needs a git repository, and %s has no tracked files", flag, root)
+	}
+	var files []string
+	var err error
+	if rev == uncommitted {
+		files, err = gitx.ChangedUncommitted(ctx, root)
+	} else {
+		files, err = gitx.ChangedSince(ctx, root, rev)
+	}
 	if err != nil {
 		if errors.Is(err, gitx.ErrNotRepo) {
-			return nil, fmt.Errorf("--since needs a git repository, and %s is not inside one", root)
+			return nil, fmt.Errorf("%s needs a git repository, and %s is not inside one", flag, root)
+		}
+		if rev == uncommitted {
+			return nil, fmt.Errorf("--changed: git could not list the changes against HEAD (%w)", err)
 		}
 		return nil, fmt.Errorf("--since %s: git could not compare that revision with HEAD (%w). Check the name, and in CI fetch the base commit first, for example with fetch-depth: 0", rev, err)
 	}

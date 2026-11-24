@@ -67,8 +67,8 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		if opts.DryRun {
 			return Result{}, fmt.Errorf("%w: --dry-run is for a directory or a git URL. For a running target, the scope file states what a scan may send", ErrRefused)
 		}
-		if opts.Since != "" {
-			return Result{}, fmt.Errorf("%w: --since limits a scan of a directory to its changed files, and %s is a running target", ErrRefused, tgt.Display)
+		if diffBase(opts) != "" {
+			return Result{}, fmt.Errorf("%w: --since and --changed limit a scan of a directory to its changed files, and %s is a running target", ErrRefused, tgt.Display)
 		}
 		if opts.Resume != "" {
 			return Result{}, fmt.Errorf("%w: --resume continues a scan of a directory, and %s is a running target", ErrRefused, tgt.Display)
@@ -112,7 +112,10 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 			return Result{}, fmt.Errorf("%w: --resume continues the investigations of an earlier run, which needs a model. Set [model] in spackle.toml, or pass --provider and --model", ErrRefused)
 		}
 	}
-	if opts.Since != "" && tgt.Kind != target.KindPath {
+	if opts.Since != "" && opts.Changed {
+		return Result{}, fmt.Errorf("%w: --since and --changed choose different file sets; give one", ErrRefused)
+	}
+	if diffBase(opts) != "" && tgt.Kind != target.KindPath {
 		return Result{}, fmt.Errorf("%w: --since compares a checkout with a base revision, and %s is not a directory. Clone the repository with the history you need and scan the directory", ErrRefused, tgt.Display)
 	}
 	if tgt.Kind == target.KindGit {
@@ -152,8 +155,8 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	// A diff scan needs its file list before anything else is done, so a
 	// revision git does not know refuses the run at once.
 	var changed map[string]bool
-	if opts.Since != "" {
-		if changed, err = changedSince(ctx, root, opts.Since); err != nil {
+	if diffBase(opts) != "" {
+		if changed, err = changedSince(ctx, root, diffBase(opts)); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 	}
@@ -180,7 +183,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 	if changed != nil {
 		var note string
-		leads, note = keepChanged(leads, changed, opts.Since)
+		leads, note = keepChanged(leads, changed, diffBase(opts))
 		scanNotes = append(scanNotes, note)
 	}
 	statuses = countLeads(statuses, leads)

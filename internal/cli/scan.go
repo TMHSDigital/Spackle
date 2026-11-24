@@ -29,6 +29,7 @@ func runScan(env Env, args []string) int {
 	ref := fs.String("ref", "", "`branch or tag` to scan, for a git URL target (default: the remote's default branch)")
 	since := fs.String("since", "", "report only on files changed since this `revision`, for a directory in a git repository (for example the base commit of a pull request)")
 	resume := fs.String("resume", "", "continue the stored scan with this `run id` (or \"latest\") where its budget ran out or it was interrupted, with a new budget")
+	changedOnly := fs.Bool("changed", false, "report only on files that differ from the last commit, staged or not, and new files git does not ignore: a scan before you commit")
 	force := fs.Bool("force", false, "with --resume, continue although the target's commit changed since that run")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -55,7 +56,7 @@ func runScan(env Env, args []string) int {
 	defer stop()
 
 	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
-		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, Resume: *resume, Force: *force, DryRun: *dryRun,
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, Changed: *changedOnly, Resume: *resume, Force: *force, DryRun: *dryRun,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
