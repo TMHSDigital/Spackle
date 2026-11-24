@@ -94,6 +94,9 @@ output_per_mtok = 2.0
 	if cfg.Budget.USD != 1.5 || cfg.Budget.WallTime.Duration != 10*time.Minute || cfg.Budget.Tokens != 2_000_000 {
 		t.Fatalf("budget = %+v", cfg.Budget)
 	}
+	if !cfg.Budget.USDSet || cfg.Budget.AllowUnpriced {
+		t.Fatalf("a dollar cap from the file must be marked as set, and allow_unpriced is off by default: %+v", cfg.Budget)
+	}
 	if cfg.Sandbox.MemoryMB != 512 || cfg.Sandbox.Images["python"] != "python:3.12-slim" || cfg.Sandbox.Images["go"] == "" {
 		t.Fatalf("sandbox = %+v", cfg.Sandbox)
 	}
@@ -112,6 +115,19 @@ output_per_mtok = 2.0
 	}
 	if cfg.Pricing["some/model"].OutputPerMTok != 2.0 {
 		t.Fatalf("pricing = %+v", cfg.Pricing)
+	}
+}
+
+func TestLoadDollarCapProvenance(t *testing.T) {
+	if b := Default().Budget; b.USDSet || b.AllowUnpriced {
+		t.Fatalf("the default dollar cap is not one the operator set: %+v", b)
+	}
+	cfg, _, err := Load(writeConfig(t, "[budget]\ntokens = 10\nallow_unpriced = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Budget.USDSet || !cfg.Budget.AllowUnpriced {
+		t.Fatalf("budget = %+v", cfg.Budget)
 	}
 }
 

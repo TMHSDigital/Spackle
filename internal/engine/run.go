@@ -176,8 +176,8 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if agentic {
 		est := estimate(opts.Config, defaultProv, llm.NewPricer(llm.PricesFromConfig(opts.Config.Pricing)), len(leads))
 		say("%s", est.String())
-		if opts.Confirm != nil && !opts.Confirm(est) {
-			return Result{}, fmt.Errorf("%w: the run was not confirmed. Pass --yes to skip this prompt, or lower --budget-usd", ErrRefused)
+		if err := confirmEstimate(opts.Config, opts.Config.ForStage("investigator"), est, opts.Confirm); err != nil {
+			return Result{}, err
 		}
 	}
 

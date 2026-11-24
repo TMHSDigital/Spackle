@@ -200,8 +200,8 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 	}
 	est := Estimate{Investigations: 1, Model: prov.Model(), USD: usd, CostKnown: known, Local: prov.Local(), CapUSD: cfg.Budget.USD, CapTokens: cfg.Budget.Tokens}
 	say("%s", est.String())
-	if opts.Confirm != nil && !opts.Confirm(est) {
-		return Result{}, fmt.Errorf("%w: the run was not confirmed. Pass --yes to skip this prompt, or lower --budget-usd", ErrRefused)
+	if err := confirmEstimate(cfg, cfg.ForStage("fixer"), est, opts.Confirm); err != nil {
+		return Result{}, err
 	}
 
 	runID := opts.RunID

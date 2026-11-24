@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A run that nobody confirms (`--yes`, the GitHub Action, the MCP server, `spackle bench --yes`) is now refused with exit code 2 when you set a dollar cap (`--budget-usd` or `usd` under `[budget]`) and the model has no known price, because that cap could not stop the run. The message shows the `[pricing]` table to add. Pass `--allow-unpriced` or set `allow_unpriced = true` under `[budget]` to run under the token cap alone. In the Action, set `args: --allow-unpriced`. Local models, OpenRouter and the built-in default cap are not affected.
 - `spackle verify` re-runs proofs against the directory that was scanned, which is now recorded as an absolute path, instead of resolving the target as typed against the current directory.
 - Directories that are pruned by default are now listed in the report as "Not read". `vendor`, `dist`, `build`, `target` and `coverage` are pruned only at the target root or where a marker file shows they are dependencies or build output, so a first-party package with one of those names is scanned.
 - The sandbox no longer copies `.git`, `.spackle`, virtual environments and tool caches from the top of the target into the in-memory work directory, which makes each run faster and leaves more of the memory limit for the program. `node_modules` and `vendor` are still copied.

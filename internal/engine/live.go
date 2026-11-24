@@ -74,8 +74,8 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 		}
 		est := estimate(cfg, defaultProv, llm.NewPricer(llm.PricesFromConfig(cfg.Pricing)), 12)
 		say("%s", est.String())
-		if opts.Confirm != nil && !opts.Confirm(est) {
-			return Result{}, fmt.Errorf("%w: the run was not confirmed. Pass --yes to skip this prompt, or lower --budget-usd", ErrRefused)
+		if err := confirmEstimate(cfg, cfg.ForStage("investigator"), est, opts.Confirm); err != nil {
+			return Result{}, err
 		}
 	}
 

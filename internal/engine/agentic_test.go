@@ -293,6 +293,63 @@ func TestEstimateWording(t *testing.T) {
 	}
 }
 
+// TestUnattendedDollarCapNeedsAPrice pins who is refused when the model has
+// no price: only a run nobody confirms, with a dollar cap the operator set,
+// that has not opted in and whose endpoint does not report its own cost.
+func TestUnattendedDollarCapNeedsAPrice(t *testing.T) {
+	unpriced := Estimate{Investigations: 3, Model: "mystery", CapUSD: 2, CapTokens: 10}
+	set := config.Default()
+	set.Budget.USD, set.Budget.USDSet = 2, true
+	allowed := set
+	allowed.Budget.AllowUnpriced = true
+	yes := func(Estimate) bool { return true }
+
+	cases := []struct {
+		name    string
+		cfg     config.Config
+		model   config.Model
+		est     Estimate
+		confirm func(Estimate) bool
+		refused bool
+	}{
+		{name: "cap set, nobody asked", cfg: set, est: unpriced, refused: true},
+		{name: "default cap", cfg: config.Default(), est: unpriced},
+		{name: "opted in", cfg: allowed, est: unpriced},
+		{name: "operator confirmed", cfg: set, est: unpriced, confirm: yes},
+		{name: "priced model", cfg: set, est: Estimate{Model: "claude-opus-5-5", CostKnown: true, CapUSD: 2}},
+		{name: "local model", cfg: set, est: Estimate{Model: "qwen", Local: true, CapUSD: 2}},
+		{name: "endpoint reports cost", cfg: set, model: config.Model{BaseURL: "https://openrouter.ai/api/v1"}, est: unpriced},
+	}
+	for _, c := range cases {
+		err := confirmEstimate(c.cfg, c.model, c.est, c.confirm)
+		if c.refused != errors.Is(err, ErrRefused) {
+			t.Errorf("%s: err = %v, want refused = %v", c.name, err, c.refused)
+		}
+		if c.refused && !strings.Contains(err.Error(), `[pricing."mystery"]`) {
+			t.Errorf("%s: the refusal does not show the table to add: %v", c.name, err)
+		}
+	}
+
+	// End to end: the refusal comes before any model call or run directory.
+	fake := script{plan: `{"intents":[]}`}.provider()
+	fake.Remote = true
+	o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	o.Config.Budget.USD, o.Config.Budget.USDSet = 2, true
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--allow-unpriced") {
+		t.Fatalf("unpriced remote model with a dollar cap: err = %v", err)
+	}
+	if len(fake.Requests) != 0 {
+		t.Fatal("a model call was made by a refused run")
+	}
+	if entries, _ := os.ReadDir(RunsDir(o.Config.StateDir)); len(entries) != 0 {
+		t.Fatal("a refused run left a run directory")
+	}
+	o.Config.Budget.AllowUnpriced = true
+	if _, err := Run(context.Background(), o); err != nil {
+		t.Fatalf("with allow_unpriced: %v", err)
+	}
+}
+
 func TestOfflineSkipsNetworkScannersAndRefusesClones(t *testing.T) {
 	in := []seed.Seeder{fakeSeeder{name: "semgrep"}, fakeSeeder{name: "gitleaks"}, fakeSeeder{name: "trivy"}, fakeSeeder{name: "osv-scanner"}, fakeSeeder{name: "builtin-code"}}
 	out := offlineSeeders(in)

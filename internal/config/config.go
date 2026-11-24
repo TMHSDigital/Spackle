@@ -72,6 +72,13 @@ type Budget struct {
 	MaxFindings int      `toml:"max_findings"`
 	// MaxTurns caps tool-use turns for one agent task.
 	MaxTurns int `toml:"max_turns"`
+	// AllowUnpriced lets an unattended run start with a model that has no
+	// known price although a dollar cap was set. The dollar cap cannot hold
+	// for such a model, so only the other caps limit the run.
+	AllowUnpriced bool `toml:"allow_unpriced"`
+	// USDSet records that the dollar cap was set by the operator, in the
+	// config file or with --budget-usd, and is not the built-in default.
+	USDSet bool `toml:"-"`
 }
 
 // Scope is the authorized scope for live targets.
@@ -223,6 +230,10 @@ func (c *Config) merge(file Config) {
 	}
 	if b.USD != 0 {
 		c.Budget.USD = b.USD
+		c.Budget.USDSet = true
+	}
+	if b.AllowUnpriced {
+		c.Budget.AllowUnpriced = true
 	}
 	if b.WallTime.Duration != 0 {
 		c.Budget.WallTime = b.WallTime

@@ -14,23 +14,24 @@ import (
 
 // globalFlags are the flags shared by the commands that run or render.
 type globalFlags struct {
-	configPath   string
-	provider     string
-	model        string
-	baseURL      string
-	budgetTokens int
-	budgetUSD    float64
-	maxFindings  int
-	offline      bool
-	fix          bool
-	noFix        bool
-	pr           bool
-	authorize    string
-	format       string
-	out          string
-	yes          bool
-	failOn       string
-	exclude      listFlag
+	configPath    string
+	provider      string
+	model         string
+	baseURL       string
+	budgetTokens  int
+	budgetUSD     float64
+	allowUnpriced bool
+	maxFindings   int
+	offline       bool
+	fix           bool
+	noFix         bool
+	pr            bool
+	authorize     string
+	format        string
+	out           string
+	yes           bool
+	failOn        string
+	exclude       listFlag
 }
 
 // listFlag collects the values of a flag that may be given more than once.
@@ -78,6 +79,7 @@ func (g *globalFlags) registerGroups(fs *flag.FlagSet, groups flagGroup) {
 	if has(flagsBudget) {
 		fs.IntVar(&g.budgetTokens, "budget-tokens", 0, "hard cap on total model `tokens` for the run")
 		fs.Float64Var(&g.budgetUSD, "budget-usd", 0, "hard cap on model spend in `USD` for the run")
+		fs.BoolVar(&g.allowUnpriced, "allow-unpriced", false, "with --yes, run a model that has no known price although a dollar cap is set; the dollar cap is then not enforced")
 		fs.IntVar(&g.maxFindings, "max-findings", 0, "report at most `n` findings, highest severity first")
 	}
 	if has(flagsOffline) {
@@ -136,6 +138,10 @@ func (g *globalFlags) load() (config.Config, error) {
 	}
 	if g.budgetUSD != 0 {
 		cfg.Budget.USD = g.budgetUSD
+		cfg.Budget.USDSet = true
+	}
+	if g.allowUnpriced {
+		cfg.Budget.AllowUnpriced = true
 	}
 	if g.maxFindings != 0 {
 		cfg.Budget.MaxFindings = g.maxFindings

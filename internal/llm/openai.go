@@ -60,8 +60,12 @@ func (o *OpenAI) isAzure() bool {
 	return strings.HasSuffix(h, ".openai.azure.com") || strings.HasSuffix(h, ".cognitiveservices.azure.com")
 }
 
-func (o *OpenAI) isOpenRouter() bool {
-	u, err := url.Parse(o.baseURL)
+func (o *OpenAI) isOpenRouter() bool { return ReportsCost(o.baseURL) }
+
+// ReportsCost reports whether the endpoint at baseURL returns the cost of
+// each request, so spend is known without a price entry. OpenRouter does.
+func ReportsCost(baseURL string) bool {
+	u, err := url.Parse(baseURL)
 	return err == nil && strings.EqualFold(u.Hostname(), "openrouter.ai")
 }
 

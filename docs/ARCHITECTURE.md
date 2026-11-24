@@ -283,7 +283,7 @@ Tool calling, stop reasons and usage are normalized across three wire shapes: An
 
 - **Per-stage selection.** `planner`, `investigator`, `prover`, `reviewer`, `fixer` and `mechanical` each resolve to a model, defaulting to `[model]`.
 - **Keys.** API keys are read only from environment variables. Config names the variable.
-- **Cost.** A built-in table prices Anthropic first-party models. `[pricing]` overrides and extends it. A cost the provider reports itself (OpenRouter) is used as is. A local model costs nothing. An unpriced remote model is recorded as cost unknown, and the dollar cap cannot be enforced for it.
+- **Cost.** A built-in table prices Anthropic first-party models. `[pricing]` overrides and extends it. A cost the provider reports itself (OpenRouter) is used as is. A local model costs nothing. An unpriced remote model is recorded as cost unknown, and the dollar cap cannot be enforced for it. An unattended run with a dollar cap the operator set is refused for such a model unless `allow_unpriced` is on.
 - **Estimated usage.** When a provider reports no usage, tokens are estimated at four bytes per token and marked as estimated.
 - **Retries.** A request is tried up to three times on a transient failure. Redirects from a provider are never followed, so a key is never replayed to another host.
 - **Offline.** `--offline` refuses a provider whose endpoint is not loopback before any request, and installs a dialer that refuses every non-loopback address. A private LAN address is not local.

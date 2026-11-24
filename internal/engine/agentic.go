@@ -90,10 +90,30 @@ func (e Estimate) String() string {
 	case e.Local:
 		return fmt.Sprintf("About %d investigations with local model %s. No model spend. Token cap %d.", e.Investigations, e.Model, e.CapTokens)
 	case !e.CostKnown:
-		return fmt.Sprintf("About %d investigations with %s. Its price is not known to Spackle, so spend cannot be estimated or capped in dollars; the token cap of %d still applies. Add [pricing] to spackle.toml to fix this.", e.Investigations, e.Model, e.CapTokens)
+		return fmt.Sprintf("About %d investigations with %s. Warning: its price is not known to Spackle, so spend cannot be estimated or capped in dollars; the token cap of %d still applies. Add [pricing] to spackle.toml to fix this.", e.Investigations, e.Model, e.CapTokens)
 	default:
 		return fmt.Sprintf("About %d investigations with %s: estimated up to $%.2f. Hard caps: $%.2f and %d tokens.", e.Investigations, e.Model, e.USD, e.CapUSD, e.CapTokens)
 	}
+}
+
+// confirmEstimate is the consent step every model run passes before
+// anything is written. With a confirm function the operator is asked. With
+// none (--yes, the Action, the MCP server, the benchmark) nobody reads the
+// estimate, so a dollar cap the operator set but that cannot hold for an
+// unpriced model refuses the run unless they opted in. m is the model the
+// estimate was made for.
+func confirmEstimate(cfg config.Config, m config.Model, est Estimate, confirm func(Estimate) bool) error {
+	if confirm != nil {
+		if !confirm(est) {
+			return fmt.Errorf("%w: the run was not confirmed. Pass --yes to skip this prompt, or lower --budget-usd", ErrRefused)
+		}
+		return nil
+	}
+	if est.Local || est.CostKnown || !cfg.Budget.USDSet || cfg.Budget.AllowUnpriced || llm.ReportsCost(m.BaseURL) {
+		return nil
+	}
+	return fmt.Errorf("%w: the dollar cap of $%.2f cannot be enforced, because Spackle has no price for %s. Add its price in USD per million tokens to spackle.toml:\n\n[pricing.%q]\ninput_per_mtok = <price>\noutput_per_mtok = <price>\n\nOr pass --allow-unpriced (or set allow_unpriced = true under [budget]) to run with the token cap of %d and no dollar cap",
+		ErrRefused, est.CapUSD, est.Model, est.Model, est.CapTokens)
 }
 
 func estimate(cfg config.Config, prov llm.Provider, pricer llm.Pricer, leads int) Estimate {

@@ -51,6 +51,7 @@ wall_time = "30m"       # a duration such as 90s, 30m or 2h
 sandbox_runs = 40       # container runs for the run
 max_findings = 50       # findings reported, highest ranked first
 max_turns = 24          # tool-use turns in one agent conversation (code scans and debug)
+# allow_unpriced = false  # true lets an unattended run use a model with no known price although usd is set
 
 [scope]
 # hosts = ["localhost:8081"]   # absent by default: no running target is authorized
@@ -95,7 +96,7 @@ fail_on = "high"        # critical, high, medium, low or never
 # output_per_mtok = 0.0
 ```
 
-Flags that map onto these keys: `--provider`, `--model`, `--base-url`, `--budget-tokens`, `--budget-usd`, `--max-findings`, `--offline`, `--fix`, `--no-fix`, `--pr`, `--format`, `--out`, `--fail-on`, `--exclude` (repeatable, adds to `[scan] exclude`). `--authorize` names a scope file and `--yes` turns off every prompt. `spackle scan <git URL> --ref <branch or tag>` scans that branch or tag instead of the remote's default branch; the ref is recorded in the run next to the commit it resolved to. A commit hash is not accepted as a ref. `spackle scan <target> --dry-run` maps the target and runs the seeders, then prints what would be read, each seeder's status and lead count, the leads by class, how many investigations would be planned and the cost estimate. It calls no model, stores no run and exits 0; with `--format json` it prints the same as one JSON object. It works for a directory or a git URL, not for a running target.
+Flags that map onto these keys: `--provider`, `--model`, `--base-url`, `--budget-tokens`, `--budget-usd`, `--allow-unpriced`, `--max-findings`, `--offline`, `--fix`, `--no-fix`, `--pr`, `--format`, `--out`, `--fail-on`, `--exclude` (repeatable, adds to `[scan] exclude`). `--authorize` names a scope file and `--yes` turns off every prompt. `spackle scan <git URL> --ref <branch or tag>` scans that branch or tag instead of the remote's default branch; the ref is recorded in the run next to the commit it resolved to. A commit hash is not accepted as a ref. `spackle scan <target> --dry-run` maps the target and runs the seeders, then prints what would be read, each seeder's status and lead count, the leads by class, how many investigations would be planned and the cost estimate. It calls no model, stores no run and exits 0; with `--format json` it prints the same as one JSON object. It works for a directory or a git URL, not for a running target.
 
 Stored runs accumulate under `state_dir`. `spackle runs` lists them, newest first, with target, outcome and finding count (`--format json` for a program). `spackle runs prune --keep <n>` deletes all but the newest `n`, and `--older-than <age>` (for example `30d` or `72h`) deletes runs started longer ago; with both, a run is deleted when either rule selects it. The runs are listed first, and nothing is deleted without `--yes` or a typed confirmation on a terminal. Pruning a run also removes its clone and its fix worktree from the state directory; a fix branch stays in your repository.
 
@@ -143,7 +144,7 @@ export OPENAI_API_KEY=...
 spackle scan . --provider openai --model "<an OpenAI model name>"
 ```
 
-Requests go to `https://api.openai.com/v1/chat/completions`. Spackle has no built-in price for OpenAI models, so add a `[pricing]` entry (see [Pricing](#pricing)) if you want the dollar cap to apply.
+Requests go to `https://api.openai.com/v1/chat/completions`. Spackle has no built-in price for OpenAI models, so add a `[pricing]` entry (see [Pricing](#pricing)) if you want the dollar cap to apply. A run with `--yes` and a dollar cap you set is refused until you do, or until you pass `--allow-unpriced`.
 
 ### OpenAI-compatible: the flexible path
 
@@ -334,6 +335,8 @@ A local model always costs zero.
 
 **What "cost unknown" means.** When a remote model has no price and the provider reports none, the call is recorded with a cost of zero and marked as unknown. The dollar cap then cannot stop the run, because nothing is added to the spend. The token cap, the wall time cap and the sandbox run cap still apply. Spackle says so before the run starts, `spackle doctor` warns about it, and the report marks the cost as unknown.
 
+**A dollar cap you set is not silently dropped.** When nobody confirms the estimate (`--yes`, the GitHub Action, the MCP server, the benchmark) and you set the dollar cap yourself, with `usd` under `[budget]` or with `--budget-usd`, a run with an unpriced remote model is refused with exit code 2 before any model call. The message shows the `[pricing."<model>"]` table to add. To run anyway under the other caps, pass `--allow-unpriced` or set `allow_unpriced = true` under `[budget]`. The rule does not apply to the built-in default cap, to a local model, to OpenRouter (which reports its own cost), or when you answer the prompt on a terminal: the prompt carries the warning.
+
 ## Budgets
 
 Caps are hard limits enforced in Go. No tool call and nothing in target content can raise them. A cap cannot be turned off: zero or a missing value means the default, and a negative value is an error.
@@ -346,6 +349,7 @@ Caps are hard limits enforced in Go. No tool call and nothing in target content 
 | `sandbox_runs` | none | 40 | Container runs: proofs, compile checks, test runs, fix checks |
 | `max_findings` | `--max-findings` | 50 | Findings in the report |
 | `max_turns` | none | 24 | Tool-use turns in one agent conversation |
+| `allow_unpriced` | `--allow-unpriced` | false | Not a cap: lets an unattended run start with an unpriced model although `usd` is set (see [Pricing](#pricing)) |
 
 `tokens`, `usd`, `wall_time` and `sandbox_runs` apply only when a model is configured. `max_findings` applies to every run.
 

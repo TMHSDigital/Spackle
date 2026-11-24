@@ -92,6 +92,11 @@ func runBench(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "spackle bench: the run was not confirmed, so nothing was scanned and no model was called.\nPass --yes to skip this prompt, or lower --budget-usd.")
 		return ExitUsage
 	}
+	if paid && !g.yes {
+		// The operator read the notice about unpriced models on a terminal
+		// and answered yes, which is the opt-in an unattended run needs.
+		cfg.Budget.AllowUnpriced = true
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -177,7 +182,7 @@ func benchIsPaid(cfg config.Config) (bool, error) {
 func benchConfirm(env Env, cfg config.Config, fixtures int, yes bool) bool {
 	fmt.Fprintf(env.Stderr, "This benchmark will run %d fixture scan(s) with %s model %s.\n", fixtures, cfg.Model.Provider, cfg.Model.Model)
 	fmt.Fprintf(env.Stderr, "Spend cap for the whole benchmark: $%.2f. The run stops when the cap is reached.\n", cfg.Budget.USD)
-	fmt.Fprintf(env.Stderr, "If Spackle does not know the model's price the dollar cap cannot be enforced; then only the token cap of %d applies, to each fixture separately. Add [pricing] to spackle.toml to avoid that.\n", cfg.Budget.Tokens)
+	fmt.Fprintf(env.Stderr, "If Spackle does not know the model's price the dollar cap cannot be enforced; then only the token cap of %d applies, to each fixture separately. Add [pricing] to spackle.toml to avoid that. With --yes and a dollar cap you set, such a model is refused unless you pass --allow-unpriced.\n", cfg.Budget.Tokens)
 	if yes {
 		return true
 	}

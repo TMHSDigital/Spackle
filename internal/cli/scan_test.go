@@ -442,6 +442,34 @@ func TestScanPaidRunWithoutATerminalIsRefused(t *testing.T) {
 	}
 }
 
+// TestScanUnattendedDollarCapNeedsAPrice checks that --yes with a dollar cap
+// does not start a run the cap cannot stop. "some-model" has no price, so
+// the run is refused before any model call and the message carries the
+// table to add and the flag that opts in.
+func TestScanUnattendedDollarCapNeedsAPrice(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	t.Setenv("ANTHROPIC_API_KEY", "placeholder-"+"not-a-key")
+	t.Setenv("PATH", t.TempDir())
+
+	code, out, stderr := run("scan", target, "--config", cfg, "--format", "json", "--yes",
+		"--provider", "anthropic", "--model", "some-model", "--budget-usd", "2")
+	if code != ExitUsage {
+		t.Fatalf("exit = %d, want %d\nstderr: %s", code, ExitUsage, stderr)
+	}
+	for _, want := range []string{"$2.00 cannot be enforced", `[pricing."some-model"]`, "input_per_mtok", "--allow-unpriced", "allow_unpriced = true"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, stderr)
+		}
+	}
+	if out != "" {
+		t.Errorf("a refused run printed a report: %q", out)
+	}
+	if dirs := runDirs(t, stateDir); len(dirs) != 0 {
+		t.Errorf("a refused run left a run directory behind: %v", dirs)
+	}
+}
+
 func TestConfirmer(t *testing.T) {
 	paid := engine.Estimate{Investigations: 3, Model: "some-model", USD: 1.5, CostKnown: true}
 	local := engine.Estimate{Investigations: 3, Model: "some-model", Local: true}

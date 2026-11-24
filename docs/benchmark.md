@@ -89,7 +89,7 @@ spackle bench --provider anthropic --model claude-opus-5-5 --budget-usd 5
 What to expect from a paid run:
 
 - Before the first fixture, Spackle says how many scans it will run, with which model, and the spend cap, then asks you to confirm. Without a terminal it refuses unless you pass `--yes`.
-- The dollar cap is enforced across the whole benchmark. Each fixture gets what is left. If Spackle does not know the model's price the dollar cap cannot be enforced; add `[pricing]` first.
+- The dollar cap is enforced across the whole benchmark. Each fixture gets what is left. If Spackle does not know the model's price the dollar cap cannot be enforced; add `[pricing]` first. With `--yes` and `--budget-usd`, such a model is refused unless you pass `--allow-unpriced`.
 - When the cap is reached, or a scan is refused for a reason that would repeat, the run stops. A run that did not cover every fixture prints its partial figures and writes no results file, so a partial run can never be quoted.
 - Verified fixes need a container runtime. Without one, nothing is demonstrated and the verified-fix rate is 0.
 - The check for an existing results file happens before any scan, so a name clash never throws away a run that cost money.

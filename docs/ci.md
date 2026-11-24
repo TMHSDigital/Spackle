@@ -103,7 +103,7 @@ The variable depends on the provider:
 | `openai` | `OPENAI_API_KEY` |
 | `openai-compatible` | `SPACKLE_API_KEY`, or the variable named by `api_key_env` in a committed `spackle.toml` |
 
-With a model, the run spends money, up to `budget-usd`. The action passes `--yes`, so nobody is asked to confirm the estimate: setting `provider` is the consent. If Spackle has no price for the model, the dollar cap cannot be enforced and only the token cap applies. See [config.md](config.md#pricing).
+With a model, the run spends money, up to `budget-usd`. The action passes `--yes`, so nobody is asked to confirm the estimate: setting `provider` is the consent. If Spackle has no price for the model (every `openai` model, and most `openai-compatible` endpoints other than OpenRouter), the dollar cap cannot be enforced, so the scan is refused with exit code 2 and the message shows the `[pricing]` table to commit in `spackle.toml`. To run under the token cap alone, set `args: --allow-unpriced`. See [config.md](config.md#pricing).
 
 A committed `spackle.toml` in the scanned repository's working directory is read as usual. Use it for per-stage models, budgets other than the dollar cap, or pricing. Point at a file elsewhere with `args: --config path/to/spackle.toml`.
 
