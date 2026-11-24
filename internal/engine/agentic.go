@@ -169,7 +169,7 @@ type agenticState struct {
 }
 
 func newAgenticState() *agenticState {
-	return &agenticState{capState: capState{outcome: "completed"}, parent: map[string]int64{}, fates: map[string]leadFate{}}
+	return &agenticState{capState: capState{outcome: ledger.OutcomeCompleted}, parent: map[string]int64{}, fates: map[string]leadFate{}}
 }
 
 // settle records one fate for every lead of an investigation.
@@ -219,7 +219,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	// Plan.
 	r.say("Planning investigations")
 	var intents []agent.Intent
-	planner, err := r.runnerFor("planner")
+	planner, err := r.runnerFor(config.StagePlanner)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -269,7 +269,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	for _, s := range []struct {
 		stage string
 		into  **agent.Runner
-	}{{"investigator", &sg.investigator}, {"reviewer", &sg.reviewer}, {"prover", &sg.prover}, {"fixer", &sg.fixer}} {
+	}{{config.StageInvestigator, &sg.investigator}, {config.StageReviewer, &sg.reviewer}, {config.StageProver, &sg.prover}, {config.StageFixer, &sg.fixer}} {
 		if *s.into, err = r.runnerFor(s.stage); err != nil {
 			return nil, nil, "", err
 		}
@@ -306,7 +306,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		}
 	}
 	if st.interrupted {
-		st.outcome = "interrupted"
+		st.outcome = ledger.OutcomeInterrupted
 		st.capNote = "interrupted by the operator"
 		r.say("Interrupted: writing the findings produced so far")
 		// The run's context is cancelled. The remaining steps are local and
@@ -326,7 +326,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	// Look for chains across confirmed findings. Optional: skip when the
 	// budget is gone, and never fail the run over it.
 	if !st.interrupted && r.budget.Check() == nil {
-		if mech, merr := r.runnerFor("mechanical"); merr == nil {
+		if mech, merr := r.runnerFor(config.StageMechanical); merr == nil {
 			if linked, cerr := agent.Correlate(ctx, mech, mapSeq, r.sealer, st.findings); cerr == nil {
 				st.findings = linked
 			} else if errors.Is(cerr, budget.ErrExhausted) {
@@ -369,7 +369,7 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 		// A provider failure on one investigation should not discard
 		// the rest of the run. Record it and move on.
 		reason := "the investigation failed: " + textx.Clip(ierr.Error(), 300)
-		if _, err := r.led.Append(seq, ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: it.ID + " " + it.Title, Reason: reason}); err != nil {
+		if _, err := r.led.Append(seq, ledger.TypeReject, ledger.Reject{Stage: config.StageInvestigator, Intent: it.ID + " " + it.Title, Reason: reason}); err != nil {
 			return goOn, err
 		}
 		st.settle(it.LeadIDs, fateIncomplete, reason)
@@ -392,9 +392,9 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 		f = agent.ApplyReview(f, rev)
 		outcomeName := rev.Verdict
 		if rev.Verdict == agent.ReviewRefuted {
-			outcomeName = "dismissed"
+			outcomeName = ledger.VerdictDismissed
 		}
-		if _, err := r.led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "reviewer", Outcome: outcomeName, Reason: rev.Reason}); err != nil {
+		if _, err := r.led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageReviewer, Outcome: outcomeName, Reason: rev.Reason}); err != nil {
 			return goOn, err
 		}
 	case errors.Is(rerr, budget.ErrExhausted):
@@ -418,7 +418,7 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 		default:
 			// One failed proof or fix step must not end the run. The
 			// finding stays as it was traced.
-			if _, err := r.led.Append(seq, ledger.TypeReject, ledger.Reject{Stage: "prover", Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + textx.Clip(perr.Error(), 300)}); err != nil {
+			if _, err := r.led.Append(seq, ledger.TypeReject, ledger.Reject{Stage: config.StageProver, Intent: f.ID + " " + f.Title, Reason: "the proof or fix step failed: " + textx.Clip(perr.Error(), 300)}); err != nil {
 				return goOn, err
 			}
 		}

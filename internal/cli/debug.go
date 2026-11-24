@@ -11,6 +11,7 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/engine"
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/ledger"
 )
 
 // maxIssueFile is how much of an issue file is read. An issue is a
@@ -84,7 +85,7 @@ func runDebug(env Env, args []string) int {
 			return ExitFindings
 		}
 	}
-	if res.Run.Outcome != "completed" {
+	if res.Run.Outcome != ledger.OutcomeCompleted {
 		fmt.Fprintf(env.Stderr, "The run ended early (%s) before the failure was reproduced. Raise the budget and run again.\n", res.Run.Outcome)
 		return ExitFindings
 	}

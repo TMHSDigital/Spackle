@@ -50,3 +50,23 @@ func TestClipNeverSplitsACharacter(t *testing.T) {
 		}
 	}
 }
+
+func TestCut(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"abc", 10, "abc"},
+		{"abcd", 3, "abc"},
+		{"abc", 0, ""},
+		{"abc", -1, ""},
+		{"aé", 2, "a"},
+		{"a€b", 3, "a"},
+		{"a😀b", 5, "a😀"},
+	} {
+		if got := Cut(c.in, c.max); got != c.want || !utf8.ValidString(got) {
+			t.Errorf("Cut(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+	}
+}

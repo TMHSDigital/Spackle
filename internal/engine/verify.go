@@ -70,18 +70,12 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 	if st, serr := os.Stat(targetDir); serr != nil || !st.IsDir() {
 		return nil, fmt.Errorf("%w: the target of run %s (%s) is no longer a directory here. Run verify where the scanned directory still exists, or scan again", ErrRefused, run.ID, targetDir)
 	}
-	detect := opts.DetectRuntime
-	if detect == nil {
-		detect = sandbox.Detect
-	}
-	rt, err := detect(ctx, opts.Config.Sandbox.Runtime)
+	rt, err := detectRuntime(ctx, opts.DetectRuntime, opts.Config.Sandbox.Runtime)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
-	profile := sandbox.Profile{
-		Network: opts.Config.Sandbox.Network, MemoryMB: opts.Config.Sandbox.MemoryMB, CPUs: opts.Config.Sandbox.CPUs,
-		PIDs: opts.Config.Sandbox.PIDs, Timeout: opts.Config.Sandbox.Timeout.Duration,
-	}.WithDefaults()
+	// The same profile a scan runs its proofs under.
+	profile := opts.Config.Sandbox.Profile().WithDefaults()
 
 	type job struct {
 		f   finding.Finding
@@ -134,13 +128,11 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 			}
 			files[name] = string(b)
 		}
-		if !rt.ImagePresent(ctx, j.man.Image) {
-			if opts.Config.Offline {
-				return outcomes, fmt.Errorf("%w: sandbox image %s is not on this machine and offline mode does not pull images; pull it once while online", ErrRefused, j.man.Image)
+		if ierr := ensureImage(ctx, rt, j.man.Image, opts.Config.Offline, opts.Progress); ierr != nil {
+			if errors.As(ierr, &offlineImageError{}) {
+				return outcomes, fmt.Errorf("%w: %w", ErrRefused, ierr)
 			}
-			if perr := rt.Pull(ctx, j.man.Image); perr != nil {
-				return outcomes, fmt.Errorf("sandbox image %s is not available: %w", j.man.Image, perr)
-			}
+			return outcomes, ierr
 		}
 		spec := sandbox.Spec{Image: j.man.Image, Cmd: j.man.Command, SourceDir: targetDir, Files: files, Profile: profile}
 		res, rerr := rt.Run(ctx, spec)
@@ -170,7 +162,7 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 				// is not the proof succeeding, and it is not a fix.
 				note = fmt.Sprintf("The proof could not be verified: it %s, which shows neither that the flaw is still there nor that it is gone, so the finding keeps its status (%s). Read the proof's output to see what failed.", agent.InconclusiveWhy(res), j.f.Status)
 			}
-			if _, err := led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: j.f.ID, Stage: "verify", Outcome: "inconclusive", Reason: note}); err != nil {
+			if _, err := led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: j.f.ID, Stage: "verify", Outcome: ledger.VerdictInconclusive, Reason: note}); err != nil {
 				return outcomes, err
 			}
 			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
@@ -192,9 +184,9 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 			f.Status = finding.StatusFixed
 			f.Remediation.Verification = "verified by spackle verify: the stored proof of concept no longer succeeds against the current code"
 		}
-		outcomeName := "still-reproduces"
+		outcomeName := ledger.VerdictStillReproduces
 		if !reproduces {
-			outcomeName = "no-longer-reproduces"
+			outcomeName = ledger.VerdictNoLongerReproduces
 		}
 		if _, err := led.Append(seq, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "verify", Outcome: outcomeName, Reason: out.Note}); err != nil {
 			return outcomes, err

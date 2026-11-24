@@ -16,6 +16,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/engine"
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/report"
 )
 
@@ -74,7 +75,7 @@ func runScan(env Env, args []string) int {
 	if engine.Resumable(res.Run) {
 		fmt.Fprintf(env.Stderr, "The budget ran out before every planned investigation was done. To continue with the rest under a new budget:\n  spackle scan %s --resume %s\n", tgt, res.RunID)
 	}
-	if res.Run.Outcome == "interrupted" {
+	if res.Run.Outcome == ledger.OutcomeInterrupted {
 		// The report holds what was found before the interrupt. The run
 		// did not finish, so it is not a pass whatever it found.
 		fmt.Fprintf(env.Stderr, "The run was interrupted. The report covers only what was investigated before that.\n")

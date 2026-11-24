@@ -22,7 +22,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/TMHSDigital/spackle/internal/envelope"
 	"github.com/TMHSDigital/spackle/internal/llm"
@@ -268,10 +267,7 @@ func truncate(text string, limit int) string {
 	cut := strings.LastIndexByte(text[:limit], '\n') + 1
 	if cut == 0 {
 		// One line longer than the limit: cut inside it, on a rune boundary.
-		cut = limit
-		for cut > 0 && !utf8.RuneStart(text[cut]) {
-			cut--
-		}
+		cut = len(textx.Cut(text, limit))
 	}
 	head := text[:cut]
 	if !strings.HasSuffix(head, "\n") {

@@ -105,7 +105,7 @@ func loadResume(ctx context.Context, stateDir, id, root string, force bool) (*re
 // Resumable reports whether a stored run stopped on its budget with planned
 // investigations it did not reach, which scan --resume can continue.
 func Resumable(run report.Run) bool {
-	if run.Command != "scan" || run.Mode != "agentic" || run.Outcome != "budget-exhausted" {
+	if run.Command != "scan" || run.Mode != "agentic" || run.Outcome != ledger.OutcomeBudgetExhausted {
 		return false
 	}
 	for _, skip := range run.Skipped {

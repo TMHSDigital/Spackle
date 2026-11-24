@@ -184,7 +184,7 @@ func ResolveRun(stateDir, id string) (string, error) {
 func (r *runner) fail(err error) error {
 	if !r.ended {
 		r.ended = true
-		_, _ = r.led.Append(0, ledger.TypeRunEnd, ledger.RunEnd{Outcome: "failed", Note: err.Error()})
+		_, _ = r.led.Append(0, ledger.TypeRunEnd, ledger.RunEnd{Outcome: ledger.OutcomeFailed, Note: err.Error()})
 	}
 	return err
 }

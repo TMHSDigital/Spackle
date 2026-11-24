@@ -18,7 +18,6 @@ import (
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/mapper"
-	"github.com/TMHSDigital/spackle/internal/sandbox"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
 	"github.com/TMHSDigital/spackle/internal/textx"
@@ -80,7 +79,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	provs := newProviders(opts.Config, opts.ProviderFactory)
 	var defaultProv llm.Provider
 	if agentic {
-		if defaultProv, err = preflightModel(provs, "investigator"); err != nil {
+		if defaultProv, err = preflightModel(provs, config.StageInvestigator); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 	}
@@ -211,7 +210,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 			// refused when its dollar cap cannot hold. A dry run is how
 			// a CI setup is checked, so it says so here.
 			if opts.Confirm == nil {
-				if why := unpricedRefusal(opts.Config, opts.Config.ForStage("investigator"), est); why != "" {
+				if why := unpricedRefusal(opts.Config, opts.Config.ForStage(config.StageInvestigator), est); why != "" {
 					plan.Notes = append(plan.Notes, "A real run with these settings would be refused: "+why)
 				}
 			}
@@ -225,7 +224,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if agentic {
 		est := estimate(opts.Config, defaultProv, llm.NewPricer(llm.PricesFromConfig(opts.Config.Pricing)), len(leads))
 		say("%s", est.String())
-		if err := confirmEstimate(opts.Config, opts.Config.ForStage("investigator"), est, opts.Confirm); err != nil {
+		if err := confirmEstimate(opts.Config, opts.Config.ForStage(config.StageInvestigator), est, opts.Confirm); err != nil {
 			return Result{}, err
 		}
 	}
@@ -239,11 +238,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	r.changed, r.resume = changed, resume
 	led := r.led
 	if agentic {
-		detect := opts.DetectRuntime
-		if detect == nil {
-			detect = sandbox.Detect
-		}
-		rt, derr := detect(ctx, r.cfg.Sandbox.Runtime)
+		rt, derr := detectRuntime(ctx, opts.DetectRuntime, r.cfg.Sandbox.Runtime)
 		why := ""
 		if derr != nil {
 			rt, why = nil, firstSentence(derr.Error())
@@ -315,7 +310,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 
 	var findings []finding.Finding
 	var parent map[string]int64
-	outcome := "completed"
+	outcome := ledger.OutcomeCompleted
 	if agentic {
 		findings, parent, outcome, err = r.agentic(ctx, root, m, leads, leadSeq, mapSeq)
 		if err != nil {

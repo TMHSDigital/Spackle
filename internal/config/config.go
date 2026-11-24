@@ -21,8 +21,19 @@ import (
 // DefaultFile is the config file looked up in the working directory.
 const DefaultFile = "spackle.toml"
 
+// The pipeline stages that can have their own model. The names are config
+// keys and are stored in ledgers.
+const (
+	StagePlanner      = "planner"
+	StageInvestigator = "investigator"
+	StageProver       = "prover"
+	StageReviewer     = "reviewer"
+	StageFixer        = "fixer"
+	StageMechanical   = "mechanical"
+)
+
 // Stages lists the pipeline stages that can have their own model.
-var Stages = []string{"planner", "investigator", "prover", "reviewer", "fixer", "mechanical"}
+var Stages = []string{StagePlanner, StageInvestigator, StageProver, StageReviewer, StageFixer, StageMechanical}
 
 // Provider names.
 const (
@@ -408,11 +419,7 @@ func (c Config) Validate() error {
 	// it would refuse later (a timeout above its hard cap, a negative
 	// limit) stops the run before anything is spent.
 	if c.Sandbox.Network == "none" || c.Sandbox.Network == "scope" {
-		profile := sandbox.Profile{
-			Network: c.Sandbox.Network, MemoryMB: c.Sandbox.MemoryMB, CPUs: c.Sandbox.CPUs,
-			PIDs: c.Sandbox.PIDs, Timeout: c.Sandbox.Timeout.Duration,
-		}
-		if err := profile.Validate(); err != nil {
+		if err := c.Sandbox.Profile().Validate(); err != nil {
 			add("[sandbox] %s", strings.TrimPrefix(err.Error(), "sandbox: "))
 		}
 	}
@@ -484,4 +491,15 @@ func DefaultKeyEnv(provider string) string {
 		return "SPACKLE_API_KEY"
 	}
 	return ""
+}
+
+// Profile returns the container limits the [sandbox] table asks for, as
+// they were written: the sandbox package fills in its defaults. It is the
+// one place the table becomes a profile, so every command that starts a
+// container runs it under the same limits.
+func (s Sandbox) Profile() sandbox.Profile {
+	return sandbox.Profile{
+		Network: s.Network, MemoryMB: s.MemoryMB, CPUs: s.CPUs,
+		PIDs: s.PIDs, Timeout: s.Timeout.Duration,
+	}
 }

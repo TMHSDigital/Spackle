@@ -14,12 +14,12 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/engine"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/report"
+	"github.com/TMHSDigital/spackle/internal/textx"
 )
 
 // Limits on what one tool call returns. They keep a reply small enough for a
@@ -520,11 +520,7 @@ func truncate(s string, limit int) (string, bool) {
 	if len(s) <= limit {
 		return s, false
 	}
-	cut := limit
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut], true
+	return textx.Cut(s, limit), true
 }
 
 type findingResult struct {

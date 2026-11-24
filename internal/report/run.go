@@ -231,7 +231,7 @@ func Load(runDir string) (Run, error) {
 		return Run{}, fmt.Errorf("ledger in %s has no run.start event: it is not a Spackle run", runDir)
 	}
 	if run.Outcome == "" {
-		run.Outcome = "incomplete"
+		run.Outcome = ledger.OutcomeIncomplete
 		run.EndedAt = events[len(events)-1].TS
 	}
 	fs := make([]finding.Finding, 0, len(order))

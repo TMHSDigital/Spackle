@@ -164,15 +164,11 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 		missing = append(missing, "no model is configured (set [model] in spackle.toml, or pass --provider and --model)")
 	default:
 		var perr error
-		if prov, perr = preflightModel(provs, "fixer"); perr != nil {
+		if prov, perr = preflightModel(provs, config.StageFixer); perr != nil {
 			missing = append(missing, "the configured model cannot be used ("+perr.Error()+")")
 		}
 	}
-	detect := opts.DetectRuntime
-	if detect == nil {
-		detect = sandbox.Detect
-	}
-	rt, derr := detect(ctx, cfg.Sandbox.Runtime)
+	rt, derr := detectRuntime(ctx, opts.DetectRuntime, cfg.Sandbox.Runtime)
 	switch {
 	case derr != nil:
 		missing = append(missing, "no container runtime is available ("+derr.Error()+")")
@@ -190,7 +186,7 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	}
 	est := Estimate{Investigations: 1, Model: prov.Model(), USD: usd, CostKnown: known, Local: prov.Local(), CapUSD: cfg.Budget.USD, CapTokens: cfg.Budget.Tokens}
 	say("%s", est.String())
-	if err := confirmEstimate(cfg, cfg.ForStage("fixer"), est, opts.Confirm); err != nil {
+	if err := confirmEstimate(cfg, cfg.ForStage(config.StageFixer), est, opts.Confirm); err != nil {
 		return Result{}, err
 	}
 
@@ -229,11 +225,11 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 		return Result{}, err
 	}
 	newRegistry := r.registries(root, m.Files)
-	prover, err := r.runnerFor("prover")
+	prover, err := r.runnerFor(config.StageProver)
 	if err != nil {
 		return Result{}, err
 	}
-	fixer, err := r.runnerFor("fixer")
+	fixer, err := r.runnerFor(config.StageFixer)
 	if err != nil {
 		return Result{}, err
 	}
@@ -408,14 +404,14 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 	rep, err := d.reproduce(ctx, reproCmd, prover, newRegistry)
 	switch {
 	case errors.Is(err, budget.ErrExhausted):
-		return "budget-exhausted", nil, d.skip(err, "Reproduction: not completed, so it is not known whether the failure reproduces.", "Root cause analysis and fix: not started.")
+		return ledger.OutcomeBudgetExhausted, nil, d.skip(err, "Reproduction: not completed, so it is not known whether the failure reproduces.", "Root cause analysis and fix: not started.")
 	case err != nil:
 		return "", nil, err
 	case rep.passes:
-		return "completed", nil, d.note("The test %s passes on the current code, so there is nothing to debug.", d.test)
+		return ledger.OutcomeCompleted, nil, d.note("The test %s passes on the current code, so there is nothing to debug.", d.test)
 	case !rep.reproduced:
 		f := d.notReproduced(rep)
-		return "completed", &f, nil
+		return ledger.OutcomeCompleted, &f, nil
 	}
 
 	bisect := ""
@@ -431,7 +427,7 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 			return "", nil, err
 		}
 	}
-	outcome := "completed"
+	outcome := ledger.OutcomeCompleted
 	var diag agent.Diagnosis
 	derr := d.r.budget.Check()
 	if derr == nil {
@@ -441,7 +437,7 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 	switch {
 	case derr == nil:
 	case errors.Is(derr, budget.ErrExhausted):
-		outcome = "budget-exhausted"
+		outcome = ledger.OutcomeBudgetExhausted
 		left := "Root cause analysis and fix: not completed."
 		if diag.RootCause != "" {
 			left = "Fix: a root cause was found, but no fix was verified."

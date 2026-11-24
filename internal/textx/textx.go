@@ -11,11 +11,21 @@ func Clip(s string, maxBytes int) string {
 	if len(s) <= maxBytes {
 		return s
 	}
+	return Cut(s, maxBytes) + "..."
+}
+
+// Cut returns the longest prefix of s that is at most maxBytes bytes long
+// and does not end inside a UTF-8 sequence. It adds nothing: it is for a
+// caller that says in its own words that text was cut.
+func Cut(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
 	if maxBytes < 0 {
 		maxBytes = 0
 	}
 	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
 		maxBytes--
 	}
-	return s[:maxBytes] + "..."
+	return s[:maxBytes]
 }

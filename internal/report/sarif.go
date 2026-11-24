@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/finding"
+	"github.com/TMHSDigital/spackle/internal/ledger"
 )
 
 // SARIF 2.1.0, shaped for GitHub code scanning. Only the properties Spackle
@@ -181,7 +182,7 @@ func renderSARIF(run Run, w io.Writer) error {
 				Version:        run.Version,
 				Rules:          rules,
 			}},
-			Invocations: []sarifInvocation{{ExecutionSuccessful: run.Outcome != "failed"}},
+			Invocations: []sarifInvocation{{ExecutionSuccessful: run.Outcome != ledger.OutcomeFailed}},
 			Results:     results,
 		}},
 	})

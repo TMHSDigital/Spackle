@@ -14,6 +14,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
 	"github.com/TMHSDigital/spackle/internal/authz"
 	"github.com/TMHSDigital/spackle/internal/budget"
+	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/dast"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
@@ -67,12 +68,12 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	provs := newProviders(cfg, opts.ProviderFactory)
 	var defaultProv llm.Provider
 	if agentic {
-		if defaultProv, err = preflightModel(provs, "investigator"); err != nil {
+		if defaultProv, err = preflightModel(provs, config.StageInvestigator); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 		est := estimate(cfg, defaultProv, llm.NewPricer(llm.PricesFromConfig(cfg.Pricing)), 12)
 		progressf(opts.Progress, "%s", est.String())
-		if err := confirmEstimate(cfg, cfg.ForStage("investigator"), est, opts.Confirm); err != nil {
+		if err := confirmEstimate(cfg, cfg.ForStage(config.StageInvestigator), est, opts.Confirm); err != nil {
 			return Result{}, err
 		}
 	}
@@ -189,7 +190,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	}
 	findings = finding.Rank(finding.Dedup(findings))
 
-	outcome := "completed"
+	outcome := ledger.OutcomeCompleted
 	if agentic && len(findings) > 0 {
 		findings, outcome, err = r.assessLive(ctx, findings, parent, mapSeq, client, tgt)
 		if err != nil {
@@ -246,14 +247,14 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 		return nil, "", err
 	}
 	bud, sealer := r.budget, r.sealer
-	run, err := r.runnerFor("investigator")
+	run, err := r.runnerFor(config.StageInvestigator)
 	if err != nil {
 		return nil, "", err
 	}
 	run.MaxTurns = liveMaxTurns
 	known := func(id string) bool { _, ok := client.Exchange(id); return ok }
 
-	st := capState{outcome: "completed"}
+	st := capState{outcome: ledger.OutcomeCompleted}
 	notAssessed := func(rest []finding.Finding) []string {
 		var out []string
 		for _, f := range rest {
@@ -298,7 +299,7 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 			if ctx.Err() != nil {
 				return nil, "", ctx.Err()
 			}
-			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: f.ID, Reason: "the assessment failed: " + textx.Clip(aerr.Error(), 300)}); err != nil {
+			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: config.StageInvestigator, Intent: f.ID, Reason: "the assessment failed: " + textx.Clip(aerr.Error(), 300)}); err != nil {
 				return nil, "", err
 			}
 			continue
@@ -313,18 +314,18 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 			// the finding keeps its standing and is listed as not assessed.
 			st.exhaust(requestCap, notAssessed(findings[i:i+1])...)
 		case rev.Rejected != "":
-			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: "investigator", Intent: f.ID, Reason: rev.Rejected}); err != nil {
+			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: config.StageInvestigator, Intent: f.ID, Reason: rev.Rejected}); err != nil {
 				return nil, "", err
 			}
 		case rev.Confirmed:
 			findings[i] = rev.Finding
-			if _, err := r.led.Append(parent[f.ID], ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "investigator", Outcome: "confirmed", Reason: rev.Reason}); err != nil {
+			if _, err := r.led.Append(parent[f.ID], ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageInvestigator, Outcome: ledger.VerdictConfirmed, Reason: rev.Reason}); err != nil {
 				return nil, "", err
 			}
 		default:
 			findings[i].Status = finding.StatusDismissed
 			findings[i].DismissReason = "Assessed against the running target and not confirmed: " + rev.Reason
-			if _, err := r.led.Append(parent[f.ID], ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "investigator", Outcome: "dismissed", Reason: rev.Reason}); err != nil {
+			if _, err := r.led.Append(parent[f.ID], ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageInvestigator, Outcome: ledger.VerdictDismissed, Reason: rev.Reason}); err != nil {
 				return nil, "", err
 			}
 		}

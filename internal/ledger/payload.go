@@ -78,10 +78,29 @@ type BudgetSkip struct {
 // Verdict is the data of a verdict event: a change to a finding's standing.
 type Verdict struct {
 	FindingID string `json:"finding_id"`
-	Stage     string `json:"stage"`   // reviewer|prover|fixer|verify
-	Outcome   string `json:"outcome"` // confirmed|dismissed|demonstrated|not-reproduced|fixed|fix-rejected
+	Stage     string `json:"stage"`   // reviewer|investigator|prover|fixer|verify
+	Outcome   string `json:"outcome"` // one of the Verdict constants, or the reviewer's own verdict
 	Reason    string `json:"reason,omitempty"`
 }
+
+// Verdict outcomes the engine writes. They are stored in ledgers, so a
+// value is never changed, only added.
+const (
+	// A model confirmed or dismissed the finding.
+	VerdictConfirmed = "confirmed"
+	VerdictDismissed = "dismissed"
+	// The proof of concept showed the flaw in the sandbox, or did not.
+	VerdictDemonstrated  = "demonstrated"
+	VerdictNotReproduced = "not-reproduced"
+	// A fix was written and verified, written and not verified, or rejected.
+	VerdictFixed         = "fixed"
+	VerdictFixUnverified = "fix-unverified"
+	VerdictFixRejected   = "fix-rejected"
+	// "spackle verify" ran a stored proof again.
+	VerdictStillReproduces    = "still-reproduces"
+	VerdictNoLongerReproduces = "no-longer-reproduces"
+	VerdictInconclusive       = "inconclusive"
+)
 
 // Reject is the data of a draft.reject event.
 type Reject struct {
@@ -104,8 +123,25 @@ type SandboxRun struct {
 
 // RunEnd is the data of a run.end event.
 type RunEnd struct {
-	Outcome string `json:"outcome"` // completed|budget-exhausted|interrupted|failed
+	Outcome string `json:"outcome"` // one of the Outcome constants
 	Note    string `json:"note,omitempty"`
+}
+
+// Run outcomes. They are stored in ledgers and decide exit codes, so a
+// value is never changed, only added.
+const (
+	OutcomeCompleted       = "completed"
+	OutcomeBudgetExhausted = "budget-exhausted"
+	OutcomeInterrupted     = "interrupted"
+	OutcomeFailed          = "failed"
+	// OutcomeIncomplete is never written. A run whose ledger has no run.end
+	// event loads with it: the process died before the run ended.
+	OutcomeIncomplete = "incomplete"
+)
+
+// Outcomes lists every outcome a loaded run can have.
+func Outcomes() []string {
+	return []string{OutcomeCompleted, OutcomeBudgetExhausted, OutcomeInterrupted, OutcomeFailed, OutcomeIncomplete}
 }
 
 // ToolCall is the data of a tool.call event. Arguments are redacted and

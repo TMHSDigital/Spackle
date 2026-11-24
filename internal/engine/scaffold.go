@@ -146,5 +146,5 @@ type capState struct {
 func (c *capState) exhaust(capNote string, skipped ...string) {
 	c.capNote = capNote
 	c.skipped = append(c.skipped, skipped...)
-	c.outcome = "budget-exhausted"
+	c.outcome = ledger.OutcomeBudgetExhausted
 }

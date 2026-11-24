@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/agent"
 	"github.com/TMHSDigital/spackle/internal/agent/tools"
 	"github.com/TMHSDigital/spackle/internal/budget"
+	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	proglang "github.com/TMHSDigital/spackle/internal/lang"
@@ -76,11 +78,42 @@ type acceptedFix struct {
 func (r *runner) newLab(root string, tests mapper.Harness, rt sandbox.Runtime, why string) *lab {
 	return &lab{
 		r: r, root: root, runtime: rt, why: why, tests: tests, images: map[string]bool{},
-		profile: sandbox.Profile{
-			Network: r.cfg.Sandbox.Network, MemoryMB: r.cfg.Sandbox.MemoryMB, CPUs: r.cfg.Sandbox.CPUs,
-			PIDs: r.cfg.Sandbox.PIDs, Timeout: r.cfg.Sandbox.Timeout.Duration,
-		}.WithDefaults(),
+		profile: r.cfg.Sandbox.Profile().WithDefaults(),
 	}
+}
+
+// detectRuntime finds the container runtime. override replaces the
+// detection in tests; nil means the real one.
+func detectRuntime(ctx context.Context, override func(context.Context, string) (sandbox.Runtime, error), preferred string) (sandbox.Runtime, error) {
+	if override == nil {
+		override = sandbox.Detect
+	}
+	return override(ctx, preferred)
+}
+
+// offlineImageError says that an image would have to be pulled and offline
+// mode does not pull.
+type offlineImageError struct{ image string }
+
+func (e offlineImageError) Error() string {
+	return fmt.Sprintf("sandbox image %s is not on this machine and offline mode does not pull images; pull it once while online", e.image)
+}
+
+// ensureImage makes a sandbox image present on this machine. An image that
+// is missing is pulled, except in offline mode, where it is an
+// offlineImageError.
+func ensureImage(ctx context.Context, rt sandbox.Runtime, img string, offline bool, progress io.Writer) error {
+	if rt.ImagePresent(ctx, img) {
+		return nil
+	}
+	if offline {
+		return offlineImageError{image: img}
+	}
+	progressf(progress, "Pulling sandbox image %s", img)
+	if err := rt.Pull(ctx, img); err != nil {
+		return fmt.Errorf("sandbox image %s is not available: %w", img, err)
+	}
+	return nil
 }
 
 // isolation describes the sandbox for the run summary.
@@ -100,14 +133,8 @@ func (l *lab) image(ctx context.Context, lang string) (string, error) {
 	if l.images[img] {
 		return img, nil
 	}
-	if !l.runtime.ImagePresent(ctx, img) {
-		if l.r.cfg.Offline {
-			return "", fmt.Errorf("sandbox image %s is not on this machine and offline mode does not pull images; pull it once while online", img)
-		}
-		l.r.say("Pulling sandbox image %s", img)
-		if err := l.runtime.Pull(ctx, img); err != nil {
-			return "", fmt.Errorf("sandbox image %s is not available: %w", img, err)
-		}
+	if err := ensureImage(ctx, l.runtime, img, l.r.cfg.Offline, l.r.progress); err != nil {
+		return "", err
 	}
 	l.images[img] = true
 	return img, nil
@@ -226,7 +253,7 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 			Level:  finding.ConfidenceDemonstrated,
 			Reason: "A proof of concept ran in the sandbox and showed the flaw's effect. Read the proof to see exactly what it asserts.",
 		}
-		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "prover", Outcome: "demonstrated"}); err != nil {
+		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageProver, Outcome: ledger.VerdictDemonstrated}); err != nil {
 			return f, err
 		}
 	case proof.PoC != nil:
@@ -236,7 +263,7 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 		f.Proof.Reason = proof.Reason + " The finding stands on the code reading alone."
 		f.Proof.Result = proof.Output
 		f.Proof.Isolation = l.runtime.Name() + ": " + proof.Isolation
-		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "prover", Outcome: "not-reproduced", Reason: proof.Reason}); err != nil {
+		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageProver, Outcome: ledger.VerdictNotReproduced, Reason: proof.Reason}); err != nil {
 			return f, err
 		}
 	case proof.Reason != "":
@@ -276,20 +303,20 @@ func (l *lab) proveAndFix(ctx context.Context, f finding.Finding, parent int64, 
 		if fix.Why != "" {
 			f.Remediation.Why = fix.Why
 		}
-		outcome := "fix-unverified"
+		outcome := ledger.VerdictFixUnverified
 		if fix.Verified {
 			// The patch is checked but not applied: the scanned tree is
 			// never changed, so the flaw is still in the code.
 			f.Status = finding.StatusPatchAvailable
-			outcome = "fixed"
+			outcome = ledger.VerdictFixed
 		}
 		l.fixes = append(l.fixes, acceptedFix{id: f.ID, title: f.Title, files: fix.Files})
-		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "fixer", Outcome: outcome, Reason: fix.Verification}); err != nil {
+		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageFixer, Outcome: outcome, Reason: fix.Verification}); err != nil {
 			return f, err
 		}
 	case fix.Reason != "":
 		f.Remediation.Verification = "no patch: " + fix.Reason
-		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: "fixer", Outcome: "fix-rejected", Reason: fix.Reason}); err != nil {
+		if _, err := l.r.led.Append(parent, ledger.TypeVerdict, ledger.Verdict{FindingID: f.ID, Stage: config.StageFixer, Outcome: ledger.VerdictFixRejected, Reason: fix.Reason}); err != nil {
 			return f, err
 		}
 	}
