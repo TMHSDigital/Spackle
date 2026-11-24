@@ -8,7 +8,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('all', 'build', 'test', 'test-short', 'test-race', 'lint', 'fmt', 'tidy', 'bench', 'clean', 'help')]
+    [ValidateSet('all', 'build', 'test', 'test-short', 'test-race', 'lint', 'fmt', 'tidy', 'bench', 'demo-assets', 'demo-check', 'clean', 'help')]
     [string]$Target = 'help'
 )
 
@@ -72,6 +72,13 @@ switch ($Target) {
         Invoke-Build
         Invoke-Checked '.\spackle.exe' @('bench', '--corpus', 'bench/corpus', '--out', 'bench/results')
     }
+    # Regenerate every place that shows real output of a scan of the demo
+    # application. It starts examples/demo-app on 127.0.0.1 for one scan and
+    # needs Python. Read the diff afterwards.
+    'demo-assets' { Invoke-Checked 'go' @('run', './tools/demoassets', '-live') }
+    # What CI runs: the picture and the docs/findings.md example must match
+    # what the current code prints.
+    'demo-check' { Invoke-Checked 'go' @('run', './tools/demoassets', '-check') }
     'clean' {
         Invoke-Checked 'go' @('clean')
         foreach ($p in 'dist', 'spackle', 'spackle.exe', 'coverage.out') {
@@ -88,6 +95,8 @@ switch ($Target) {
             'fmt        gofmt -s'
             'tidy       go mod tidy'
             'bench      Run the benchmark corpus and write bench/results/<date>-<model>.json'
+            'demo-assets Regenerate the demo picture and the pasted findings (starts the demo app, needs Python)'
+            'demo-check Check that the demo picture and the docs/findings.md example are current'
             'clean      Remove build output'
         ) | ForEach-Object { Write-Output $_ }
     }

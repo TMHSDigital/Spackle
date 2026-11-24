@@ -135,6 +135,31 @@ go test ./internal/report -update
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes how the packages fit together. The design document is in `docs/superpowers/specs/`.
 
+## Output shown in the docs
+
+Four places show real output of a scan of the demo application in `examples/demo-app`, and none of them is typed by hand:
+
+| Place | What it shows |
+| :--- | :--- |
+| `docs/assets/demo.svg` | The terminal picture of a deterministic scan |
+| `docs/findings.md`, the `finding-json` region | One finding of that scan, as `finding.json` |
+| `README.md`, the `finding` region | One finding of a running-target scan |
+| `docs/index.html`, the `finding` region | The same finding, laid out as the site's first screen |
+
+One command regenerates all four. It needs Python, because it starts the demo application on `127.0.0.1:8081` for the length of one scan and stops it again. The application is vulnerable on purpose, so run this on a machine you work on, not on a shared one:
+
+```shell
+make demo-assets
+```
+
+```powershell
+.\make.ps1 demo-assets
+```
+
+Read the diff before you commit it. A change you cannot explain is a bug. The text around the regions (the sentence that introduces the finding, the four-row table in the README) is written by hand; the command tells you when it still names an old finding id.
+
+CI runs `make demo-check`, which covers the first two rows: a change that alters the ids or the counts of the deterministic scan fails the lint job until the files are regenerated. That scan runs with an empty `PATH`, so installed scanners add nothing and the result is the same on every machine. The running-target finding is not checked in CI, because its proof reads a system file and that file depends on the operating system. It is checked before a release instead (see the list below), on the kind of machine it was last generated on.
+
 ## Cutting a release
 
 A release is a `v*` tag on `main`. The release workflow runs the tests, builds and signs the archives and the container image, and creates the GitHub release. Before you tag:
@@ -145,6 +170,7 @@ A release is a `v*` tag on `main`. The release workflow runs the tests, builds a
 - [ ] `SECURITY.md` "Supported versions" is still true for the new release.
 - [ ] The version examples in `README.md` and `docs/ci.md` (`TMHSDigital/Spackle@vX.Y.Z`) name the new version.
 - [ ] The `go` directive in `go.mod` names a current patch release of the oldest supported Go line.
+- [ ] `go run ./tools/demoassets -live -check` passes, so the finding in `README.md` and on the site is what this version prints. If it does not, run `make demo-assets` and commit the result.
 
 ## Benchmark
 

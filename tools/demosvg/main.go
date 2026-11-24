@@ -8,6 +8,9 @@
 //
 //	spackle scan ./examples/demo-app > out.txt 2> err.txt
 //	go run ./tools/demosvg -stdout out.txt -stderr err.txt -cmd "spackle scan ./examples/demo-app" -out docs/assets/demo.svg
+//
+// With -check nothing is written and the exit code is 1 when the file
+// differs. tools/demoassets runs the scan and this tool in one step.
 package main
 
 import (
@@ -59,6 +62,7 @@ func main() {
 	title := flag.String("title", "spackle", "title bar text")
 	out := flag.String("out", "docs/assets/demo.svg", "SVG file to write")
 	maxEntries := flag.Int("max", 5, "how many findings to show")
+	check := flag.Bool("check", false, "write nothing; exit 1 when the SVG file differs from what this output gives")
 	flag.Parse()
 	if *stdout == "" {
 		fmt.Fprintln(os.Stderr, "demosvg: -stdout is required: pass the file holding the real output of a spackle run")
@@ -81,7 +85,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, "demosvg:", err)
 		os.Exit(1)
 	}
-	if err := os.WriteFile(*out, []byte(render(*title, alt, lines)), 0o644); err != nil { //nolint:gosec // a public asset
+	svg := render(*title, alt, lines)
+	if *check {
+		have, err := os.ReadFile(*out)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "demosvg:", err)
+			os.Exit(1)
+		}
+		// A checkout may have converted line endings; the content decides.
+		if strings.ReplaceAll(string(have), "\r\n", "\n") != svg {
+			fmt.Fprintf(os.Stderr, "demosvg: %s is stale: it differs from the picture this output gives\n", *out)
+			os.Exit(1)
+		}
+		return
+	}
+	if err := os.WriteFile(*out, []byte(svg), 0o644); err != nil { //nolint:gosec // a public asset
 		fmt.Fprintln(os.Stderr, "demosvg:", err)
 		os.Exit(1)
 	}

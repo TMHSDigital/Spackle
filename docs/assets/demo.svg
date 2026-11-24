@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="860" height="516" viewBox="0 0 860 516" role="img" aria-label="spackle in a terminal: spackle scan ./examples/demo-app. The first findings are pull_request_target workflow checks out the pull request's code; Attacker-controlled context interpolated into a run script; subprocess called with shell=True and a non-literal command; SQL statement built with an f-string; pickle deserialization. Summary: 20 findings (9 critical, 2 high, 2 medium, 7 low), 0 demonstrated, 0 fixed, 0 dismissed">
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="516" viewBox="0 0 860 516" role="img" aria-label="spackle in a terminal: spackle scan ./examples/demo-app. The first findings are pull_request_target workflow checks out the pull request's code; Attacker-controlled context interpolated into a run script; subprocess called with shell=True and a non-literal command; SQL statement built with an f-string; pickle deserialization. Summary: 18 findings (7 critical, 2 high, 2 medium, 7 low), 0 demonstrated, 0 fixed, 0 dismissed">
 <rect width="860" height="516" rx="12" fill="#1B1714"/>
 <path d="M0 12a12 12 0 0 1 12-12h836a12 12 0 0 1 12 12v24H0z" fill="#26201B"/>
 <rect x="0.5" y="0.5" width="859" height="515" rx="11.5" fill="none" stroke="#3A3029"/>
@@ -22,7 +22,7 @@
 <text x="24" y="380" xml:space="preserve"><tspan fill="#B5A999">SPK-CAA00B0F </tspan><tspan fill="#FF5D5D">[CRITICAL 9.2]</tspan><tspan fill="#B5A999">  plausible</tspan></text>
 <text x="24" y="400" xml:space="preserve"><tspan fill="#F3EDE4">  pickle deserialization</tspan></text>
 <text x="24" y="420" xml:space="preserve"><tspan fill="#7F7466">  app.py:91</tspan></text>
-<text x="24" y="440" xml:space="preserve"><tspan fill="#7F7466">  ... and 15 more</tspan></text>
-<text x="24" y="480" xml:space="preserve"><tspan fill="#F3EDE4">Summary: 20 findings (9 critical, 2 high, 2 medium, 7 low), 0 demonstrated, 0 fixed, 0 dismissed</tspan></text>
+<text x="24" y="440" xml:space="preserve"><tspan fill="#7F7466">  ... and 13 more</tspan></text>
+<text x="24" y="480" xml:space="preserve"><tspan fill="#F3EDE4">Summary: 18 findings (7 critical, 2 high, 2 medium, 7 low), 0 demonstrated, 0 fixed, 0 dismissed</tspan></text>
 </g>
 </svg>

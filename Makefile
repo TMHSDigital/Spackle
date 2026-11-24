@@ -12,7 +12,7 @@ endif
 
 export CGO_ENABLED := 0
 
-.PHONY: all build test test-short test-race lint fmt tidy bench clean help
+.PHONY: all build test test-short test-race lint fmt tidy bench demo-assets demo-check clean help
 
 all: lint test build
 
@@ -44,6 +44,17 @@ tidy:
 bench: build
 	./$(BINARY)$(EXE) bench --corpus bench/corpus --out bench/results
 
+# Regenerate every place that shows real output of a scan of the demo
+# application. It starts examples/demo-app on 127.0.0.1 for one scan and
+# needs Python. Read the diff afterwards.
+demo-assets:
+	go run ./tools/demoassets -live
+
+# What CI runs: the picture and the docs/findings.md example must match
+# what the current code prints.
+demo-check:
+	go run ./tools/demoassets -check
+
 clean:
 	go clean
 	rm -rf dist $(BINARY) $(BINARY).exe coverage.out
@@ -57,4 +68,6 @@ help:
 	@echo "fmt        gofmt -s"
 	@echo "tidy       go mod tidy"
 	@echo "bench      Run the benchmark corpus and write bench/results/<date>-<model>.json"
+	@echo "demo-assets Regenerate the demo picture and the pasted findings (starts the demo app, needs Python)"
+	@echo "demo-check Check that the demo picture and the docs/findings.md example are current"
 	@echo "clean      Remove build output"
