@@ -319,15 +319,21 @@ func (r *Registry) scan(ctx context.Context, name string, keep func(f walk.File,
 }
 
 func (r *Registry) definitions(ctx context.Context, name string) ([]hit, error) {
+	return r.scan(ctx, name, definesName(name))
+}
+
+// definesName returns a test for whether a line of a file defines name,
+// by the definition patterns of the file's language.
+func definesName(name string) func(f walk.File, line string) bool {
 	pats := definitionPatterns(name)
-	return r.scan(ctx, name, func(f walk.File, line string) bool {
+	return func(f walk.File, line string) bool {
 		for _, re := range pats[f.Lang] {
 			if re.MatchString(line) {
 				return true
 			}
 		}
 		return false
-	})
+	}
 }
 
 func writeCapped(b *strings.Builder, hits []hit, limit int, what string) {
@@ -378,28 +384,15 @@ func (r *Registry) findReferencesTool() builtin {
 			if err != nil {
 				return "", "", err
 			}
-			defs, err := r.definitions(ctx, name)
-			if err != nil {
-				return "", "", err
-			}
-			type site struct {
-				rel  string
-				line int
-			}
-			isDef := make(map[site]bool, len(defs))
-			for _, d := range defs {
-				isDef[site{d.rel, d.line}] = true
-			}
+			// One pass over the files: a line that uses the word and does
+			// not define it is a reference.
+			isDef := definesName(name)
 			word := regexp.MustCompile(`\b` + name + `\b`)
-			all, err := r.scan(ctx, name, func(_ walk.File, line string) bool { return word.MatchString(line) })
+			refs, err := r.scan(ctx, name, func(f walk.File, line string) bool {
+				return word.MatchString(line) && !isDef(f, line)
+			})
 			if err != nil {
 				return "", "", err
-			}
-			refs := all[:0]
-			for _, h := range all {
-				if !isDef[site{h.rel, h.line}] {
-					refs = append(refs, h)
-				}
 			}
 			var b strings.Builder
 			if len(refs) == 0 {
