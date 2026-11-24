@@ -146,6 +146,9 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	r.say("Probing %s within the authorized scope (%s)", tgt.Display, grant.Summary())
 	base, err := dast.Baseline(ctx, client, tgt.URL, dast.Options{})
 	if err != nil {
+		if ctx.Err() != nil {
+			return Result{}, r.fail(fmt.Errorf("the probe of the target was interrupted: %w", err))
+		}
 		return Result{}, r.fail(fmt.Errorf("the target could not be probed: %w. Check that it is running and reachable from this machine", err))
 	}
 	if recordErr != nil {
@@ -263,9 +266,18 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 		return out
 	}
 	requestCap := fmt.Sprintf("request cap reached: all %d requests the scope allows for this run have been sent. Raise max_requests in the scope to assess the rest", client.MaxRequests())
+	// interrupt ends the assessment at finding i. The probe findings are
+	// complete, so they are kept and the rest listed as not assessed.
+	interrupt := func(i int) {
+		st.capNote = "interrupted by the operator"
+		st.skipped = append(st.skipped, notAssessed(findings[i:])...)
+		st.outcome = ledger.OutcomeInterrupted
+		r.say("Interrupted: writing the findings produced so far")
+	}
 	for i := range findings {
-		if cerr := ctx.Err(); cerr != nil {
-			return nil, "", cerr
+		if ctx.Err() != nil {
+			interrupt(i)
+			break
 		}
 		f := findings[i]
 		if client.AtCap() {
@@ -297,7 +309,8 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 				break
 			}
 			if ctx.Err() != nil {
-				return nil, "", ctx.Err()
+				interrupt(i)
+				break
 			}
 			if _, err := r.led.Append(parent[f.ID], ledger.TypeReject, ledger.Reject{Stage: config.StageInvestigator, Intent: f.ID, Reason: "the assessment failed: " + textx.Clip(aerr.Error(), 300)}); err != nil {
 				return nil, "", err

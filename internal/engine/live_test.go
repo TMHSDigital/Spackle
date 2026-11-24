@@ -369,6 +369,74 @@ func TestLiveAssessmentReportsARequestCapHitByTheModel(t *testing.T) {
 	}
 }
 
+// An interrupt during the model assessment keeps the probe's findings: the
+// run ends interrupted, not failed, and the findings not yet assessed are
+// listed as such.
+func TestLiveInterruptDuringAssessmentKeepsFindings(t *testing.T) {
+	outside, _ := outsideServer(t)
+	app, _ := flawedApp(t, outside.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	assessments := 0
+	fake := llm.NewFake()
+	fake.Handler = func(req llm.Request, _ int) (llm.Response, error) {
+		if len(req.Messages) == 1 {
+			assessments++
+		}
+		if assessments == 2 {
+			cancel()
+			return llm.Response{}, context.Canceled
+		}
+		return llm.Response{StopReason: llm.StopEnd, Usage: llm.Usage{InputTokens: 50, OutputTokens: 20, CostKnown: true},
+			Text: `{"verdict":"not_confirmed","reason":"Nothing came back."}`}, nil
+	}
+	o := liveOpts(t, app.URL)
+	o.ScopeFile = scopeFile(t, app.URL)
+	o.Yes = true
+	o.Config.Model = config.Model{Provider: "ollama", Model: "fake-model"}
+	o.ProviderFactory = func(config.Model) (llm.Provider, error) { return llm.NewRedacting(fake), nil }
+	res, err := Run(ctx, o)
+	if err != nil {
+		t.Fatalf("an interrupted assessment failed the run: %v", err)
+	}
+	if assessments != 2 {
+		t.Fatalf("%d assessment(s) started, the test needs the interrupt in the second", assessments)
+	}
+	if res.Run.Outcome != ledger.OutcomeInterrupted {
+		t.Fatalf("outcome = %q, want interrupted", res.Run.Outcome)
+	}
+	if len(res.Run.Findings) < 2 {
+		t.Fatalf("findings = %d, want every probe finding kept", len(res.Run.Findings))
+	}
+	var listed []string
+	for _, s := range res.Run.Skipped {
+		listed = append(listed, s.Skipped...)
+	}
+	if want := len(res.Run.Findings) - 1; len(listed) != want {
+		t.Errorf("%d finding(s) are listed as not assessed, want %d: %q", len(listed), want, listed)
+	}
+}
+
+// An interrupt during the probe is not reported as an unreachable target.
+func TestLiveInterruptDuringProbeIsNotAnUnreachableTarget(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cancel()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	o := liveOpts(t, srv.URL)
+	o.ScopeFile = scopeFile(t, srv.URL)
+	_, err := Run(ctx, o)
+	if err == nil {
+		t.Fatal("an interrupted probe did not end the run")
+	}
+	if strings.Contains(err.Error(), "Check that it is running") || !strings.Contains(err.Error(), "interrupted") {
+		t.Fatalf("err = %v, want it to say the probe was interrupted", err)
+	}
+}
+
 func TestOfflineRefusesARemoteLiveTarget(t *testing.T) {
 	// 192.0.2.1 is reserved for documentation and is never routed.
 	o := liveOpts(t, "http://192.0.2.1:8080/")
