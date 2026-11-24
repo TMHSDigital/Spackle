@@ -421,7 +421,7 @@ func TestLiveInterruptDuringAssessmentKeepsFindings(t *testing.T) {
 func TestLiveInterruptDuringProbeIsNotAnUnreachableTarget(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		cancel()
 		<-r.Context().Done()
 	}))
