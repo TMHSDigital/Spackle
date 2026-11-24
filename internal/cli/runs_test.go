@@ -212,3 +212,28 @@ func TestRunsPruneHelpAndKeepValue(t *testing.T) {
 		t.Fatalf("--keep -1 exit = %d, want usage", code)
 	}
 }
+
+// spackle runs reads a run's stored summary while it is current, instead of
+// decoding the whole ledger of every run.
+func TestRunsUsesTheStoredSummary(t *testing.T) {
+	cfg, runDir := scanOnce(t, "none")
+	path := filepath.Join(runDir, "summary.json")
+	var sum map[string]any
+	if err := json.Unmarshal(mustRead(t, path), &sum); err != nil {
+		t.Fatal(err)
+	}
+	// A marker only the summary holds; the ledger is unchanged, so the
+	// summary is still current.
+	sum["target"] = "from-the-summary"
+	b, _ := json.Marshal(sum)
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	if code := Main([]string{"runs", "--config", cfg, "--format", "json"}, strings.NewReader(""), &out, &errb); code != ExitOK {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "from-the-summary") {
+		t.Fatalf("runs did not use the stored summary: %s", out.String())
+	}
+}

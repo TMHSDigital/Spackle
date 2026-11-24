@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `spackle runs` and `spackle runs prune` read each run's stored summary instead of decoding its whole ledger, as the MCP `list_runs` tool already did, so listing many runs is fast.
 - The map cache in the state directory (`cache/map-<commit>.json`, one file per scanned commit) now keeps only the 20 newest files. They used to pile up with every commit scanned.
 - The default sandbox image for JavaScript and TypeScript is now `node:24-slim` (Node 24, the active LTS) instead of `node:22-slim`, which reaches end of life on 2027-04-30. Set `[sandbox.images]` to keep the old one.
 - The installed external scanners (Semgrep, gitleaks, osv-scanner, Trivy, hadolint) now run side by side, up to three at a time, and alongside the built-in rules, instead of one after another. The seeder list and the leads are in the same order as before.

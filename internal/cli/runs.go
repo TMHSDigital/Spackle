@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -104,42 +103,35 @@ func printRunRow(env Env, r runRow) {
 // outside the runs directory can be named.
 func storedRuns(stateDir string) ([]runRow, error) {
 	dir := engine.RunsDir(stateDir)
-	entries, err := os.ReadDir(dir)
+	names, err := report.RunNames(dir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return []runRow{}, nil
-		}
 		return nil, fmt.Errorf("the runs directory %s cannot be read: %w", dir, err)
 	}
 	rows := []runRow{}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		row := runRow{RunID: e.Name(), Extra: []string{}}
-		if info, ierr := e.Info(); ierr == nil {
+	for _, name := range names {
+		row := runRow{RunID: name, Extra: []string{}}
+		if info, ierr := os.Stat(filepath.Join(dir, name)); ierr == nil {
 			row.started = info.ModTime()
 		}
-		run, lerr := report.Load(filepath.Join(dir, e.Name()))
+		// The stored summary while it is current, so a long listing does
+		// not decode every ledger.
+		sum, lerr := report.SummaryOf(filepath.Join(dir, name))
 		if lerr != nil {
 			row.Error = lerr.Error()
 		} else {
-			row.Target, row.Outcome, row.Findings = run.Target, run.Outcome, len(run.Findings)
-			if !run.StartedAt.IsZero() {
-				row.started = run.StartedAt
-				row.Started = run.StartedAt.UTC().Format(time.RFC3339)
+			row.Target, row.Outcome, row.Findings = sum.Target, sum.Outcome, sum.Findings
+			if !sum.Started.IsZero() {
+				row.started = sum.Started
+				row.Started = sum.Started.UTC().Format(time.RFC3339)
 			}
 		}
 		for _, extra := range []string{"clones", "worktrees"} {
-			if st, serr := os.Stat(filepath.Join(stateDir, extra, e.Name())); serr == nil && st.IsDir() {
+			if st, serr := os.Stat(filepath.Join(stateDir, extra, name)); serr == nil && st.IsDir() {
 				row.Extra = append(row.Extra, strings.TrimSuffix(extra, "s"))
 			}
 		}
 		rows = append(rows, row)
 	}
-	// Run ids start with a UTC timestamp, so reverse name order is newest
-	// first.
-	sort.Slice(rows, func(i, j int) bool { return rows[i].RunID > rows[j].RunID })
 	return rows, nil
 }
 

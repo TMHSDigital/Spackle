@@ -625,20 +625,10 @@ func (s *server) listRuns(_ context.Context, raw json.RawMessage) result {
 		return errorf("%v", err)
 	}
 	dir := engine.RunsDir(s.cfg.StateDir)
-	entries, err := os.ReadDir(dir)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	names, err := report.RunNames(dir)
+	if err != nil {
 		return errorf("list_runs: the runs directory cannot be read: %v. Check the state directory in the server's config", err)
 	}
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			names = append(names, e.Name())
-		}
-	}
-	// Run ids start with a UTC timestamp, so reverse name order is newest
-	// first.
-	slices.Sort(names)
-	slices.Reverse(names)
 	out := runList{Runs: []runRow{}, Total: len(names)}
 	if len(names) > maxListedRuns {
 		out.Omitted = len(names) - maxListedRuns
@@ -647,25 +637,16 @@ func (s *server) listRuns(_ context.Context, raw json.RawMessage) result {
 	for _, name := range names {
 		row := runRow{RunID: name}
 		// The summary written with the run's reports has what a row
-		// shows. Without a current one the ledger is read as before.
-		if sum, ok := report.LoadSummary(filepath.Join(dir, name)); ok {
+		// shows. Without a current one the ledger is read.
+		sum, err := report.SummaryOf(filepath.Join(dir, name))
+		if err != nil {
+			row.Error = err.Error()
+		} else {
 			n := sum.Findings
 			c := severityCounts{Critical: sum.Counts.Critical, High: sum.Counts.High, Medium: sum.Counts.Medium, Low: sum.Counts.Low, None: sum.Counts.None}
 			row.Target, row.Outcome, row.Findings, row.Counts = sum.Target, sum.Outcome, &n, &c
 			if !sum.Started.IsZero() {
 				row.Started = sum.Started.UTC().Format(time.RFC3339)
-			}
-			out.Runs = append(out.Runs, row)
-			continue
-		}
-		run, err := report.Load(filepath.Join(dir, name))
-		if err != nil {
-			row.Error = err.Error()
-		} else {
-			n, c := len(run.Findings), countsOf(run)
-			row.Target, row.Outcome, row.Findings, row.Counts = run.Target, run.Outcome, &n, &c
-			if !run.StartedAt.IsZero() {
-				row.Started = run.StartedAt.UTC().Format(time.RFC3339)
 			}
 		}
 		out.Runs = append(out.Runs, row)

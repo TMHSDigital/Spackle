@@ -2,8 +2,10 @@ package report
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/ledger"
@@ -43,6 +45,44 @@ func WriteSummary(runDir string, run Run) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(runDir, SummaryFile), append(b, '\n'), 0o600)
+}
+
+// RunNames returns the names of the run directories in runsDir, newest
+// first. Run ids start with a UTC timestamp, so that is reverse name order.
+// A runs directory that does not exist yet holds no runs.
+func RunNames(runsDir string) ([]string, error) {
+	entries, err := os.ReadDir(runsDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	names := []string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(names)))
+	return names, nil
+}
+
+// SummaryOf returns the summary of the run in runDir: the stored one while
+// it is current, otherwise one built from the ledger. It is what a listing
+// of runs shows, so both listings (the CLI and MCP) read runs the same way.
+func SummaryOf(runDir string) (Summary, error) {
+	if s, ok := LoadSummary(runDir); ok {
+		return s, nil
+	}
+	run, err := Load(runDir)
+	if err != nil {
+		return Summary{}, err
+	}
+	return Summary{
+		RunID: run.ID, Target: run.Target, Outcome: run.Outcome, Started: run.StartedAt,
+		Findings: len(run.Findings), Counts: run.Count(),
+	}, nil
 }
 
 // LoadSummary returns the summary of the run in runDir. ok is false when
