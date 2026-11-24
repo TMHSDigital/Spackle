@@ -507,3 +507,39 @@ func TestDryRunCallsNoModelAndStoresNoRun(t *testing.T) {
 		t.Fatalf("plan = %+v, err = %v", res.Plan, err)
 	}
 }
+
+// A dry run says when the real run of the same command would be refused:
+// nobody would confirm it, and its dollar cap cannot hold for the model.
+func TestDryRunSaysWhenTheRealRunWouldBeRefused(t *testing.T) {
+	plan := func(change func(*Options)) *Plan {
+		t.Helper()
+		fake := llm.NewFake()
+		fake.Remote = true
+		o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+		o.DryRun = true
+		o.Config.Budget.USD, o.Config.Budget.USDSet = 2, true
+		if change != nil {
+			change(&o)
+		}
+		res, err := Run(context.Background(), o)
+		if err != nil || res.Plan == nil {
+			t.Fatalf("plan = %+v, err = %v", res.Plan, err)
+		}
+		if len(fake.Requests) != 0 {
+			t.Fatal("a dry run called the model")
+		}
+		return res.Plan
+	}
+	const want = "A real run with these settings would be refused: the dollar cap of $2.00 cannot be enforced"
+	if p := plan(nil); !containsNote(p.Notes, want) || !containsNote(p.Notes, "--allow-unpriced") {
+		t.Fatalf("notes = %q, want the refusal of the real run", p.Notes)
+	}
+	// The real run is not refused when the operator opted in, or when
+	// somebody is there to confirm the estimate.
+	if p := plan(func(o *Options) { o.Config.Budget.AllowUnpriced = true }); containsNote(p.Notes, "would be refused") {
+		t.Fatalf("opted in: notes = %q", p.Notes)
+	}
+	if p := plan(func(o *Options) { o.Confirm = func(Estimate) bool { return true } }); containsNote(p.Notes, "would be refused") {
+		t.Fatalf("with a confirmation: notes = %q", p.Notes)
+	}
+}

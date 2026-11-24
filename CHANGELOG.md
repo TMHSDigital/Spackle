@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `spackle scan --dry-run --yes` now says when the real run would be refused because its dollar cap cannot be enforced for a model without a known price. The dry run still exits 0.
 - The report of a running-target scan now states that requests were sent without credentials and that pages behind a login were not examined.
 - A run that nobody confirms (`--yes`, the GitHub Action, the MCP server, `spackle bench --yes`) is now refused with exit code 2 when you set a dollar cap (`--budget-usd` or `usd` under `[budget]`) and the model has no known price, because that cap could not stop the run. The message shows the `[pricing]` table to add. Pass `--allow-unpriced` or set `allow_unpriced = true` under `[budget]` to run under the token cap alone. In the Action, set `args: --allow-unpriced`. Local models, OpenRouter and the built-in default cap are not affected.
 - `spackle verify` re-runs proofs against the directory that was scanned, which is now recorded as an absolute path, instead of resolving the target as typed against the current directory.

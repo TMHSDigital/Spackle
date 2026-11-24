@@ -207,6 +207,14 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 			est := estimate(opts.Config, defaultProv, llm.NewPricer(llm.PricesFromConfig(opts.Config.Pricing)), len(leads))
 			plan.Mode, plan.Model = "agentic", est.Model
 			plan.Investigations, plan.Estimate = est.Investigations, est.String()
+			// With nobody to confirm the estimate, the real run is
+			// refused when its dollar cap cannot hold. A dry run is how
+			// a CI setup is checked, so it says so here.
+			if opts.Confirm == nil {
+				if why := unpricedRefusal(opts.Config, opts.Config.ForStage("investigator"), est); why != "" {
+					plan.Notes = append(plan.Notes, "A real run with these settings would be refused: "+why)
+				}
+			}
 		}
 		if tgt.Kind == target.KindGit {
 			plan.Notes = append(plan.Notes, "The repository was cloned to map it, and the clone was removed again.")

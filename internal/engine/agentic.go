@@ -108,11 +108,22 @@ func confirmEstimate(cfg config.Config, m config.Model, est Estimate, confirm fu
 		}
 		return nil
 	}
-	if est.Local || est.CostKnown || !cfg.Budget.USDSet || cfg.Budget.AllowUnpriced || llm.ReportsCost(m.BaseURL) {
-		return nil
+	if why := unpricedRefusal(cfg, m, est); why != "" {
+		return fmt.Errorf("%w: %s", ErrRefused, why)
 	}
-	return fmt.Errorf("%w: the dollar cap of $%.2f cannot be enforced, because Spackle has no price for %s. Add its price in USD per million tokens to spackle.toml:\n\n[pricing.%q]\ninput_per_mtok = <price>\noutput_per_mtok = <price>\n\nOr pass --allow-unpriced (or set allow_unpriced = true under [budget]) to run with the token cap of %d and no dollar cap",
-		ErrRefused, est.CapUSD, est.Model, est.Model, est.CapTokens)
+	return nil
+}
+
+// unpricedRefusal says why a run that nobody confirms is refused: the
+// operator set a dollar cap, and it cannot hold for a model without a known
+// price. It returns "" when the run may go ahead. A dry run asks the same
+// question to say what the real run would do.
+func unpricedRefusal(cfg config.Config, m config.Model, est Estimate) string {
+	if est.Local || est.CostKnown || !cfg.Budget.USDSet || cfg.Budget.AllowUnpriced || llm.ReportsCost(m.BaseURL) {
+		return ""
+	}
+	return fmt.Sprintf("the dollar cap of $%.2f cannot be enforced, because Spackle has no price for %s. Add its price in USD per million tokens to spackle.toml:\n\n[pricing.%q]\ninput_per_mtok = <price>\noutput_per_mtok = <price>\n\nOr pass --allow-unpriced (or set allow_unpriced = true under [budget]) to run with the token cap of %d and no dollar cap",
+		est.CapUSD, est.Model, est.Model, est.CapTokens)
 }
 
 func estimate(cfg config.Config, prov llm.Provider, pricer llm.Pricer, leads int) Estimate {
