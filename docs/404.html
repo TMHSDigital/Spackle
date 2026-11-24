@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'">
+<title>Page not found: Spackle</title>
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="/Spackle/favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #1B1714; --raised: #26201B; --border: #3A3029;
+  --fg: #F3EDE4; --muted: #B5A999; --dim: #7F7466;
+  --patch: #FF8A4C; --link: #FF8A4C;
+  --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #F6F1EA; --raised: #FFFFFF; --border: #DDD2C3;
+    --fg: #231C16; --muted: #5E5247; --dim: #75695B;
+    --patch: #E8743A; --link: #A8440F;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1.0625rem/1.65 var(--sans); }
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 2px; }
+.wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+.brand {
+  display: inline-flex; align-items: center; gap: 0.6rem; margin: 1.1rem 0;
+  color: var(--fg); text-decoration: none;
+  font: 700 1.3rem/1 var(--mono); letter-spacing: -0.02em;
+}
+.brand svg { width: 1.75rem; height: 1.75rem; }
+main { border-top: 1px solid var(--border); padding: 3rem 0; }
+.code { font: 0.8rem/1.5 var(--mono); color: var(--muted); margin: 0 0 1rem; }
+h1 { font: 600 clamp(2.4rem, 5.6vw, 4.5rem)/1 var(--serif); letter-spacing: -0.02em; margin: 0 0 1.5rem; }
+p { margin: 0 0 1rem; max-width: 60ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="brand" href="/Spackle/" aria-label="Spackle home">
+    <svg viewBox="0 0 44 44" aria-hidden="true"><rect x="1.5" y="1.5" width="41" height="41" rx="7" fill="var(--raised)" stroke="var(--border)" stroke-width="3"/><path d="M10 6 L17 16 L13 23 L22 31 L19 38" fill="none" stroke="var(--dim)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="17" width="30" height="13" rx="3" fill="var(--patch)" transform="rotate(-18 24 23.5)"/></svg>
+    spackle
+  </a>
+  <main>
+    <p class="code">404</p>
+    <h1>Nothing here.</h1>
+    <p>This site is one page. The documentation lives in the repository.</p>
+    <p><a href="/Spackle/">Go to the Spackle page</a> or <a href="https://github.com/TMHSDigital/Spackle/tree/main/docs">read the docs on GitHub</a>.</p>
+  </main>
+</div>
+</body>
+</html>
