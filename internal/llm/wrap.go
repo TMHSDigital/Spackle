@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -19,11 +20,32 @@ import (
 // This is the last line of defense, not the only one: tools redact their
 // own output too. It exists so that a new tool or prompt that forgets to
 // redact still cannot leak.
+//
+// An agent conversation resends its whole, growing message list on every
+// turn, and the earlier messages never change. The wrapper therefore keeps
+// the cleaned form of each text it has seen, keyed by a hash of the text,
+// so a turn only pays for the messages that are new.
 type Redacting struct {
 	inner Provider
 	mu    sync.Mutex
 	hits  int
+	// seen maps the hash of a text to its cleaned form. The text itself is
+	// never kept: it may hold the secret. seenBytes is the size of the
+	// cleaned forms, and the map is dropped when it passes maxSeenBytes.
+	seen      map[[sha256.Size]byte]cleaned
+	seenBytes int
 }
+
+// cleaned is what the wrapper remembers about one text.
+type cleaned struct {
+	text   string // the text with every secret replaced
+	secret bool   // whether the text held a secret
+}
+
+// maxSeenBytes bounds the memory the cleaned texts may take. Dropping the
+// map costs one more scan of each text that is still in use, nothing else.
+// It is a variable so a test can lower it.
+var maxSeenBytes = 64 << 20
 
 // NewRedacting wraps p.
 func NewRedacting(p Provider) *Redacting { return &Redacting{inner: p} }
@@ -47,17 +69,57 @@ func (r *Redacting) Redactions() int {
 	return r.hits
 }
 
+// clean returns s with every secret replaced. A secret is counted once,
+// when its text is first seen, not again each time the text is resent.
 func (r *Redacting) clean(s string) string {
 	if s == "" {
 		return s
 	}
-	out, matches := redact.Apply(s)
-	if len(matches) > 0 {
-		r.mu.Lock()
-		r.hits += len(matches)
-		r.mu.Unlock()
+	return r.lookup('t', s, func() cleaned {
+		out, matches := redact.Apply(s)
+		if len(matches) > 0 {
+			r.mu.Lock()
+			r.hits += len(matches)
+			r.mu.Unlock()
+		}
+		return cleaned{text: out, secret: len(matches) > 0}
+	}).text
+}
+
+// holdsSecret reports whether raw, a provider's own earlier output, holds a
+// secret. Only the answer is kept.
+func (r *Redacting) holdsSecret(raw string) bool {
+	return r.lookup('r', raw, func() cleaned {
+		return cleaned{secret: len(redact.Scan(raw)) > 0}
+	}).secret
+}
+
+// lookup returns what is remembered for s, computing and keeping it when s
+// is new. kind keeps the two uses of the map apart.
+func (r *Redacting) lookup(kind byte, s string, compute func() cleaned) cleaned {
+	h := sha256.New()
+	h.Write([]byte{kind})
+	h.Write([]byte(s))
+	var key [sha256.Size]byte
+	h.Sum(key[:0])
+
+	r.mu.Lock()
+	c, ok := r.seen[key]
+	r.mu.Unlock()
+	if ok {
+		return c
 	}
-	return out
+	c = compute()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.seen == nil || r.seenBytes+len(c.text) > maxSeenBytes {
+		r.seen, r.seenBytes = map[[sha256.Size]byte]cleaned{}, 0
+	}
+	if _, dup := r.seen[key]; !dup {
+		r.seen[key] = c
+		r.seenBytes += len(c.text)
+	}
+	return c
 }
 
 // Complete implements Provider.
@@ -75,7 +137,7 @@ func (r *Redacting) Complete(ctx context.Context, req Request) (Response, error)
 		// Raw is the provider's own earlier output. It was produced from
 		// already-redacted input, but check it anyway: if a secret is found
 		// drop Raw so the turn is rebuilt from the cleaned fields.
-		if len(m.Raw) > 0 && len(redact.Scan(string(m.Raw))) > 0 {
+		if len(m.Raw) > 0 && r.holdsSecret(string(m.Raw)) {
 			cm.Raw = nil
 		}
 		clean.Messages[i] = cm

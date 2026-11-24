@@ -17,6 +17,7 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/lang"
+	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -456,8 +457,15 @@ const cacheVersion = 1
 
 type cacheFile struct {
 	Version int `json:"version"`
-	Map     Map `json:"map"`
+	// Spackle is the build that wrote the entry. Another build may list
+	// or read the target differently (skip rules, entry patterns), so its
+	// entry is not trusted even when cacheVersion was not bumped.
+	Spackle string `json:"spackle"`
+	Map     Map    `json:"map"`
 }
+
+// builtBy names this build of Spackle for the cache.
+func builtBy() string { return version.Version + "+" + version.Commit }
 
 func cachePath(dir, commit string) string {
 	return filepath.Join(dir, fmt.Sprintf("map-%s.json", commit))
@@ -469,7 +477,7 @@ func loadCache(dir, commit string) (Map, bool) {
 		return Map{}, false
 	}
 	var c cacheFile
-	if json.Unmarshal(b, &c) != nil || c.Version != cacheVersion || c.Map.Commit != commit {
+	if json.Unmarshal(b, &c) != nil || c.Version != cacheVersion || c.Spackle != builtBy() || c.Map.Commit != commit {
 		return Map{}, false
 	}
 	return c.Map, true
@@ -482,7 +490,7 @@ func saveCache(dir, commit string, m Map) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cacheFile{Version: cacheVersion, Map: m}, "", "  ")
+	b, err := json.MarshalIndent(cacheFile{Version: cacheVersion, Spackle: builtBy(), Map: m}, "", "  ")
 	if err != nil {
 		return err
 	}

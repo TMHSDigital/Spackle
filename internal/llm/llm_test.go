@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -489,5 +490,74 @@ func TestFakeRefusesToolBlocksWithoutTools(t *testing.T) {
 	}
 	if _, err := NewFake(Say("ok")).Complete(context.Background(), Request{Messages: history, Tools: []ToolDef{{Name: "grep"}}}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A conversation resends every earlier message on each turn. The wrapper
+// cleans a text once, gives the same cleaned text every time after that,
+// and counts a secret once, not once per turn.
+func TestRedactingCleansAResentTextOnce(t *testing.T) {
+	aws := "AKIA" + "IOSFODNN7EXAMPLE"
+	fake := NewFake(Say("a"), Say("b"), Say("c"))
+	p := NewRedacting(fake)
+	raw := json.RawMessage(`{"earlier":"output with ` + aws + `"}`)
+	msgs := []Message{{Role: RoleUser, Text: "the key is " + aws}}
+	for turn := 1; turn <= 3; turn++ {
+		if _, err := p.Complete(context.Background(), Request{System: "system prompt", Tools: []ToolDef{{Name: "grep"}}, Messages: msgs}); err != nil {
+			t.Fatal(err)
+		}
+		if got := p.Redactions(); got != turn {
+			t.Fatalf("after turn %d: %d redactions, want one per new secret-bearing text", turn, got)
+		}
+		msgs = append(msgs,
+			Message{Role: RoleAssistant, Text: "reply", Raw: raw},
+			Message{Role: RoleTool, ToolResults: []ToolResult{{CallID: "1", Content: strings.Repeat("x", turn) + " found " + aws}}})
+	}
+	if strings.Contains(fake.Sent(), aws) {
+		t.Fatalf("a secret reached the provider: %s", fake.Sent())
+	}
+	for i, req := range fake.Requests {
+		if got := req.Messages[0].Text; !strings.Contains(got, "[REDACTED:") {
+			t.Fatalf("turn %d: the resent first message was not cleaned: %q", i+1, got)
+		}
+		for _, m := range req.Messages {
+			if len(m.Raw) > 0 {
+				t.Fatalf("turn %d: a raw turn that holds a secret was kept", i+1)
+			}
+		}
+	}
+	// One entry per distinct text: the system prompt, the first message,
+	// "reply", the raw turn, and the tool results of two turns.
+	if got := len(p.seen); got != 6 {
+		t.Fatalf("%d texts are remembered, want 6", got)
+	}
+}
+
+// The memory of cleaned texts is bounded. Past the bound it starts over,
+// and a text is simply cleaned again: nothing leaks and nothing is lost.
+func TestRedactingMemoryIsBounded(t *testing.T) {
+	old := maxSeenBytes
+	maxSeenBytes = 64
+	t.Cleanup(func() { maxSeenBytes = old })
+	aws := "AKIA" + "IOSFODNN7EXAMPLE"
+	fake := NewFake()
+	fake.Handler = func(Request, int) (Response, error) { return Response{StopReason: StopEnd, Text: "ok"}, nil }
+	p := NewRedacting(fake)
+	for i := 0; i < 20; i++ {
+		text := fmt.Sprintf("message %02d holds %s and some padding", i, aws)
+		for round := 0; round < 2; round++ {
+			if _, err := p.Complete(context.Background(), Request{Messages: []Message{{Role: RoleUser, Text: text}}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if p.seenBytes > maxSeenBytes+len(text) {
+			t.Fatalf("after %d texts %d bytes are held, over the bound of %d", i+1, p.seenBytes, maxSeenBytes)
+		}
+	}
+	if strings.Contains(fake.Sent(), aws) {
+		t.Fatal("a secret reached the provider after the memory started over")
+	}
+	if len(fake.Requests) != 40 {
+		t.Fatalf("%d requests", len(fake.Requests))
 	}
 }

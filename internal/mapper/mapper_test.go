@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -172,6 +173,35 @@ func TestBuildHandsOverTheTextsItRead(t *testing.T) {
 	}
 	if _, ok := texts.Get(abs("Dockerfile")); ok {
 		t.Error("Dockerfile is not read by the mapper, so there is nothing to hand over")
+	}
+}
+
+// A cache entry written by another build of Spackle is not used: that
+// build may have listed or read the target differently.
+func TestCacheEntryOfAnotherBuildIsNotUsed(t *testing.T) {
+	dir := t.TempDir()
+	const commit = "0123456789abcdef0123456789abcdef01234567"
+	if err := saveCache(dir, commit, Map{Commit: commit, FileCount: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := loadCache(dir, commit); !ok || m.FileCount != 7 {
+		t.Fatalf("the entry this build wrote was not found: %+v, %v", m, ok)
+	}
+	old := version.Version
+	version.Version = "v9.9.9"
+	t.Cleanup(func() { version.Version = old })
+	if _, ok := loadCache(dir, commit); ok {
+		t.Fatal("an entry written by another build was used")
+	}
+	// The new build writes its own entry over the old one.
+	if err := saveCache(dir, commit, Map{Commit: commit, FileCount: 8}); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := loadCache(dir, commit); !ok || m.FileCount != 8 {
+		t.Fatalf("entry after the rewrite: %+v, %v", m, ok)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Fatalf("%d cache files, want one per commit", len(entries))
 	}
 }
 
