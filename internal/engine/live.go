@@ -37,6 +37,9 @@ var observedClasses = map[string]bool{
 	"cors-misconfiguration": true, "information-disclosure": true,
 }
 
+// unauthenticatedNote is recorded in every running-target run.
+const unauthenticatedNote = "Requests were sent without credentials: no login was performed and no session cookie was kept. Pages and endpoints behind a login were not examined."
+
 // runLive scans a running application. The authorized-scope gate comes
 // first: nothing is sent, and no run directory is created, until it passes.
 func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() time.Time) (_ Result, err error) {
@@ -111,6 +114,13 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 		if _, err := led.Append(startSeq, ledger.TypeNote, "Operator's authorization statement: "+textx.Clip(st, 400)); err != nil {
 			return Result{}, err
 		}
+	}
+
+	// No setting gives the scan a session or a credential, and the report
+	// has to say so: on an application that sits behind a login, what was
+	// examined is the part an anonymous visitor can reach.
+	if _, err := led.Append(startSeq, ledger.TypeNote, unauthenticatedNote); err != nil {
+		return Result{}, err
 	}
 
 	// Every exchange is stored as evidence the moment it happens, so a run

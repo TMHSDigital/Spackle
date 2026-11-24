@@ -133,6 +133,9 @@ func TestLiveScanStaysInScopeAndRecordsEvidence(t *testing.T) {
 	if run.TargetKind != "url" || run.ScopeSource != "scope-file" || !strings.Contains(run.Scope, strings.TrimPrefix(app.URL, "http://")) {
 		t.Fatalf("run kind=%s scope=%q source=%s", run.TargetKind, run.Scope, run.ScopeSource)
 	}
+	if !containsNote(run.Notes, "Requests were sent without credentials") || !containsNote(run.Notes, "behind a login were not examined") {
+		t.Fatalf("the report does not say that the scan was unauthenticated: %v", run.Notes)
+	}
 	if !strings.Contains(strings.Join(run.Notes, "|"), "My own test server.") {
 		t.Fatalf("the authorization statement was not recorded: %v", run.Notes)
 	}

@@ -414,6 +414,8 @@ statement = "Staging environment owned by my team. Ticket SEC-123."
 
 The same rules bind the baseline probe and the `http_request` tool a model uses. The tool has no argument that reaches the scope, the request cap or the rate limit.
 
+**A running-target scan is not authenticated.** There is no setting for a login, a session cookie or an authorization header, and a cookie the target sets is not sent back. The scan covers what an anonymous visitor can reach, and every report of such a scan says so in its run notes.
+
 ## Sandbox
 
 Proofs of concept, compile checks, test runs and fix checks run only in a container. Spackle drives the `docker` or `podman` command line.
