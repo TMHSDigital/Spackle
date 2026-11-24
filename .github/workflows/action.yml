@@ -101,6 +101,28 @@ jobs:
           spackle-dir: ${{ runner.temp }}/spackle-bin
           upload-sarif: 'false'
           args: --no-such-flag
+      # diff-base becomes --since. Nothing has changed since HEAD, so the
+      # same path that fails the default run reports nothing, even with the
+      # lowest threshold.
+      - name: diff-base with nothing changed
+        id: diffbase
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          fail-on: low
+          diff-base: HEAD
+      - name: diff-base with a revision git does not know
+        id: badbase
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          diff-base: no-such-revision
       - name: Assert the exit codes
         shell: bash
         env:
@@ -109,6 +131,8 @@ jobs:
           MULTILINE: ${{ steps.multiline.outputs.exit-code }}
           QUOTED: ${{ steps.quoted.outputs.exit-code }}
           BADFLAG: ${{ steps.badflag.outputs.exit-code }}
+          DIFFBASE: ${{ steps.diffbase.outputs.exit-code }}
+          BADBASE: ${{ steps.badbase.outputs.exit-code }}
         run: |
           fail=0
           check() {
@@ -120,4 +144,8 @@ jobs:
           check "arguments on several lines" "${MULTILINE}" 0
           check "quoted arguments" "${QUOTED}" 2
           check "unknown flag" "${BADFLAG}" 2
+          # With --since HEAD applied there is nothing to report. Without it
+          # this run would exit 1, as the default run does.
+          check "diff-base HEAD" "${DIFFBASE}" 0
+          check "diff-base unknown revision" "${BADBASE}" 2
           exit "${fail}"
