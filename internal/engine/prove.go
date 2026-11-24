@@ -189,16 +189,8 @@ func (l *lab) baselineTests(ctx context.Context, parent int64, lang, image strin
 		return cmd, *l.baseline, nil
 	}
 	l.r.say("Running the project's tests once as a baseline")
-	box := l.box("", parent)
-	if err := l.r.budget.UseSandbox(); err != nil {
-		return cmd, false, err
-	}
-	spec := sandbox.Spec{Image: image, Cmd: cmd, SourceDir: l.root, Profile: l.profile}
-	res, rerr := l.runtime.Run(ctx, spec)
-	if rerr != nil {
-		return cmd, false, rerr
-	}
-	if err := box.Record("tests-baseline", spec, res); err != nil {
+	res, err := l.box("", parent).Exec(ctx, "tests-baseline", image, cmd, nil, "")
+	if err != nil {
 		return cmd, false, err
 	}
 	ok := res.ExitCode == 0 && !res.TimedOut

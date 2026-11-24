@@ -57,10 +57,22 @@ type Box struct {
 
 // run executes one command against a copy of the target plus extra files.
 func (b *Box) run(ctx context.Context, purpose, image string, cmd []string, files map[string]string) (sandbox.Result, error) {
+	return b.Exec(ctx, purpose, image, cmd, files, "")
+}
+
+// Exec executes one command against a copy of sourceDir (the target when it
+// is "") plus extra files. It is the one way to start a sandbox run: it
+// counts the run against the sandbox cap, bounds it by the wall time that
+// is left, and records it. A run stopped by the wall time cap returns an
+// error wrapping budget.ErrExhausted.
+func (b *Box) Exec(ctx context.Context, purpose, image string, cmd []string, files map[string]string, sourceDir string) (sandbox.Result, error) {
 	if err := b.Budget.UseSandbox(); err != nil {
 		return sandbox.Result{}, err
 	}
-	spec := sandbox.Spec{Image: image, Cmd: cmd, SourceDir: b.Root, Files: files, Profile: b.Profile}
+	if sourceDir == "" {
+		sourceDir = b.Root
+	}
+	spec := sandbox.Spec{Image: image, Cmd: cmd, SourceDir: sourceDir, Files: files, Profile: b.Profile}
 	// A sandbox run has its own timeout, but one that starts just under
 	// the wall time cap must not outlive the run by that much.
 	runCtx, cancel := context.WithTimeout(ctx, b.Budget.Remaining())

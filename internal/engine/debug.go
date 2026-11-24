@@ -302,21 +302,17 @@ func (d *debugRun) skip(capErr error, skipped ...string) error {
 	return err
 }
 
-// run executes one command in the sandbox against sourceDir plus files. It
-// is the only place debug mode starts a container outside the agent package:
-// every run counts against the sandbox cap and leaves an evidence file and a
-// ledger event. It returns the evidence file's path relative to the run.
+// run executes one command in the sandbox against sourceDir plus files,
+// through the run's box: every run counts against the sandbox cap, is
+// bounded by the wall time left, and leaves an evidence file and a ledger
+// event. It returns the evidence file's path relative to the run.
 func (d *debugRun) run(ctx context.Context, purpose string, cmd []string, files map[string]string, sourceDir string) (sandbox.Result, string, error) {
-	if err := d.r.budget.UseSandbox(); err != nil {
-		return sandbox.Result{}, "", err
-	}
-	spec := sandbox.Spec{Image: d.image, Cmd: cmd, SourceDir: sourceDir, Files: files, Profile: d.l.profile}
-	res, err := d.l.runtime.Run(ctx, spec)
+	res, err := d.box.Exec(ctx, purpose, d.image, cmd, files, sourceDir)
 	if err != nil {
+		if errors.Is(err, budget.ErrExhausted) {
+			return res, "", err
+		}
 		return res, "", fmt.Errorf("the sandbox could not run %q: %w", strings.Join(cmd, " "), err)
-	}
-	if err := d.box.Record(purpose, spec, res); err != nil {
-		return res, "", err
 	}
 	return res, d.evidence[len(d.evidence)-1], nil
 }
@@ -415,9 +411,16 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 	}
 
 	bisect := ""
+	outcome := ledger.OutcomeCompleted
 	if d.good != "" {
 		if bisect, err = d.bisect(ctx, rep); err != nil {
-			return "", nil, err
+			if !errors.Is(err, budget.ErrExhausted) {
+				return "", nil, err
+			}
+			outcome = ledger.OutcomeBudgetExhausted
+			if err := d.skip(err, "Bisect: stopped early, so the first bad commit was not found."); err != nil {
+				return "", nil, err
+			}
 		}
 	}
 
@@ -427,7 +430,6 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 			return "", nil, err
 		}
 	}
-	outcome := ledger.OutcomeCompleted
 	var diag agent.Diagnosis
 	derr := d.r.budget.Check()
 	if derr == nil {
@@ -538,10 +540,14 @@ func (d *debugRun) bisect(ctx context.Context, rep reproduction) (string, error)
 	}
 	d.r.say("Bisecting %d commit(s) between %s and HEAD", len(list), d.good)
 
-	// stopped turns a probe error into a note, unless it is a cancellation.
+	// stopped turns a probe error into a note, unless it is a cancellation
+	// or a reached cap, which the caller handles.
 	stopped := func(perr error) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
+		}
+		if errors.Is(perr, budget.ErrExhausted) {
+			return "", perr
 		}
 		return "", d.note("Bisect stopped early (%s), so the first bad commit was not found.", textx.Clip(perr.Error(), 300))
 	}

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/finding"
@@ -835,6 +836,70 @@ func TestDebugBisectDoesNotBlameHeadForUncommittedChanges(t *testing.T) {
 	}
 	if got := len(bisectDirs(o.Target, rt)); got != 1 {
 		t.Fatalf("bisect probes = %d, want only the probe of HEAD", got)
+	}
+}
+
+// hangingProbes is a runtime whose bisect probes (any run outside the target
+// directory) run until they are stopped, and whose first run moves the
+// clock to just before the wall time cap.
+type hangingProbes struct {
+	*debugRuntime
+	target    string
+	moveClock func()
+}
+
+func (h *hangingProbes) Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
+	if spec.SourceDir == h.target {
+		res, err := h.debugRuntime.Run(ctx, spec)
+		h.moveClock()
+		return res, err
+	}
+	<-ctx.Done()
+	return sandbox.Result{}, ctx.Err()
+}
+
+// A bisect probe that starts just under the wall time cap is stopped when
+// the cap is reached, and the run ends budget-exhausted, not completed.
+func TestDebugBisectProbeIsBoundedByTheWallTimeCap(t *testing.T) {
+	var mu sync.Mutex
+	start := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	now := start
+	const wall = 10 * time.Minute
+	rt := &hangingProbes{debugRuntime: &debugRuntime{}}
+	rt.moveClock = func() {
+		mu.Lock()
+		defer mu.Unlock()
+		now = start.Add(wall - 300*time.Millisecond)
+	}
+	o := debugOpts(t, debugModel{fix: fixedCalc}.provider(), rt.debugRuntime)
+	o.DetectRuntime = func(context.Context, string) (sandbox.Runtime, error) { return rt, nil }
+	o.Clock = func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	o.Config.Budget.WallTime.Duration = wall
+	rt.target = o.Target
+	hashes, _ := debugRepo(t, o.Target)
+	o.Good = hashes[0]
+
+	done := make(chan struct{})
+	var res Result
+	var err error
+	go func() { res, err = Debug(context.Background(), o); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("a bisect probe outlived the wall time cap")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.Outcome != ledger.OutcomeBudgetExhausted {
+		t.Fatalf("outcome = %q, want budget-exhausted; notes %v", res.Run.Outcome, res.Run.Notes)
+	}
+	var skipped []string
+	for _, s := range res.Run.Skipped {
+		skipped = append(skipped, s.Cap+": "+strings.Join(s.Skipped, " "))
+	}
+	if !strings.Contains(strings.Join(skipped, "|"), "Bisect: stopped early") {
+		t.Fatalf("skipped = %v", skipped)
 	}
 }
 
