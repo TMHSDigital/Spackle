@@ -340,7 +340,9 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			st.capNote = "budget"
 		}
 		if len(st.skipped) == 0 {
-			st.skipped = []string{"Later optional stages (review or chain analysis) were cut short."}
+			// Only the optional chain analysis sets a cap without listing
+			// what it left undone.
+			st.skipped = []string{"Chain analysis: cut short."}
 		}
 		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: st.capNote, Skipped: st.skipped}); err != nil {
 			return nil, nil, "", err
@@ -398,8 +400,10 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 			return goOn, err
 		}
 	case errors.Is(rerr, budget.ErrExhausted):
+		// A cap cut this finding's work short, whichever investigation it
+		// is: the run is budget-exhausted, not completed.
 		f.Confidence.Reason += " Not reviewed: the budget ran out first."
-		st.capNote = rerr.Error()
+		st.exhaust(rerr.Error(), fmt.Sprintf("Review: not done for %s (%s).", f.Title, f.Location))
 	default:
 		f.Confidence.Reason += " Not reviewed: the review call failed."
 	}
@@ -409,7 +413,7 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 		switch {
 		case perr == nil:
 		case errors.Is(perr, budget.ErrExhausted):
-			st.capNote = perr.Error()
+			st.exhaust(perr.Error(), fmt.Sprintf("Proof or fix: cut short for %s (%s).", f.Title, f.Location))
 		case ctx.Err() != nil:
 			// The finding itself is complete; only its proof or fix was
 			// cut short. Keep it.

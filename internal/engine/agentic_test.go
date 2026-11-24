@@ -254,6 +254,41 @@ func TestBudgetExhaustionDegradesAndSaysWhatWasSkipped(t *testing.T) {
 	}
 }
 
+// A cap reached during the review of the last planned investigation makes
+// the run budget-exhausted, as the same cut on an earlier one does, and the
+// skip entry names the step that was cut.
+func TestBudgetCutOnTheLastReviewIsBudgetExhausted(t *testing.T) {
+	base := script{plan: planFor(leadID(sqlLead(), "fake")), investigate: goodDraft(), review: `{"verdict":"confirmed","reason":"ok"}`}.provider()
+	fake := llm.NewFake()
+	fake.Handler = func(req llm.Request, n int) (llm.Response, error) {
+		resp, err := base.Handler(req, n)
+		if stageOf(req) == "investigator" {
+			// The investigation uses up what is left of the token cap.
+			resp.Usage = llm.Usage{InputTokens: 100_000, OutputTokens: 100, CostKnown: true}
+		}
+		return resp, err
+	}
+	o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	o.Config.Budget.Tokens = 100_000
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Run.Findings) != 1 || !strings.Contains(res.Run.Findings[0].Confidence.Reason, "Not reviewed: the budget ran out first.") {
+		t.Fatalf("findings = %+v, want the investigated finding, not reviewed", res.Run.Findings)
+	}
+	if res.Run.Outcome != ledger.OutcomeBudgetExhausted {
+		t.Fatalf("outcome = %s, want budget-exhausted", res.Run.Outcome)
+	}
+	var skipped []string
+	for _, s := range res.Run.Skipped {
+		skipped = append(skipped, s.Skipped...)
+	}
+	if !strings.Contains(strings.Join(skipped, "|"), "Review: not done for SQL injection in find") {
+		t.Fatalf("skipped = %q, want the review named", skipped)
+	}
+}
+
 func TestSecretsNeverReachTheModelInAFullRun(t *testing.T) {
 	secret := "tr0ub4dor-" + "fixture-9Zq2Lm7x"
 	fake := script{plan: `{"intents":[]}`, investigate: `{"verdict":"no_finding","reason":"x"}`}.provider()
