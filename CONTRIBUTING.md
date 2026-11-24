@@ -45,11 +45,14 @@ Both entry points take the same targets. Use `.\make.ps1 <target>` on Windows an
 |---|---|
 | `build` | Builds the `spackle` binary (`spackle.exe` on Windows) with `CGO_ENABLED=0` |
 | `test` | Runs the unit tests in shuffled order |
+| `test-short` | Runs the tests without the ones that start containers, the full benchmark corpus run and the installed-scanner checks |
 | `test-race` | Runs the unit tests with the race detector. Needs cgo and a C compiler |
 | `lint` | Runs `go vet` and `golangci-lint` |
 | `fmt` | Runs `gofmt -s` over `cmd` and `internal` |
 | `tidy` | Runs `go mod tidy` |
 | `bench` | Builds, then runs the benchmark corpus and writes a results file |
+| `demo-check` | Checks that the demo picture and the worked example in `docs/findings.md` match what the code prints (CI runs it) |
+| `demo-assets` | Regenerates them from a scan of `examples/demo-app` (needs Python). Read the diff afterwards |
 | `clean` | Removes build output |
 | `all` | `lint`, `test`, then `build` |
 | `help` | Lists the targets |
@@ -74,7 +77,7 @@ On Windows:
 .\make.ps1 build
 ```
 
-CI runs on Linux, macOS, and Windows with no API key and no container runtime. Tests must pass in that environment. Use the fake provider in `internal/llm` for anything that would otherwise call a model.
+CI runs on Linux, macOS, and Windows with no API key. The macOS and Windows runners have no container runtime and the Linux runners have Docker, so tests must pass both with and without one. Use the fake provider in `internal/llm` for anything that would otherwise call a model.
 
 While you work, two faster forms help. `make test-short` (`.\make.ps1 test-short`) leaves out the tests that start containers, the full benchmark corpus run and the installed-scanner checks. To run one test: `go test -run TestName ./internal/<package>`.
 
@@ -83,6 +86,7 @@ CI checks more than the three commands above, so a change that passes them can s
 - The tests run with the race detector on all three systems. `make test` does not use it. Run `make test-race` (it needs cgo and a C compiler) before you push a change that touches goroutines or shared state.
 - `go mod verify` and `go mod tidy -diff` must be clean. Run `make tidy` after you change imports.
 - `gofmt -s` must have nothing to change (`make fmt`), and the linters run on Linux only.
+- `go run ./tools/demoassets -check` (`make demo-check`) must pass: a change to what a scan or a report prints needs `make demo-assets`.
 - One Linux job also measures statement coverage and writes the figure to the job summary.
 - A separate Linux job runs the sandbox integration tests with Docker, with `SPACKLE_REQUIRE_RUNTIME=1` so that it cannot pass by skipping. Without that variable these tests skip when no runtime is present. To run them the way CI does:
 
