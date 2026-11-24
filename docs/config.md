@@ -102,7 +102,7 @@ Stored runs accumulate under `state_dir`. `spackle runs` lists them, newest firs
 
 `spackle runs compare <older-run-id> <newer-run-id>` joins two stored runs on finding id and lists the findings that are new in the newer run, gone from it, and present in both (with any change of status or severity), as text or with `--format json`. Dismissed findings are left out. A finding id includes the line, so code that moved to another line shows as one finding gone and one new. There is no flag for `state_dir`, the sandbox settings, `wall_time`, `sandbox_runs` or `max_turns`: set those in the file.
 
-Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr` and `--fail-on`. `report` takes `--config`, `--format` and `--out`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline`, `--format` and the three model flags. `runs` takes `--config` and `--format`; `runs prune` takes `--config`, `--keep`, `--older-than` and `--yes`. `spackle <command> --help` lists them.
+Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr` and `--fail-on`. `report` takes `--config`, `--format`, `--out` and `--finding`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline`, `--format` and the three model flags. `runs` takes `--config` and `--format`; `runs prune` takes `--config`, `--keep`, `--older-than` and `--yes`. `spackle <command> --help` lists them.
 
 ## Providers
 
@@ -498,7 +498,7 @@ Where non-terminal formats go:
 
 Progress and status lines go to standard error, so standard output is safe to redirect.
 
-`spackle report <run-id>` re-renders a stored run from its ledger alone. The run id may be a unique prefix, or `latest`.
+`spackle report <run-id>` re-renders a stored run from its ledger alone. The run id may be a unique prefix, or `latest`. `--finding <id>` (repeatable) renders only those findings, as terminal text unless you pass `--format`; an id that is not in the run exits 2.
 
 ### Exit codes
 

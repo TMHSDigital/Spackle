@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,41 @@ func TestReportReproducesTheStoredReport(t *testing.T) {
 	} {
 		if code, stdout, stderr := run(args...); code != ExitOK || stdout != want {
 			t.Errorf("%s: code=%d, same bytes=%v\nstderr: %s", name, code, stdout == want, stderr)
+		}
+	}
+}
+
+// --finding renders only the named findings, in every format, and an id
+// that is not in the run is a usage error.
+func TestReportFindingRendersOnlyThatFinding(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw+"\nimport hashlib\n\ndef digest(data):\n    return hashlib.md5(data).hexdigest()\n")
+	if code, _, stderr := run("scan", target, "--config", cfg, "--offline", "--format", "json"); code != ExitFindings {
+		t.Fatalf("scan: exit = %d\nstderr: %s", code, stderr)
+	}
+	runDir := onlyRunDir(t, stateDir)
+	var all struct {
+		Findings []struct {
+			ID string `json:"id"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(mustRead(t, filepath.Join(runDir, "reports", "report.json")), &all); err != nil || len(all.Findings) < 2 {
+		t.Fatalf("the run needs at least two findings: %d, %v", len(all.Findings), err)
+	}
+	keep, other := all.Findings[1].ID, all.Findings[0].ID
+	for _, format := range []string{"terminal", "markdown", "json", "sarif", "html"} {
+		code, stdout, stderr := run("report", "latest", "--config", cfg, "--format", format, "--finding", strings.ToLower(keep))
+		if code != ExitOK || !strings.Contains(stdout, keep) || strings.Contains(stdout, other) {
+			t.Errorf("%s: code=%d, has %s=%v, has %s=%v\nstderr: %s", format, code, keep, strings.Contains(stdout, keep), other, strings.Contains(stdout, other), stderr)
+		}
+	}
+	// With no --format, the selection is printed for the terminal.
+	if code, stdout, _ := run("report", "latest", "--config", cfg, "--finding", keep); code != ExitOK || !strings.Contains(stdout, keep) || strings.Contains(stdout, other) {
+		t.Errorf("default format: code=%d", code)
+	}
+	for _, bad := range []string{"SPK-00000000", "not-an-id"} {
+		if code, _, stderr := run("report", "latest", "--config", cfg, "--format", "json", "--finding", bad); code != ExitUsage || stderr == "" {
+			t.Errorf("--finding %s: code=%d, want usage", bad, code)
 		}
 	}
 }
