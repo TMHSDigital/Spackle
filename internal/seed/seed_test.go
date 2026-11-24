@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/TMHSDigital/spackle/internal/walk"
@@ -48,6 +49,48 @@ func TestEachFileIsDeterministic(t *testing.T) {
 	}
 	if leads, err := eachFile(context.Background(), "test", nil, check); err != nil || len(leads) != 0 {
 		t.Fatalf("no files: leads=%d err=%v", len(leads), err)
+	}
+}
+
+// A context that is already done must always win: no file is handed to a
+// worker and the cancellation is reported, also for a single file, where a
+// worker is ready at the same moment.
+func TestEachFileHandsOutNothingAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, n := range []int{1, 2, 64} {
+		files := make([]walk.File, n)
+		for round := 0; round < 200; round++ {
+			var checked atomic.Int32
+			_, err := eachFile(ctx, "test", files, func(walk.File) ([]Lead, error) {
+				checked.Add(1)
+				return nil, nil
+			})
+			if err == nil || !strings.Contains(err.Error(), "stopped early") || !errors.Is(err, context.Canceled) {
+				t.Fatalf("%d files, round %d: err = %v, want the cancellation", n, round, err)
+			}
+			if got := checked.Load(); got != 0 {
+				t.Fatalf("%d files, round %d: %d files were checked after the cancellation", n, round, got)
+			}
+		}
+	}
+}
+
+// A run that covered every file is complete, even when the context ends
+// just after the last file was handed out.
+func TestEachFileThatCoveredEverythingIsNotStopped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := make([]walk.File, 3)
+	var checked atomic.Int32
+	leads, err := eachFile(ctx, "test", files, func(walk.File) ([]Lead, error) {
+		if checked.Add(1) == int32(len(files)) {
+			cancel()
+		}
+		return []Lead{{Line: 1}}, nil
+	})
+	if err != nil || len(leads) != len(files) {
+		t.Fatalf("leads = %d, err = %v", len(leads), err)
 	}
 }
 

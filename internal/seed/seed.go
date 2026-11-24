@@ -215,18 +215,30 @@ func eachFile(ctx context.Context, what string, files []walk.File, check func(f 
 			}
 		}()
 	}
-	var stopped error
+	handed := 0
 feed:
 	for i := range files {
+		// A select with both cases ready picks one at random, so a context
+		// that is already done is checked first: no file is handed out
+		// after the run was cancelled.
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case next <- i:
+			handed++
 		case <-ctx.Done():
-			stopped = fmt.Errorf("%s stopped early: %w; rerun the scan to cover the remaining files", what, ctx.Err())
 			break feed
 		}
 	}
 	close(next)
 	wg.Wait()
+	// Every file that was handed out has been checked, so the run stopped
+	// early exactly when some file was never handed out.
+	var stopped error
+	if handed < len(files) {
+		stopped = fmt.Errorf("%s stopped early: %w; rerun the scan to cover the remaining files", what, ctx.Err())
+	}
 
 	var leads []Lead
 	var firstErr error
