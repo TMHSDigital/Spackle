@@ -42,6 +42,8 @@ type runner struct {
 	changed map[string]bool
 	// resume is the earlier run a resumed scan continues; nil otherwise.
 	resume *resumeState
+	// ended is set once the ledger has its run.end event.
+	ended bool
 }
 
 func (r *runner) say(format string, a ...any) {
@@ -51,7 +53,7 @@ func (r *runner) say(format string, a ...any) {
 }
 
 // Run executes the pipeline.
-func Run(ctx context.Context, opts Options) (Result, error) {
+func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	clock := opts.Clock
 	if clock == nil {
 		clock = time.Now
@@ -239,6 +241,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	runCreated = true
 	r := &runner{opts: opts, cfg: opts.Config, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs, changed: changed, resume: resume}
 	defer func() { _ = led.Close() }()
+	defer r.endOnError(&err)
 	if agentic {
 		detect := opts.DetectRuntime
 		if detect == nil {
@@ -338,13 +341,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 
-	if _, err := led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: outcome}); err != nil {
-		return Result{}, err
-	}
-	if err := led.Close(); err != nil {
-		return Result{}, err
-	}
-	return finish(runDir, runID)
+	return r.end(startSeq, outcome)
 }
 
 // recordFindings applies the max-findings cap and appends the findings to the

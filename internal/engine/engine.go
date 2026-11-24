@@ -182,8 +182,35 @@ func ResolveRun(stateDir, id string) (string, error) {
 
 // fail records a failed run in the ledger and returns the error.
 func (r *runner) fail(err error) error {
-	_, _ = r.led.Append(0, ledger.TypeRunEnd, ledger.RunEnd{Outcome: "failed", Note: err.Error()})
+	if !r.ended {
+		r.ended = true
+		_, _ = r.led.Append(0, ledger.TypeRunEnd, ledger.RunEnd{Outcome: "failed", Note: err.Error()})
+	}
 	return err
+}
+
+// endOnError is deferred by every mode as soon as the ledger is open, with
+// a pointer to the function's error result. Whatever error ends the run
+// from then on, the ledger gets a run.end event that says it failed, so the
+// run never loads as "incomplete", which means the process died. It does
+// nothing when the run already has its run.end.
+func (r *runner) endOnError(err *error) {
+	if *err != nil {
+		_ = r.fail(*err)
+	}
+}
+
+// end is the last step of every mode: it writes the run.end event, closes
+// the ledger, and writes the reports and finding folders from it.
+func (r *runner) end(startSeq int64, outcome string) (Result, error) {
+	if _, err := r.led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: outcome}); err != nil {
+		return Result{}, err
+	}
+	r.ended = true
+	if err := r.led.Close(); err != nil {
+		return Result{}, err
+	}
+	return finish(r.runDir, r.runID)
 }
 
 // finish loads the run back from its ledger and writes the per-finding

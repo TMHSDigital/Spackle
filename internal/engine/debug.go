@@ -102,7 +102,7 @@ type debugRun struct {
 // failure in the sandbox, finds the root cause (bisecting when a good
 // revision is given), writes a fix and verifies it. Nothing is executed
 // outside the sandbox and the working tree is never modified.
-func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
+func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	clock := opts.Clock
 	if clock == nil {
 		clock = time.Now
@@ -221,6 +221,7 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 		cfg:  cfg, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs,
 	}
 	r.lab = r.newLab(root, m.Tests, rt, "")
+	defer r.endOnError(&err)
 
 	commit := ""
 	if gitx.HasTracked(ctx, root) {
@@ -312,13 +313,7 @@ func Debug(ctx context.Context, opts DebugOptions) (Result, error) {
 			return Result{}, aerr
 		}
 	}
-	if _, err := led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: outcome}); err != nil {
-		return Result{}, err
-	}
-	if err := led.Close(); err != nil {
-		return Result{}, err
-	}
-	return finish(runDir, runID)
+	return r.end(startSeq, outcome)
 }
 
 // debugRefusal explains what debug mode lacks and what it could still

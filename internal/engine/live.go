@@ -39,7 +39,7 @@ var observedClasses = map[string]bool{
 
 // runLive scans a running application. The authorized-scope gate comes
 // first: nothing is sent, and no run directory is created, until it passes.
-func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() time.Time) (Result, error) {
+func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() time.Time) (_ Result, err error) {
 	say := func(format string, a ...any) {
 		if opts.Progress != nil {
 			fmt.Fprintf(opts.Progress, format+"\n", a...)
@@ -92,6 +92,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	}
 	r := &runner{opts: opts, cfg: cfg, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs}
 	defer func() { _ = led.Close() }()
+	defer r.endOnError(&err)
 
 	start := ledger.RunStart{
 		RunID: runID, Version: version.Version, Command: "scan",
@@ -202,13 +203,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	if err := r.recordFindings(mapSeq, findings, parent); err != nil {
 		return Result{}, err
 	}
-	if _, err := led.Append(startSeq, ledger.TypeRunEnd, ledger.RunEnd{Outcome: outcome}); err != nil {
-		return Result{}, err
-	}
-	if err := led.Close(); err != nil {
-		return Result{}, err
-	}
-	return finish(runDir, runID)
+	return r.end(startSeq, outcome)
 }
 
 // liveFinding turns a probe lead into a finding whose proof is the
