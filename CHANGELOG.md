@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The installed external scanners (Semgrep, gitleaks, osv-scanner, Trivy, hadolint) now run side by side, up to three at a time, and alongside the built-in rules, instead of one after another. The seeder list and the leads are in the same order as before.
 - `spackle scan --dry-run --yes` now says when the real run would be refused because its dollar cap cannot be enforced for a model without a known price. The dry run still exits 0.
 - The report of a running-target scan now states that requests were sent without credentials and that pages behind a login were not examined.
 - A run that nobody confirms (`--yes`, the GitHub Action, the MCP server, `spackle bench --yes`) is now refused with exit code 2 when you set a dollar cap (`--budget-usd` or `usd` under `[budget]`) and the model has no known price, because that cap could not stop the run. The message shows the `[pricing]` table to add. Pass `--allow-unpriced` or set `allow_unpriced = true` under `[budget]` to run under the token cap alone. In the Action, set `args: --allow-unpriced`. Local models, OpenRouter and the built-in default cap are not affected.

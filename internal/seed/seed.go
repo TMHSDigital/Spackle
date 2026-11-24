@@ -92,26 +92,46 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 			}
 		}
 	}
-	sharedRun := map[int]fileRun{}
+	// Every other available seeder (the external scanners) is an
+	// independent subprocess: they run side by side, and alongside the
+	// shared pass, with at most maxConcurrentScanners at once. Results are
+	// stored by seeder position, so the output order does not depend on
+	// which finishes first.
+	runs := make([]fileRun, len(seeders))
+	avail := make([]bool, len(seeders))
+	notes := make([]string, len(seeders))
+	inShared := map[int]bool{}
+	for _, i := range sharedAt {
+		inShared[i] = true
+	}
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, maxConcurrentScanners)
+	for i, s := range seeders {
+		avail[i], notes[i] = s.Available()
+		if !avail[i] || inShared[i] {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			runs[i].leads, runs[i].err = s.Run(ctx, root, files)
+		}()
+	}
 	if len(shared) > 0 {
 		for j, r := range runFiles(ctx, shared, files, texts) {
-			sharedRun[sharedAt[j]] = r
+			runs[sharedAt[j]] = r
 		}
 	}
+	wg.Wait()
 
 	var leads []Lead
 	var statuses []Status
 	for i, s := range seeders {
-		st := Status{Name: s.Name()}
-		st.Available, st.Note = s.Available()
+		st := Status{Name: s.Name(), Available: avail[i], Note: notes[i]}
 		if st.Available {
-			var got []Lead
-			var err error
-			if r, ok := sharedRun[i]; ok {
-				got, err = r.leads, r.err
-			} else {
-				got, err = s.Run(ctx, root, files)
-			}
+			got, err := runs[i].leads, runs[i].err
 			if err != nil {
 				st.Error = err.Error()
 			}
@@ -136,6 +156,10 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 	}
 	return Sort(Unique(leads)), statuses
 }
+
+// maxConcurrentScanners is how many external scanners run at once. Each is
+// a heavy subprocess of its own, so they are not all started together.
+const maxConcurrentScanners = 3
 
 // Lead caps. A generated or vendored file can match one rule thousands of
 // times. Past a point more leads of the same rule in the same file add

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
@@ -185,6 +186,44 @@ func (manyLeads) Name() string              { return "many" }
 func (manyLeads) Available() (bool, string) { return true, "" }
 func (m manyLeads) Run(context.Context, string, []walk.File) ([]Lead, error) {
 	return m.leads, nil
+}
+
+// rendezvous is a scanner that waits, while it runs, for the other one to
+// start too. Run one after another, the first would give up waiting.
+type rendezvous struct {
+	name        string
+	mine, other chan struct{}
+}
+
+func (r rendezvous) Name() string            { return r.name }
+func (rendezvous) Available() (bool, string) { return true, "" }
+func (r rendezvous) Run(context.Context, string, []walk.File) ([]Lead, error) {
+	close(r.mine)
+	select {
+	case <-r.other:
+		return []Lead{{RuleID: r.name, Class: "debug-enabled", File: r.name + ".py", Line: 1, Title: "t", Detail: "d", Fix: "f"}}, nil
+	case <-time.After(10 * time.Second):
+		return nil, errors.New(r.name + " ran alone: the other scanner never started while it ran")
+	}
+}
+
+// External scanners are independent subprocesses, so they run side by side;
+// the statuses still come back in seeder order.
+func TestRunAllRunsScannersConcurrently(t *testing.T) {
+	a, b := make(chan struct{}), make(chan struct{})
+	seeders := []Seeder{rendezvous{"first", a, b}, rendezvous{"second", b, a}}
+	leads, statuses := RunAll(context.Background(), seeders, "", nil, nil)
+	if len(statuses) != 2 || statuses[0].Name != "first" || statuses[1].Name != "second" {
+		t.Fatalf("statuses = %+v, want them in seeder order", statuses)
+	}
+	for _, st := range statuses {
+		if st.Error != "" {
+			t.Fatalf("%s: %s", st.Name, st.Error)
+		}
+	}
+	if len(leads) != 2 {
+		t.Fatalf("leads = %d, want one per scanner", len(leads))
+	}
 }
 
 // One rule that matches thousands of lines of a generated file must not
