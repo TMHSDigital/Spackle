@@ -206,39 +206,82 @@ func Prove(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer
 	if err != nil {
 		return res, err
 	}
-	system := proverSystem(sealer)
-	user := "Write a proof of concept for this finding.\n\n" + sealer.Wrap("finding to demonstrate", string(raw))
+	again := sealer.Wrap("finding to demonstrate", string(raw))
+	return attemptPoC(ctx, r, parent, sealer, reg, box, language, image, marker, res, pocSpec{
+		purpose:  "poc",
+		system:   proverSystem(sealer),
+		first:    "Write a proof of concept for this finding.\n\n" + again,
+		again:    again,
+		noun:     "proof",
+		cannot:   "A proof could not be run in the sandbox: ",
+		notShown: "did not show the flaw",
+		retry:    "Your proof ran but did not demonstrate the flaw. ",
+		advice:   "If the proof was wrong, fix it and reply again in the same JSON format. If the output shows the flaw is not actually present, reply with can_prove false and say so.",
+		decode: func(text string) (bool, proverReply, error) {
+			var reply proverReply
+			err := decodeReply(text, &reply)
+			return reply.CanProve, reply, err
+		},
+	})
+}
 
+// pocSpec is everything that differs between proving a finding and
+// reproducing an issue. Both ask the model for a few files and one command,
+// run them in the sandbox and judge the run by the marker.
+type pocSpec struct {
+	purpose string // names the sandbox run in the ledger: "poc" or "repro"
+	system  string
+	first   string // the first prompt
+	again   string // the task, repeated after an attempt that failed
+	noun    string // "proof" or "reproduction"
+	// cannot starts the reason when the model says it cannot do the task.
+	cannot string
+	// notShown ends the reason for a run without the marker.
+	notShown string
+	// retry starts the prompt after a run that did not succeed, and advice
+	// tells the model how to answer it.
+	retry, advice string
+	// decode reads the model's reply. ok is the model's own claim that it
+	// can do the task; it never decides the outcome.
+	decode func(text string) (ok bool, reply proverReply, err error)
+}
+
+// attemptPoC is the loop behind Prove and Reproduce. The model writes the
+// files and the command, they are checked before anything runs, and the run
+// is judged by JudgeProof alone. An attempt that fails is sent back once
+// with the reason and its output. res arrives with its isolation set.
+func attemptPoC(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer, reg *tools.Registry, box *Box,
+	language, image, marker string, res ProofResult, spec pocSpec) (ProofResult, error) {
+	user := spec.first
 	for attempt := 1; attempt <= 2; attempt++ {
 		res.Attempts = attempt
-		out, err := r.Run(ctx, parent, system, user, reg)
+		out, err := r.Run(ctx, parent, spec.system, user, reg)
 		if err != nil {
 			return res, err
 		}
 		if out.Stopped == StopRefusal || out.Stopped == StopTruncated {
-			res.Reason = "The model did not produce a proof (" + out.Stopped + ")."
+			res.Reason = "The model did not produce a " + spec.noun + " (" + out.Stopped + ")."
 			return res, nil
 		}
-		var reply proverReply
-		if derr := decodeReply(out.Text, &reply); derr != nil {
-			res.Reason = "The proof could not be parsed: " + derr.Error()
+		ok, reply, derr := spec.decode(out.Text)
+		if derr != nil {
+			res.Reason = "The " + spec.noun + " could not be parsed: " + derr.Error()
 			return res, nil
 		}
-		if !reply.CanProve {
-			res.Reason = "A proof could not be run in the sandbox: " + textx.Clip(strings.TrimSpace(reply.Reason), 400)
+		if !ok {
+			res.Reason = spec.cannot + textx.Clip(strings.TrimSpace(reply.Reason), 400)
 			return res, nil
 		}
 		files, cmd, verr := validatePoC(box.Root, language, reply)
 		if verr != nil {
-			res.Reason = "The proof was rejected before running: " + verr.Error()
+			res.Reason = "The " + spec.noun + " was rejected before running: " + verr.Error()
 			if attempt == 2 {
 				return res, nil
 			}
-			user = "Your proof was rejected before running: " + verr.Error() + "\nFix that and reply again in the same JSON format.\n\n" +
-				sealer.Wrap("finding to demonstrate", string(raw))
+			user = "Your " + spec.noun + " was rejected before running: " + verr.Error() + "\nFix that and reply again in the same JSON format.\n\n" + spec.again
 			continue
 		}
-		run, rerr := box.run(ctx, "poc", image, cmd, files)
+		run, rerr := box.run(ctx, spec.purpose, image, cmd, files)
 		if rerr != nil {
 			return res, rerr
 		}
@@ -252,19 +295,18 @@ func Prove(ctx context.Context, r *Runner, parent int64, sealer *envelope.Sealer
 		}
 		switch {
 		case run.TimedOut:
-			res.Reason = "The proof timed out."
+			res.Reason = "The " + spec.noun + " timed out."
 		case strings.Contains(run.Stdout+run.Stderr, marker):
-			res.Reason = fmt.Sprintf("The proof printed the marker but exited with code %d.", run.ExitCode)
+			res.Reason = fmt.Sprintf("The %s printed the marker but exited with code %d.", spec.noun, run.ExitCode)
 		default:
-			res.Reason = fmt.Sprintf("The proof ran (exit code %d) and did not show the flaw.", run.ExitCode)
+			res.Reason = fmt.Sprintf("The %s ran (exit code %d) and %s.", spec.noun, run.ExitCode, spec.notShown)
 		}
 		if attempt == 2 {
 			return res, nil
 		}
-		user = "Your proof ran but did not demonstrate the flaw. " + res.Reason + " Its output was:\n" +
-			sealer.Wrap("proof output", textx.Clip(output, 3000)) +
-			"\n\nIf the proof was wrong, fix it and reply again in the same JSON format. If the output shows the flaw is not actually present, reply with can_prove false and say so.\n\n" +
-			sealer.Wrap("finding to demonstrate", string(raw))
+		user = spec.retry + res.Reason + " Its output was:\n" +
+			sealer.Wrap(spec.noun+" output", textx.Clip(output, 3000)) +
+			"\n\n" + spec.advice + "\n\n" + spec.again
 	}
 	return res, nil
 }

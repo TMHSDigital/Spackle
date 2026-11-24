@@ -115,70 +115,26 @@ func Reproduce(ctx context.Context, r *Runner, parent int64, sealer *envelope.Se
 	if err != nil {
 		return res, err
 	}
-	system := reproduceSystem(sealer)
 	// The marker and the language are Spackle's own words, so they stay
 	// outside the envelope. The issue text never does.
 	base := fmt.Sprintf("Write a reproduction for the issue below. The target's language is %s. The marker to print when the problem is reproduced is %s\n\n", language, marker) +
 		sealer.Wrap("issue description", issue)
-	user := base
-
-	for attempt := 1; attempt <= 2; attempt++ {
-		res.Attempts = attempt
-		out, err := r.Run(ctx, parent, system, user, reg)
-		if err != nil {
-			return res, err
-		}
-		if out.Stopped == StopRefusal || out.Stopped == StopTruncated {
-			res.Reason = "The model did not produce a reproduction (" + out.Stopped + ")."
-			return res, nil
-		}
-		var reply reproduceReply
-		if derr := decodeReply(out.Text, &reply); derr != nil {
-			res.Reason = "The reproduction could not be parsed: " + derr.Error()
-			return res, nil
-		}
-		if !reply.CanReproduce {
-			res.Reason = "The issue could not be reproduced in the sandbox: " + textx.Clip(strings.TrimSpace(reply.Reason), 400)
-			return res, nil
-		}
-		files, cmd, verr := validatePoC(box.Root, language, proverReply{Files: reply.Files, Command: reply.Command})
-		if verr != nil {
-			res.Reason = "The reproduction was rejected before running: " + verr.Error()
-			if attempt == 2 {
-				return res, nil
-			}
-			user = "Your reproduction was rejected before running: " + verr.Error() + "\nFix that and reply again in the same JSON format.\n\n" + base
-			continue
-		}
-		run, rerr := box.run(ctx, "repro", image, cmd, files)
-		if rerr != nil {
-			return res, rerr
-		}
-		output, _ := redact.Apply(strings.TrimSpace(run.Stdout + "\n" + run.Stderr))
-		res.Output = textx.Clip(output, 4000)
-		res.PoC = &PoC{Files: files, Command: cmd, Marker: marker, Language: language, Image: image, Explanation: textx.Clip(reply.Explanation, 800)}
-		printed := strings.Contains(run.Stdout+run.Stderr, marker)
-		if JudgeProof(run, marker) == ProofSucceeded {
-			res.Demonstrated = true
-			res.Reason = ""
-			return res, nil
-		}
-		switch {
-		case run.TimedOut:
-			res.Reason = "The reproduction timed out."
-		case printed:
-			res.Reason = fmt.Sprintf("The reproduction printed the marker but exited with code %d.", run.ExitCode)
-		default:
-			res.Reason = fmt.Sprintf("The reproduction ran (exit code %d) and did not show the problem.", run.ExitCode)
-		}
-		if attempt == 2 {
-			return res, nil
-		}
-		user = "Your reproduction ran but did not show the problem. " + res.Reason + " Its output was:\n" +
-			sealer.Wrap("reproduction output", textx.Clip(output, 3000)) +
-			"\n\nIf the script was wrong, fix it and reply again in the same JSON format. If the output shows the code behaves correctly, reply with can_reproduce false and say so.\n\n" + base
-	}
-	return res, nil
+	return attemptPoC(ctx, r, parent, sealer, reg, box, language, image, marker, res, pocSpec{
+		purpose:  "repro",
+		system:   reproduceSystem(sealer),
+		first:    base,
+		again:    base,
+		noun:     "reproduction",
+		cannot:   "The issue could not be reproduced in the sandbox: ",
+		notShown: "did not show the problem",
+		retry:    "Your reproduction ran but did not show the problem. ",
+		advice:   "If the script was wrong, fix it and reply again in the same JSON format. If the output shows the code behaves correctly, reply with can_reproduce false and say so.",
+		decode: func(text string) (bool, proverReply, error) {
+			var reply reproduceReply
+			err := decodeReply(text, &reply)
+			return reply.CanReproduce, proverReply{Reason: reply.Reason, Files: reply.Files, Command: reply.Command, Explanation: reply.Explanation}, err
+		},
+	})
 }
 
 // Diagnosis is the outcome of looking for a root cause and a fix.
