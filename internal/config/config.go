@@ -146,6 +146,9 @@ type Output struct {
 	Dir     string   `toml:"dir"`
 	// FailOn is the lowest severity that makes scan exit 1.
 	FailOn string `toml:"fail_on"`
+	// FailOnConfidence is the lowest confidence a finding needs to count
+	// toward FailOn: plausible (every finding), high or demonstrated.
+	FailOnConfidence string `toml:"fail_on_confidence"`
 }
 
 // Price is the cost of a model per million tokens, in USD.
@@ -185,7 +188,7 @@ func Default() Config {
 			Images:  lang.DefaultImages(),
 		},
 		Fix:      Fix{MaxAttempts: 3},
-		Output:   Output{Formats: []string{"terminal"}, FailOn: "high"},
+		Output:   Output{Formats: []string{"terminal"}, FailOn: "high", FailOnConfidence: "plausible"},
 		StateDir: ".spackle",
 	}
 }
@@ -320,6 +323,9 @@ func (c *Config) merge(file Config) {
 	if file.Output.FailOn != "" {
 		c.Output.FailOn = file.Output.FailOn
 	}
+	if file.Output.FailOnConfidence != "" {
+		c.Output.FailOnConfidence = file.Output.FailOnConfidence
+	}
 	if len(file.Pricing) > 0 {
 		c.Pricing = file.Pricing
 	}
@@ -441,6 +447,11 @@ func (c Config) Validate() error {
 	case "critical", "high", "medium", "low", "never":
 	default:
 		add("[output] fail_on %q is not one of critical, high, medium, low, never", c.Output.FailOn)
+	}
+	switch c.Output.FailOnConfidence {
+	case "plausible", "high", "demonstrated":
+	default:
+		add("[output] fail_on_confidence %q is not one of plausible, high, demonstrated", c.Output.FailOnConfidence)
 	}
 	for _, p := range append(append([]string(nil), c.Scan.Exclude...), c.Scan.Include...) {
 		if err := walk.CheckPattern(p); err != nil {

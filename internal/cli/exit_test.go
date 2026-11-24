@@ -145,3 +145,38 @@ func TestCommandsRefuseFlagsTheyDoNotRead(t *testing.T) {
 		}
 	}
 }
+
+// fail_on_confidence keeps findings below a confidence out of the gate:
+// unconfirmed leads can be reported without failing CI.
+func TestExitForHonoursTheConfidenceThreshold(t *testing.T) {
+	high := func(level string) report.Run {
+		return report.Run{Findings: []finding.Finding{{Status: finding.StatusOpen, Severity: finding.Severity{Label: "high"}, Confidence: finding.Confidence{Level: level}}}}
+	}
+	cases := []struct {
+		threshold, level string
+		want             int
+	}{
+		{"plausible", finding.ConfidencePlausible, ExitFindings},
+		{"high", finding.ConfidencePlausible, ExitOK},
+		{"high", finding.ConfidenceHigh, ExitFindings},
+		{"demonstrated", finding.ConfidencePlausible, ExitOK},
+		{"demonstrated", finding.ConfidenceHigh, ExitOK},
+		{"demonstrated", finding.ConfidenceDemonstrated, ExitFindings},
+	}
+	for _, c := range cases {
+		cfg := config.Default()
+		cfg.Output.FailOnConfidence = c.threshold
+		if got := exitFor(cfg, high(c.level)); got != c.want {
+			t.Errorf("fail_on_confidence %s, finding %s: exit %d, want %d", c.threshold, c.level, got, c.want)
+		}
+	}
+	// The flag reaches the config, and a wrong value is refused.
+	g := globalFlags{failOnConf: "demonstrated", configPath: ""}
+	if cfg, err := g.load(); err != nil || cfg.Output.FailOnConfidence != "demonstrated" {
+		t.Errorf("--fail-on-confidence: %q, %v", cfg.Output.FailOnConfidence, err)
+	}
+	g.failOnConf = "certain"
+	if _, err := g.load(); err == nil {
+		t.Error("--fail-on-confidence certain was accepted")
+	}
+}

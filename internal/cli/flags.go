@@ -31,6 +31,7 @@ type globalFlags struct {
 	out           string
 	yes           bool
 	failOn        string
+	failOnConf    string
 	exclude       listFlag
 }
 
@@ -107,6 +108,7 @@ func (g *globalFlags) registerGroups(fs *flag.FlagSet, groups flagGroup) {
 	}
 	if has(flagsFailOn) {
 		fs.StringVar(&g.failOn, "fail-on", "", "lowest `severity` that makes the command exit 1: critical, high, medium, low or never")
+		fs.StringVar(&g.failOnConf, "fail-on-confidence", "", "lowest `confidence` a finding needs to count toward --fail-on: plausible (default, every finding), high or demonstrated")
 	}
 }
 
@@ -169,6 +171,9 @@ func (g *globalFlags) load() (config.Config, error) {
 	}
 	if g.failOn != "" {
 		cfg.Output.FailOn = g.failOn
+	}
+	if g.failOnConf != "" {
+		cfg.Output.FailOnConfidence = g.failOnConf
 	}
 	for _, f := range cfg.Output.Formats {
 		if _, ok := report.Ext(f); !ok {

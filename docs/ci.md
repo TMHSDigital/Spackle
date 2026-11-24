@@ -52,6 +52,7 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `path` | `.` | Directory to scan, relative to the workspace |
 | `version` | `latest` | Spackle release to install, for example `v0.1.0`. `latest` resolves the newest release |
 | `fail-on` | `high` | Lowest severity that fails the job: `critical`, `high`, `medium`, `low` or `never` |
+| `fail-on-confidence` | empty | Lowest confidence a finding needs to count toward `fail-on`: `plausible` (every finding), `high` or `demonstrated`. Empty uses `fail_on_confidence` from a committed `spackle.toml`, whose default is `plausible` |
 | `upload-sarif` | `true` | Upload the SARIF report to code scanning. Needs `security-events: write` |
 | `provider` | empty | Model provider: `anthropic`, `openai`, `openai-compatible` or `ollama`. Empty runs the deterministic stages only, unless a committed `spackle.toml` has a `[model]` table (see below) |
 | `model` | empty | Model name for the provider |
@@ -174,6 +175,8 @@ If either check fails, the step fails and Spackle is never run. Action inputs re
 | 3 | The run itself failed | The job fails |
 
 A finding is unresolved when its status is `open` or `patch-available`. A patch that Spackle wrote and checked is not applied to the code that was scanned, so such a finding still fails the job until the patch is merged and a later scan or `spackle verify` no longer reproduces it. Fixed and dismissed findings do not count toward the threshold. The SARIF report agrees with this rule: unresolved findings keep the level of their severity, and a fixed finding is listed at level `note`. `fail-on: never` makes a successful scan exit 0 whatever it found.
+
+`fail-on-confidence` (`--fail-on-confidence`, `[output] fail_on_confidence`) narrows the gate further: with `high`, only findings a model traced end to end or proved count, and unconfirmed leads are reported without failing the job; with `demonstrated`, only findings whose proof of concept ran. Without a model every finding is `plausible`, so `high` or `demonstrated` never fails a deterministic scan. SARIF levels still follow severity.
 
 ## Other CI systems
 

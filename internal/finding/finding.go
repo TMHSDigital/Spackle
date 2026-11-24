@@ -325,6 +325,12 @@ func validCWE(s string) bool {
 var labelOrder = map[string]int{"critical": 4, "high": 3, "medium": 2, "low": 1, "none": 0}
 var confidenceOrder = map[string]int{ConfidenceDemonstrated: 2, ConfidenceHigh: 1, ConfidencePlausible: 0}
 
+// ConfidenceRank orders confidence levels; higher is stronger. An unknown
+// or empty level ranks as plausible, the weakest.
+func ConfidenceRank(level string) int {
+	return confidenceOrder[level]
+}
+
 // LabelRank orders severity labels; higher is worse. Unknown labels rank
 // below "none".
 func LabelRank(label string) int {

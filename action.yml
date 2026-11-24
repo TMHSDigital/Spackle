@@ -20,6 +20,10 @@ inputs:
     description: Lowest severity that fails the job (critical, high, medium, low or never).
     required: false
     default: high
+  fail-on-confidence:
+    description: Lowest confidence a finding needs to count toward fail-on (plausible, high or demonstrated). Empty uses the config file, whose default is plausible (every finding).
+    required: false
+    default: ''
   upload-sarif:
     description: 'Upload the SARIF report to GitHub code scanning. Needs "security-events: write".'
     required: false
@@ -137,6 +141,7 @@ runs:
       env:
         SPACKLE_PATH: ${{ inputs.path }}
         SPACKLE_FAIL_ON: ${{ inputs.fail-on }}
+        SPACKLE_FAIL_ON_CONFIDENCE: ${{ inputs.fail-on-confidence }}
         SPACKLE_PROVIDER: ${{ inputs.provider }}
         SPACKLE_MODEL: ${{ inputs.model }}
         SPACKLE_BASE_URL: ${{ inputs.base-url }}
@@ -154,6 +159,7 @@ runs:
           args+=(--provider "${SPACKLE_PROVIDER}" --model "${SPACKLE_MODEL}" --budget-usd "${SPACKLE_BUDGET_USD}")
           if [ -n "${SPACKLE_BASE_URL}" ]; then args+=(--base-url "${SPACKLE_BASE_URL}"); fi
         fi
+        if [ -n "${SPACKLE_FAIL_ON_CONFIDENCE}" ]; then args+=(--fail-on-confidence "${SPACKLE_FAIL_ON_CONFIDENCE}"); fi
         if [ "${SPACKLE_FIX}" = "true" ]; then args+=(--fix); else args+=(--no-fix); fi
         if [ -n "${SPACKLE_DIFF_BASE}" ]; then args+=(--since "${SPACKLE_DIFF_BASE}"); fi
         if [ -n "${SPACKLE_ARGS}" ]; then

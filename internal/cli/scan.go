@@ -169,9 +169,11 @@ func exitFor(cfg config.Config, run report.Run) int {
 		return ExitOK
 	}
 	threshold := finding.LabelRank(cfg.Output.FailOn)
+	minConfidence := finding.ConfidenceRank(cfg.Output.FailOnConfidence)
 	for _, f := range run.Findings {
 		unresolved := f.Status == finding.StatusOpen || f.Status == finding.StatusPatchAvailable
-		if unresolved && finding.LabelRank(f.Severity.Label) >= threshold {
+		confident := finding.ConfidenceRank(f.Confidence.Level) >= minConfidence
+		if unresolved && confident && finding.LabelRank(f.Severity.Label) >= threshold {
 			return ExitFindings
 		}
 	}
