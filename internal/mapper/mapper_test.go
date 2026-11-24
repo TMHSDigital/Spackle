@@ -2,12 +2,14 @@ package mapper
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/version"
 	"github.com/TMHSDigital/spackle/internal/walk"
@@ -301,5 +303,47 @@ func TestCacheIsKeyedByCleanCommit(t *testing.T) {
 	}
 	if dirty.Commit != "" || len(dirty.Entry) != len(first.Entry)+1 {
 		t.Fatalf("dirty build: commit=%q entries=%d (clean had %d)", dirty.Commit, len(dirty.Entry), len(first.Entry))
+	}
+}
+
+// One map cache file is written per scanned commit. Only the newest
+// maxCacheEntries are kept, and never the one just written.
+func TestMapCacheIsPruned(t *testing.T) {
+	dir := t.TempDir()
+	old := time.Now().Add(-time.Hour)
+	for i := 0; i < 2*maxCacheEntries; i++ {
+		p := cachePath(dir, fmt.Sprintf("%040x", i+1))
+		if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Older files have older times: file 1 is the oldest.
+		if err := os.Chtimes(p, old.Add(time.Duration(i)*time.Second), old.Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(other, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	commit := fmt.Sprintf("%040x", 0xabc)
+	if err := saveCache(dir, commit, Map{Commit: commit}); err != nil {
+		t.Fatal(err)
+	}
+	maps, _ := filepath.Glob(filepath.Join(dir, "map-*.json"))
+	if len(maps) != maxCacheEntries {
+		t.Fatalf("%d map cache files remain, want %d", len(maps), maxCacheEntries)
+	}
+	if _, err := os.Stat(cachePath(dir, commit)); err != nil {
+		t.Fatalf("the entry just written was pruned: %v", err)
+	}
+	newest := cachePath(dir, fmt.Sprintf("%040x", 2*maxCacheEntries))
+	if _, err := os.Stat(newest); err != nil {
+		t.Errorf("the newest older entry was pruned: %v", err)
+	}
+	if _, err := os.Stat(cachePath(dir, fmt.Sprintf("%040x", 1))); err == nil {
+		t.Error("the oldest entry was kept")
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("a file that is not a map cache entry was removed: %v", err)
 	}
 }

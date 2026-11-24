@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/lang"
@@ -494,7 +495,50 @@ func saveCache(dir, commit string, m Map) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(cachePath(dir, commit), append(b, '\n'), 0o600)
+	if err := os.WriteFile(cachePath(dir, commit), append(b, '\n'), 0o600); err != nil {
+		return err
+	}
+	pruneCache(dir, commit)
+	return nil
+}
+
+// maxCacheEntries is how many map cache files are kept. One is written per
+// scanned commit; without a limit they would pile up in the state directory.
+const maxCacheEntries = 20
+
+// pruneCache deletes the oldest map cache files beyond maxCacheEntries,
+// never the one for keep. It is best effort: a file it cannot delete stays.
+func pruneCache(dir, keep string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	type entry struct {
+		name string
+		mod  time.Time
+	}
+	var maps []entry
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "map-") || !strings.HasSuffix(name, ".json") || name == filepath.Base(cachePath(dir, keep)) {
+			continue
+		}
+		info, ierr := e.Info()
+		if ierr != nil {
+			continue
+		}
+		maps = append(maps, entry{name, info.ModTime()})
+	}
+	// Newest first; the entry for keep is not in the list and takes one slot.
+	sort.Slice(maps, func(i, j int) bool {
+		if !maps[i].mod.Equal(maps[j].mod) {
+			return maps[i].mod.After(maps[j].mod)
+		}
+		return maps[i].name > maps[j].name
+	})
+	for i := maxCacheEntries - 1; i < len(maps); i++ {
+		_ = os.Remove(filepath.Join(dir, maps[i].name))
+	}
 }
 
 func isHex(s string) bool {
