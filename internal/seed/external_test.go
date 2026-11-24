@@ -3,6 +3,7 @@ package seed
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -407,15 +408,23 @@ func TestExternalArgs(t *testing.T) {
 // when its scanner is installed. It checks the contract (valid leads or a
 // descriptive error), not what the scanner finds, because rule sets change
 // and some scanners need the network.
+//
+// With SPACKLE_REQUIRE_SCANNERS=1 (the scheduled scanners job in CI, which
+// installs all five) nothing is skipped: a scanner that is missing, or whose
+// run fails, fails the test, so that job cannot pass by skipping. It also
+// asks for the results that do not depend on a downloaded rule set.
 func TestExternalScannersInstalled(t *testing.T) {
-	needsNetwork := map[string]bool{"semgrep": true, "osv-scanner": true, "trivy": true}
+	require := os.Getenv("SPACKLE_REQUIRE_SCANNERS") == "1"
 	for _, s := range External() {
 		x := s.(*external)
 		t.Run(x.name, func(t *testing.T) {
 			if _, err := exec.LookPath(x.bin); err != nil {
+				if require {
+					t.Fatalf("SPACKLE_REQUIRE_SCANNERS=1 but %s is not on PATH", x.bin)
+				}
 				t.Skipf("%s is not installed (not on PATH); install it to run this integration test", x.bin)
 			}
-			if testing.Short() {
+			if testing.Short() && !require {
 				t.Skipf("skipping the %s integration run in -short mode", x.bin)
 			}
 			if ok, note := x.Available(); !ok {
@@ -430,7 +439,7 @@ func TestExternalScannersInstalled(t *testing.T) {
 			defer cancel()
 			leads, err := x.Run(ctx, root, files)
 			if err != nil {
-				if needsNetwork[x.name] {
+				if x.UsesNetwork() && !require {
 					t.Skipf("%s is installed but its run failed, which is expected without network access: %v", x.bin, err)
 				}
 				t.Fatalf("%s run failed: %v", x.bin, err)
@@ -440,6 +449,11 @@ func TestExternalScannersInstalled(t *testing.T) {
 			assertNoSecret(t, leads)
 			if x.name == "gitleaks" && len(leads) == 0 {
 				t.Errorf("gitleaks found nothing in a file with a planted token")
+			}
+			// hadolint's rules are built in, so its result is the same
+			// on every machine: the latest tag and the root user.
+			if require && x.name == "hadolint" && len(leads) == 0 {
+				t.Errorf("hadolint reported nothing for a Dockerfile with a latest tag and a root user")
 			}
 		})
 	}

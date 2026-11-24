@@ -1,0 +1,85 @@
+name: scanners
+
+# Runs the external scanner adapters (internal/seed/external.go) against the
+# real tools. Every other job runs them against JSON written by hand in the
+# tests, so a scanner release that renames a flag or a field would not be
+# noticed there: the adapter would return nothing and CI would stay green.
+#
+# The five scanners are installed at the versions pinned below, each release
+# file checked against the SHA-256 recorded here. To move to a newer release,
+# change the version and the hash together (the hash is in the checksum file
+# of the release). Nothing updates these pins automatically.
+
+on:
+  schedule:
+    - cron: '17 5 * * 2'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/scanners.yml
+      - internal/seed/external.go
+      - internal/seed/external_test.go
+
+permissions: read-all
+
+concurrency:
+  group: scanners-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adapters:
+    name: scanner adapters (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      HADOLINT_VERSION: 2.15.1
+      HADOLINT_SHA256: c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+      OSV_SCANNER_VERSION: 2.7.1
+      OSV_SCANNER_SHA256: fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+      TRIVY_VERSION: 0.76.2
+      TRIVY_SHA256: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
+      SEMGREP_VERSION: 1.186.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: '1.27'
+      - name: Install the pinned scanners
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bin="${RUNNER_TEMP}/scanners"
+          dl="${RUNNER_TEMP}/scanner-downloads"
+          mkdir -p "${bin}" "${dl}"
+          # fetch <repository> <tag> <file> <sha256>: download one release
+          # file and stop unless it is the file the hash was recorded for.
+          fetch() {
+            gh release download "$2" --repo "$1" --pattern "$3" --dir "${dl}" --clobber
+            echo "$4  ${dl}/$3" | sha256sum -c -
+          }
+          fetch gitleaks/gitleaks "v${GITLEAKS_VERSION}" "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" "${GITLEAKS_SHA256}"
+          tar -xzf "${dl}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -C "${bin}" gitleaks
+          fetch hadolint/hadolint "v${HADOLINT_VERSION}" hadolint-linux-x86_64 "${HADOLINT_SHA256}"
+          install -m 0755 "${dl}/hadolint-linux-x86_64" "${bin}/hadolint"
+          fetch google/osv-scanner "v${OSV_SCANNER_VERSION}" osv-scanner_linux_amd64 "${OSV_SCANNER_SHA256}"
+          install -m 0755 "${dl}/osv-scanner_linux_amd64" "${bin}/osv-scanner"
+          fetch aquasecurity/trivy "v${TRIVY_VERSION}" "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" "${TRIVY_SHA256}"
+          tar -xzf "${dl}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -C "${bin}" trivy
+          pipx install "semgrep==${SEMGREP_VERSION}"
+          echo "${bin}" >> "${GITHUB_PATH}"
+      - name: Versions
+        run: |
+          gitleaks version
+          hadolint --version
+          osv-scanner --version
+          trivy --version
+          semgrep --version
+      # SPACKLE_REQUIRE_SCANNERS turns "skip when the scanner is missing or
+      # its run failed" into a failure, so this job cannot pass by skipping.
+      - name: Run the adapters against the scanners
+        run: go test -count=1 -v -run 'TestExternalScannersInstalled' ./internal/seed
+        env:
+          SPACKLE_REQUIRE_SCANNERS: '1'

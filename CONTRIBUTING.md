@@ -94,6 +94,8 @@ SPACKLE_REQUIRE_RUNTIME=1 go test -shuffle=on -run Integration ./...
 $env:SPACKLE_REQUIRE_RUNTIME = '1'; go test -shuffle=on -run Integration ./...
 ```
 
+The adapters for the external scanners (semgrep, gitleaks, osv-scanner, trivy, hadolint) are tested against samples of each tool's output on every push. A separate workflow, `scanners`, runs once a week and on a pull request that touches the adapters: it installs pinned releases of the five scanners and runs the adapters against them with `SPACKLE_REQUIRE_SCANNERS=1`, so that a missing scanner or a failed run fails the test instead of skipping it. With the scanners on your `PATH`, the same check is `SPACKLE_REQUIRE_SCANNERS=1 go test -run TestExternalScannersInstalled ./internal/seed`.
+
 The report renderers are tested against golden files. When you change report output on purpose, update them and read the diff:
 
 ```shell
