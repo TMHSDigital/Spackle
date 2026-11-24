@@ -4,8 +4,9 @@ name: tool-versions
 # Dependabot does not read that file, so this job compares each pin with the
 # tool's latest release once a week and fails when one is behind.
 #
-# It also checks the default sandbox images, which are string literals in
-# internal/config/config.go and so are invisible to Dependabot too: the job
+# It also checks the default sandbox images, which are the DefaultImage
+# string literals in internal/lang/lang.go and so are invisible to
+# Dependabot too: the job
 # fails when one of them is within 60 days of its end of life.
 
 on:
@@ -16,7 +17,7 @@ on:
     paths:
       - .github/tool-versions.env
       - .github/workflows/tool-versions.yml
-      - internal/config/config.go
+      - internal/lang/lang.go
 
 permissions: read-all
 
@@ -58,17 +59,17 @@ jobs:
               *) echo unknown ;;
             esac
           }
-          images="$(sed -n '/Images: map\[string\]string{/,/},/p' internal/config/config.go | grep -o '"[a-z]*: *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' | sort -u)"
-          test -n "${images}" || { echo "::error::no default sandbox images were found in internal/config/config.go"; exit 1; }
+          images="$(grep -o 'DefaultImage: "[^"]*"' internal/lang/lang.go | sed 's/.*"\(.*\)"/\1/' | sort -u)"
+          test -n "${images}" || { echo "::error::no default sandbox images were found in internal/lang/lang.go"; exit 1; }
           limit="$(date -u -d '+60 days' +%Y-%m-%d)"
           bad=0
           for image in ${images}; do
             end="$(eol "${image}")"
             if [ "${end}" = unknown ]; then
-              echo "::error file=internal/config/config.go::default sandbox image ${image} has no end-of-life date in this workflow. Add one."
+              echo "::error file=internal/lang/lang.go::default sandbox image ${image} has no end-of-life date in this workflow. Add one."
               bad=1
             elif [[ "${end}" < "${limit}" ]]; then
-              echo "::error file=internal/config/config.go::default sandbox image ${image} reaches end of life on ${end}. Move the default to a supported release."
+              echo "::error file=internal/lang/lang.go::default sandbox image ${image} reaches end of life on ${end}. Move the default to a supported release."
               bad=1
             else
               echo "${image} is supported until ${end}."
