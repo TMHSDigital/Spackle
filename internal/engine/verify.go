@@ -142,13 +142,17 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 				return outcomes, rerr
 			}
 			note = "The proof could not be run: " + textx.Clip(rerr.Error(), 200)
+			// The attempt is in the ledger, so the report can say why the
+			// finding kept its status.
+			if _, err := led.Append(0, ledger.TypeVerdict, ledger.Verdict{FindingID: j.f.ID, Stage: "verify", Outcome: ledger.VerdictInconclusive, Reason: note}); err != nil {
+				return outcomes, err
+			}
 			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
 			continue
 		}
-		seq, aerr := led.Append(0, ledger.TypeSandboxRun, ledger.SandboxRun{
-			FindingID: j.f.ID, Purpose: "verify", Image: spec.Image, Command: strings.Join(spec.Cmd, " "),
-			ExitCode: res.ExitCode, TimedOut: res.TimedOut, Isolation: res.Isolation,
-		})
+		// The output is kept as evidence, as a scan keeps it, so a verdict
+		// can be read back later.
+		seq, aerr := recordSandboxRun(opts.RunDir, led, j.f.ID, 0, nextEvidence(opts.RunDir, j.f.ID), "verify", spec, res)
 		if aerr != nil {
 			return outcomes, aerr
 		}

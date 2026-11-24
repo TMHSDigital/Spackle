@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `spackle verify` now keeps the output of each proof it re-runs in the finding's `evidence/` folder and links it from the ledger, as a scan does, and a proof that could not be run in the sandbox leaves an `inconclusive` verdict in the ledger. Before, the output behind a `fixed` verdict was discarded and a sandbox error left no trace.
 - A `spackle debug` run now records the absolute directory it debugged, so `spackle verify` re-runs its reproduction there. Verified from another directory, it used to run against the target as typed (often `.`), resolved against the current directory, and could mark the finding fixed.
 - A cap reached while a finding is reviewed, proved or fixed now ends the run as `budget-exhausted` whichever investigation it happens on, and the report names the step that was cut for that finding. On the last planned investigation the run used to end as `completed`.
 - The wall time cap now also stops the sandbox runs of `spackle debug` (the reproduction, bisect probes and fix checks) and the project's baseline test run in a scan. Each could run for the full sandbox timeout past the cap. A debug run whose bisect is cut short by a cap now ends as `budget-exhausted`.

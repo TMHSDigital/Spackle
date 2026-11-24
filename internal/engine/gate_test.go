@@ -631,6 +631,23 @@ func storedFinding(t *testing.T, runDir, id string) finding.Finding {
 	return finding.Finding{}
 }
 
+// assertOnlyInconclusive checks that a verify whose sandbox failed added one
+// inconclusive verify verdict to the ledger and no sandbox run.
+func assertOnlyInconclusive(t *testing.T, runDir string, before int) {
+	t.Helper()
+	events, err := ledger.Read(runDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != before+1 || events[before].Type != ledger.TypeVerdict {
+		t.Fatalf("verify added %d event(s), want one verdict", len(events)-before)
+	}
+	var v ledger.Verdict
+	if err := events[before].Decode(&v); err != nil || v.Stage != "verify" || v.Outcome != ledger.VerdictInconclusive {
+		t.Fatalf("verdict = %+v (%v), want an inconclusive verify verdict", v, err)
+	}
+}
+
 func ledgerLen(t *testing.T, runDir string) int {
 	t.Helper()
 	events, err := ledger.Read(runDir)
@@ -768,9 +785,7 @@ func TestVerifyKeepsTheFindingWhenTheSandboxFails(t *testing.T) {
 	if !strings.HasPrefix(out[0].Note, "The proof could not be run: ") || !strings.Contains(out[0].Note, "not responding") {
 		t.Fatalf("note = %q", out[0].Note)
 	}
-	if ledgerLen(t, res.RunDir) != events {
-		t.Fatal("a run that never happened was written to the ledger")
-	}
+	assertOnlyInconclusive(t, res.RunDir, events)
 	if got := storedFinding(t, res.RunDir, f.ID); got.Status != finding.StatusOpen || got.Proof.Status != finding.ProofDemonstrated {
 		t.Fatalf("status=%s proof=%s", got.Status, got.Proof.Status)
 	}
@@ -785,6 +800,15 @@ func TestVerifyKeepsTheFindingWhenTheSandboxFails(t *testing.T) {
 	if got := storedFinding(t, res.RunDir, f.ID).Status; got != finding.StatusFixed {
 		t.Fatalf("status = %s, want fixed", got)
 	}
+	// The output behind the fixed verdict is kept as evidence and linked.
+	runs, _, _ := gateEvents(t, res.RunDir)
+	last := runs[len(runs)-1]
+	if last.Purpose != "verify" || last.OutputRef == "" {
+		t.Fatalf("verify sandbox event = %+v, want it linked to its output", last)
+	}
+	if b, err := os.ReadFile(filepath.Join(res.RunDir, filepath.FromSlash(last.OutputRef))); err != nil || !strings.Contains(string(b), "AssertionError") {
+		t.Fatalf("verify evidence %s = %q, %v", last.OutputRef, b, err)
+	}
 
 	// A fixed finding stays fixed through an outage as well.
 	rt.proof = broken
@@ -796,14 +820,12 @@ func TestVerifyKeepsTheFindingWhenTheSandboxFails(t *testing.T) {
 	if len(out) != 1 || out[0].Reproduces || !out[0].Inconclusive || !strings.HasPrefix(out[0].Note, "The proof could not be run: ") {
 		t.Fatalf("outcomes = %+v", out)
 	}
-	if ledgerLen(t, res.RunDir) != events {
-		t.Fatal("a run that never happened was written to the ledger")
-	}
+	assertOnlyInconclusive(t, res.RunDir, events)
 	if got := storedFinding(t, res.RunDir, f.ID).Status; got != finding.StatusFixed {
 		t.Fatalf("status = %s, want fixed", got)
 	}
 	_, verdicts, _ := gateEvents(t, res.RunDir)
-	if got := stageVerdicts(verdicts, "verify"); got != "no-longer-reproduces" {
+	if got := stageVerdicts(verdicts, "verify"); got != "inconclusive,no-longer-reproduces,inconclusive" {
 		t.Fatalf("verify verdicts = %q", got)
 	}
 }

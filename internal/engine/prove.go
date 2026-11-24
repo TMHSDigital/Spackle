@@ -148,32 +148,49 @@ func (l *lab) box(findingID string, parent int64) *agent.Box {
 		Runtime: l.runtime, Profile: l.profile, Budget: l.r.budget, Root: l.root,
 		Record: func(purpose string, spec sandbox.Spec, res sandbox.Result) error {
 			n++
-			dir := filepath.Join(l.r.runDir, "findings", findingID, "evidence")
-			if findingID == "" {
-				dir = filepath.Join(l.r.runDir, "evidence")
-			}
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				return fmt.Errorf("write evidence: %w", err)
-			}
-			name := fmt.Sprintf("%02d-%s.txt", n, purpose)
-			out, _ := redact.Apply(res.Stdout)
-			errOut, _ := redact.Apply(res.Stderr)
-			body := fmt.Sprintf("purpose: %s\nimage: %s\ncommand: %s\nisolation: %s\nexit code: %d\ntimed out: %v\n\n--- stdout ---\n%s\n--- stderr ---\n%s\n",
-				purpose, spec.Image, strings.Join(spec.Cmd, " "), res.Isolation, res.ExitCode, res.TimedOut, out, errOut)
-			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-				return fmt.Errorf("write evidence: %w", err)
-			}
-			rel := filepath.ToSlash(filepath.Join("findings", findingID, "evidence", name))
-			if findingID == "" {
-				rel = "evidence/" + name
-			}
-			_, err := l.r.led.Append(parent, ledger.TypeSandboxRun, ledger.SandboxRun{
-				FindingID: findingID, Purpose: purpose, Image: spec.Image, Command: strings.Join(spec.Cmd, " "),
-				ExitCode: res.ExitCode, TimedOut: res.TimedOut, Isolation: res.Isolation, OutputRef: rel,
-			})
+			_, err := recordSandboxRun(l.r.runDir, l.r.led, findingID, parent, n, purpose, spec, res)
 			return err
 		},
 	}
+}
+
+// recordSandboxRun writes the redacted output of one sandbox run as evidence
+// file n of findingID (the run's own evidence folder when findingID is "")
+// and appends its sandbox_run event, linked to that file, under parent. It
+// returns the event's sequence number. Scans, debug and verify all record
+// their sandbox runs through it.
+func recordSandboxRun(runDir string, led *ledger.Writer, findingID string, parent int64, n int, purpose string, spec sandbox.Spec, res sandbox.Result) (int64, error) {
+	dir := filepath.Join(runDir, "findings", findingID, "evidence")
+	if findingID == "" {
+		dir = filepath.Join(runDir, "evidence")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return 0, fmt.Errorf("write evidence: %w", err)
+	}
+	name := fmt.Sprintf("%02d-%s.txt", n, purpose)
+	out, _ := redact.Apply(res.Stdout)
+	errOut, _ := redact.Apply(res.Stderr)
+	body := fmt.Sprintf("purpose: %s\nimage: %s\ncommand: %s\nisolation: %s\nexit code: %d\ntimed out: %v\n\n--- stdout ---\n%s\n--- stderr ---\n%s\n",
+		purpose, spec.Image, strings.Join(spec.Cmd, " "), res.Isolation, res.ExitCode, res.TimedOut, out, errOut)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+		return 0, fmt.Errorf("write evidence: %w", err)
+	}
+	rel := filepath.ToSlash(filepath.Join("findings", findingID, "evidence", name))
+	if findingID == "" {
+		rel = "evidence/" + name
+	}
+	return led.Append(parent, ledger.TypeSandboxRun, ledger.SandboxRun{
+		FindingID: findingID, Purpose: purpose, Image: spec.Image, Command: strings.Join(spec.Cmd, " "),
+		ExitCode: res.ExitCode, TimedOut: res.TimedOut, Isolation: res.Isolation, OutputRef: rel,
+	})
+}
+
+// nextEvidence returns the number for the next evidence file of findingID:
+// one more than the files already in its evidence folder, so a later step
+// (verify) never overwrites what the scan wrote.
+func nextEvidence(runDir, findingID string) int {
+	entries, _ := os.ReadDir(filepath.Join(runDir, "findings", findingID, "evidence"))
+	return len(entries) + 1
 }
 
 // baselineTests runs the project's own test suite once on the unmodified
