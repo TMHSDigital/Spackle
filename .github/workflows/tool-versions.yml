@@ -55,7 +55,7 @@ jobs:
             case "$1" in
               golang:1.27) echo 2027-08-15 ;;       # until Go 1.29 is released
               python:3.13-slim) echo 2029-10-31 ;;
-              node:22-slim) echo 2027-04-30 ;;
+              node:24-slim) echo 2028-04-30 ;;
               *) echo unknown ;;
             esac
           }

@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The default sandbox image for JavaScript and TypeScript is now `node:24-slim` (Node 24, the active LTS) instead of `node:22-slim`, which reaches end of life on 2027-04-30. Set `[sandbox.images]` to keep the old one.
 - The installed external scanners (Semgrep, gitleaks, osv-scanner, Trivy, hadolint) now run side by side, up to three at a time, and alongside the built-in rules, instead of one after another. The seeder list and the leads are in the same order as before.
 - `spackle scan --dry-run --yes` now says when the real run would be refused because its dollar cap cannot be enforced for a model without a known price. The dry run still exits 0.
 - The report of a running-target scan now states that requests were sent without credentials and that pages behind a login were not examined.

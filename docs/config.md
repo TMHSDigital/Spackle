@@ -72,8 +72,8 @@ timeout = "2m"          # one container run; values above 15m are refused
 [sandbox.images]
 go = "golang:1.27"
 python = "python:3.13-slim"
-javascript = "node:22-slim"
-typescript = "node:22-slim"
+javascript = "node:24-slim"
+typescript = "node:24-slim"
 
 [fix]
 enabled = true

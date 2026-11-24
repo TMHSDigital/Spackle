@@ -79,13 +79,13 @@ var table = []Proof{
 		},
 	},
 	{
-		Name: "javascript", Display: "JavaScript", DefaultImage: "node:22-slim", Programs: []string{"node"},
+		Name: "javascript", Display: "JavaScript", DefaultImage: "node:24-slim", Programs: []string{"node"},
 		compileCheck: nodeCheck, singleTest: nodeTest,
 	},
 	{
 		// node --check does not parse TypeScript, so there is no compile
 		// check for it.
-		Name: "typescript", Display: "TypeScript", DefaultImage: "node:22-slim", Programs: []string{"node"},
+		Name: "typescript", Display: "TypeScript", DefaultImage: "node:24-slim", Programs: []string{"node"},
 		singleTest: nodeTest,
 	},
 }
