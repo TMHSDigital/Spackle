@@ -210,7 +210,10 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	startSeq, err := r.begin(ledger.RunStart{
 		Command: "debug",
 		Target:  tgt.Display, TargetKind: string(tgt.Kind), Commit: commit,
-		Mode: "agentic", Provider: prov.Name(), Model: prov.Model(),
+		// The absolute directory, so verify re-runs the reproduction here
+		// wherever verify itself is run from.
+		TargetPath: root,
+		Mode:       "agentic", Provider: prov.Name(), Model: prov.Model(),
 		Isolation: r.lab.isolation(),
 	})
 	if err != nil {

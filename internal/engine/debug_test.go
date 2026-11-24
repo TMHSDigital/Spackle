@@ -903,6 +903,39 @@ func TestDebugBisectProbeIsBoundedByTheWallTimeCap(t *testing.T) {
 	}
 }
 
+// A debug run records the absolute directory it debugged, so verify re-runs
+// its reproduction there and not in whatever directory verify runs from.
+func TestVerifyOfADebugRunUsesTheDebuggedDirectory(t *testing.T) {
+	rt := &debugRuntime{}
+	o := debugOpts(t, debugModel{fix: fixedCalc}.provider(), rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	root := o.Target
+	t.Chdir(root)
+	o.Target, o.Test, o.Issue = ".", "", hostileIssue
+	res, err := Debug(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.TargetPath != root {
+		t.Fatalf("TargetPath = %q, want %q", res.Run.TargetPath, root)
+	}
+	t.Chdir(t.TempDir())
+	rt.runs = nil
+	detect := func(context.Context, string) (sandbox.Runtime, error) { return rt, nil }
+	if _, err := Verify(context.Background(), VerifyOptions{Config: o.Config, RunDir: res.RunDir, DetectRuntime: detect, Clock: fixedClock()}); err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.runs) == 0 {
+		t.Fatal("verify ran nothing")
+	}
+	for _, spec := range rt.runs {
+		if spec.SourceDir != root {
+			t.Errorf("verify ran against %q, want the debugged directory %q", spec.SourceDir, root)
+		}
+	}
+}
+
 // A new failing test usually does not exist at the --good revision. A probe
 // where the test selects nothing is neither good nor bad: bisect stops and
 // says the test must exist there, instead of calling the revision bad.
