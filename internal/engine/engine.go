@@ -228,7 +228,8 @@ func finish(runDir, runID string) (Result, error) {
 }
 
 // WriteArtifacts writes findings/<id>/finding.json (plus fix.patch and
-// review.md when present) and reports/report.<ext> for every format.
+// review.md when present), reports/report.<ext> for every format, and the
+// run summary that listings read.
 func WriteArtifacts(runDir string, run report.Run) error {
 	for _, f := range run.Findings {
 		dir := filepath.Join(runDir, "findings", f.ID)
@@ -267,6 +268,10 @@ func WriteArtifacts(runDir string, run report.Run) error {
 		if err := renderFile(filepath.Join(repDir, "report."+ext), format, run); err != nil {
 			return err
 		}
+	}
+	// Last, so the summary is only there when everything it stands for is.
+	if err := report.WriteSummary(runDir, run); err != nil {
+		return fmt.Errorf("write run summary: %w", err)
 	}
 	return nil
 }

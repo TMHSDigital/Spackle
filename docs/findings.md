@@ -18,6 +18,7 @@ Each run directory, `<state_dir>/runs/<run-id>/`, holds:
 | `findings/<id>/review.md` | The reason, when the finding was dismissed |
 | `evidence/exchanges/` | Recorded requests and responses, for a running target |
 | `reports/report.<ext>` | The report in all five formats |
+| `summary.json` | The few fields a listing of runs shows (target, start, outcome, counts). It is derived from the ledger and ignored when the ledger has changed since it was written |
 
 ## The schema
 

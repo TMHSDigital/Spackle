@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -547,6 +548,21 @@ func (s *server) getFinding(_ context.Context, raw json.RawMessage) result {
 	if id == "" || len(id) > maxIDLen {
 		return errorf("finding_id must be a finding id such as SPK-1A2B3C4D: take it from the result of scan or get_report")
 	}
+	// The finding folder holds the same finding as the ledger for as long
+	// as the ledger is unchanged, which the run summary vouches for. Read
+	// it from there when that holds, instead of decoding the whole ledger.
+	if dir, derr := s.runDir(*a.RunID); derr == nil {
+		if f, runID, ok := storedFinding(dir, id); ok {
+			b, err := json.MarshalIndent(f, "", "  ")
+			if err != nil {
+				return errorf("internal error: the finding could not be encoded: %v", err)
+			}
+			return result{
+				text:       dataNotice + "\n\n" + string(b),
+				structured: findingResult{Notice: dataNotice, RunID: runID, Finding: f},
+			}
+		}
+	}
 	run, err := s.loadRun(*a.RunID)
 	if err != nil {
 		return errorf("get_finding: %v", err)
@@ -564,6 +580,31 @@ func (s *server) getFinding(_ context.Context, raw json.RawMessage) result {
 		text:       dataNotice + "\n\n" + string(b),
 		structured: findingResult{Notice: dataNotice, RunID: run.ID, Finding: f},
 	}
+}
+
+var findingIDRe = regexp.MustCompile(`^SPK-[0-9A-F]{8}$`)
+
+// storedFinding reads one finding from its folder in the run directory. ok
+// is false when the id is not a finding id, when the run's ledger changed
+// after its folders were written, or when the file is not there; the caller
+// then loads the run from the ledger.
+func storedFinding(runDir, id string) (f finding.Finding, runID string, ok bool) {
+	id = strings.ToUpper(id)
+	if !findingIDRe.MatchString(id) {
+		return finding.Finding{}, "", false
+	}
+	sum, current := report.LoadSummary(runDir)
+	if !current {
+		return finding.Finding{}, "", false
+	}
+	b, err := os.ReadFile(filepath.Join(runDir, "findings", id, "finding.json")) //nolint:gosec // the id is checked against the finding id pattern above
+	if err != nil || json.Unmarshal(b, &f) != nil || f.ID != id {
+		return finding.Finding{}, "", false
+	}
+	if runID = sum.RunID; runID == "" {
+		runID = filepath.Base(runDir)
+	}
+	return f, runID, true
 }
 
 type runRow struct {
@@ -609,6 +650,18 @@ func (s *server) listRuns(_ context.Context, raw json.RawMessage) result {
 	}
 	for _, name := range names {
 		row := runRow{RunID: name}
+		// The summary written with the run's reports has what a row
+		// shows. Without a current one the ledger is read as before.
+		if sum, ok := report.LoadSummary(filepath.Join(dir, name)); ok {
+			n := sum.Findings
+			c := severityCounts{Critical: sum.Counts.Critical, High: sum.Counts.High, Medium: sum.Counts.Medium, Low: sum.Counts.Low, None: sum.Counts.None}
+			row.Target, row.Outcome, row.Findings, row.Counts = sum.Target, sum.Outcome, &n, &c
+			if !sum.Started.IsZero() {
+				row.Started = sum.Started.UTC().Format(time.RFC3339)
+			}
+			out.Runs = append(out.Runs, row)
+			continue
+		}
 		run, err := report.Load(filepath.Join(dir, name))
 		if err != nil {
 			row.Error = err.Error()

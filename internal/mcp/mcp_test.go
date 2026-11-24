@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -1149,5 +1150,68 @@ func TestGetReportTruncatesLargeReports(t *testing.T) {
 	}
 	if !strings.Contains(tr.text(), "[Truncated: the report is") {
 		t.Error("the text does not carry the truncation note")
+	}
+}
+
+// The run summary and the finding folders are shortcuts. list_runs and
+// get_finding must say exactly the same with them as from the ledger, and
+// must fall back to the ledger when a summary is missing or out of date.
+func TestRunSummaryShortcutAgreesWithTheLedger(t *testing.T) {
+	fx := newFixture(t)
+	c := start(t, fx.opts)
+	var sum scanSummary
+	tr := c.tool("scan", map[string]any{"path": "."})
+	if err := json.Unmarshal(tr.Structured, &sum); err != nil || tr.IsError || len(sum.Findings) == 0 {
+		t.Fatalf("scan: %v %s", err, tr.text())
+	}
+	fid := sum.Findings[0].ID
+	runDir := filepath.Join(engine.RunsDir(fx.opts.Config.StateDir), sum.RunID)
+	summary := filepath.Join(runDir, report.SummaryFile)
+	if _, ok := report.LoadSummary(runDir); !ok {
+		t.Fatal("the scan left no current run summary, so this test would compare the ledger with itself")
+	}
+	if f, id, ok := storedFinding(runDir, strings.ToLower(fid)); !ok || f.ID != fid || id != sum.RunID {
+		t.Fatalf("the stored finding was not used: %v %q %q", ok, f.ID, id)
+	}
+	for _, id := range []string{"SPK-00000000", "../" + fid, "SPK-123", ""} {
+		if _, _, ok := storedFinding(runDir, id); ok {
+			t.Errorf("storedFinding accepted %q", id)
+		}
+	}
+
+	ask := func() (list, one string) {
+		t.Helper()
+		l := c.tool("list_runs", nil)
+		f := c.tool("get_finding", map[string]any{"run_id": sum.RunID, "finding_id": fid})
+		if l.IsError || f.IsError {
+			t.Fatalf("list_runs: %s\nget_finding: %s", l.text(), f.text())
+		}
+		return l.text(), f.text()
+	}
+	listFast, findingFast := ask()
+
+	// Out of date: the ledger grew after the summary was written.
+	raw, err := os.ReadFile(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := strings.Replace(string(raw), `"outcome": "completed"`, `"outcome": "made up"`, 1)
+	stale = regexp.MustCompile(`"ledger_bytes": \d+`).ReplaceAllString(stale, `"ledger_bytes": 1`)
+	if stale == string(raw) {
+		t.Fatalf("the summary has an unexpected shape:\n%s", raw)
+	}
+	if err := os.WriteFile(summary, []byte(stale), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if listStale, findingStale := ask(); listStale != listFast || findingStale != findingFast {
+		t.Errorf("an out-of-date summary was trusted:\n%s\nwant\n%s", listStale, listFast)
+	}
+
+	// Missing: a run stored before summaries existed.
+	if err := os.Remove(summary); err != nil {
+		t.Fatal(err)
+	}
+	if listSlow, findingSlow := ask(); listSlow != listFast || findingSlow != findingFast {
+		t.Errorf("list_runs or get_finding differs between the summary and the ledger:\n%s\nwant\n%s", listSlow, listFast)
 	}
 }

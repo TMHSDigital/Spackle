@@ -66,6 +66,7 @@ Each run writes to the state directory, `.spackle/` in the working directory unl
 | Findings | `runs/<run-id>/findings/<id>/` | `finding.json`, the proof under `poc/`, sandbox output under `evidence/`, `fix.patch`, `review.md` |
 | Exchanges | `runs/<run-id>/evidence/exchanges/` | Every request and response sent to a running target, redacted, with stored bodies capped in size |
 | Reports | `runs/<run-id>/reports/` | Terminal, Markdown, HTML, JSON and SARIF |
+| Run summary | `runs/<run-id>/summary.json` | The target, start time, outcome and finding counts of the run, for listings |
 | Map cache | `cache/` | The target map, keyed by commit |
 | Clones | `clones/<run-id>/` | The shallow clone of a git URL target |
 | Fix worktrees | `worktrees/<run-id>/` | The checkout that holds the fix branch |
