@@ -20,11 +20,13 @@ type RunStart struct {
 	Commit     string `json:"commit,omitempty"`
 	// Ref is the branch or tag that was asked for with --ref, for a git
 	// URL target. Commit is what it resolved to.
-	Ref      string `json:"ref,omitempty"`
-	Mode     string `json:"mode"` // deterministic|agentic
-	Provider string `json:"provider,omitempty"`
-	Model    string `json:"model,omitempty"`
-	Offline  bool   `json:"offline,omitempty"`
+	Ref string `json:"ref,omitempty"`
+	// ResumedFrom is the id of the run this run continues (scan --resume).
+	ResumedFrom string `json:"resumed_from,omitempty"`
+	Mode        string `json:"mode"` // deterministic|agentic
+	Provider    string `json:"provider,omitempty"`
+	Model       string `json:"model,omitempty"`
+	Offline     bool   `json:"offline,omitempty"`
 	// Scope is the authorized scope for a live target, as confirmed.
 	Scope string `json:"scope,omitempty"`
 	// ScopeSource says how authorization was given: scope-file, config or interactive.
@@ -125,7 +127,7 @@ type Intent struct {
 	Files      []string `json:"files,omitempty"`
 	LeadIDs    []string `json:"lead_ids,omitempty"`
 	Priority   int      `json:"priority"`
-	Source     string   `json:"source"` // planner|fallback
+	Source     string   `json:"source"` // planner|fallback|resumed
 }
 
 // HTTPExchange is the data of an http.exchange event: a pointer to one

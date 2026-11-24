@@ -25,14 +25,7 @@ func diffTarget(t *testing.T, root string) string {
 	}
 	git := func(args ...string) string {
 		t.Helper()
-		full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"}, args...)
-		cmd := exec.Command("git", full...)
-		cmd.Dir = root
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
+		return gitIn(t, root, args...)
 	}
 	old := "import os\n\ndef run(cmd):\n    os.system(cmd)\n"
 	if err := os.WriteFile(filepath.Join(root, "old.py"), []byte(old), 0o644); err != nil {
@@ -55,6 +48,20 @@ func diffTarget(t *testing.T, root string) string {
 	git("add", "-A")
 	git("commit", "-q", "-m", "change app.py")
 	return base
+}
+
+// gitIn runs git in dir with a fixed identity and no line ending
+// conversion, and returns its trimmed output.
+func gitIn(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"}, args...)
+	cmd := exec.Command("git", full...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestSinceLimitsTheScanToChangedFiles(t *testing.T) {

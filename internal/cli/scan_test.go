@@ -488,6 +488,24 @@ func TestScanSinceNeedsARepository(t *testing.T) {
 	}
 }
 
+// TestScanResumeIsRefusedWithoutAModel checks that --resume reaches the
+// engine: with no model there is nothing that could continue a run.
+func TestScanResumeIsRefusedWithoutAModel(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	t.Setenv("PATH", t.TempDir())
+	code, out, stderr := run("scan", target, "--config", cfg, "--format", "json", "--resume", "latest", "--force")
+	if code != ExitUsage || !strings.Contains(stderr, "--resume continues the investigations of an earlier run, which needs a model") {
+		t.Fatalf("exit = %d, want %d\nstderr: %s", code, ExitUsage, stderr)
+	}
+	if out != "" {
+		t.Errorf("a refused run printed a report: %q", out)
+	}
+	if dirs := runDirs(t, stateDir); len(dirs) != 0 {
+		t.Errorf("a refused run left a run directory behind: %v", dirs)
+	}
+}
+
 func TestConfirmer(t *testing.T) {
 	paid := engine.Estimate{Investigations: 3, Model: "some-model", USD: 1.5, CostKnown: true}
 	local := engine.Estimate{Investigations: 3, Model: "some-model", Local: true}

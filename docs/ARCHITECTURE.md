@@ -240,7 +240,7 @@ Each run writes `<state_dir>/runs/<run-id>/ledger.jsonl`. Run ids have the form 
 | `finding.upsert` | One finding in full |
 | `budget.skip` | Which cap was reached and what was not examined |
 | `note` | A plain sentence for the report |
-| `run.end` | Outcome: `completed`, `budget-exhausted`, `interrupted` or `failed` |
+| `run.end` | Outcome: `completed`, `budget-exhausted`, `interrupted` or `failed`. A later run can continue a `budget-exhausted` or `interrupted` scan (`scan --resume`); its `run.start` names this run in `resumed_from` |
 
 The ledger file is created exclusively and opened for append only, with mode 0600 in a 0700 directory. The reader rejects a file with a missing, reordered or truncated event. The ledger is not cryptographically chained. See [THREAT_MODEL.md](THREAT_MODEL.md) for what that means.
 

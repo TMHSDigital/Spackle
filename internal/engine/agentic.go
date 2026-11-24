@@ -187,8 +187,15 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	if r.changed != nil {
 		planMap = changedMap(m, r.changed)
 	}
-	intents, perr := agent.Plan(ctx, planner, mapSeq, sealer, planMap, leads, limit)
-	if perr != nil || len(intents) == 0 {
+	// A resumed run does not plan again: it continues with the
+	// investigations the earlier run did not reach.
+	var perr error
+	if r.resume != nil {
+		intents = agent.ResumePlan(r.resume.intents, planMap, leads, limit)
+	} else {
+		intents, perr = agent.Plan(ctx, planner, mapSeq, sealer, planMap, leads, limit)
+	}
+	if r.resume == nil && (perr != nil || len(intents) == 0) {
 		switch {
 		case ctx.Err() != nil:
 			intents, interrupted = nil, true
@@ -246,7 +253,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	// notInvestigated records the intents from i on as skipped.
 	notInvestigated := func(i int) {
 		for _, rest := range intents[i:] {
-			skipped = append(skipped, fmt.Sprintf("Not investigated: %s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
+			skipped = append(skipped, fmt.Sprintf(notInvestigatedPrefix+"%s (%s)", rest.Title, strings.Join(rest.Files, ", ")))
 		}
 	}
 	// record appends a finished finding to the ledger at once, so an
@@ -379,11 +386,31 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			investigated[findings[i].ID] = i
 		}
 	}
+	// In a resumed run the earlier run's findings stand unless this run
+	// reached its own conclusion about the same finding. decided holds the
+	// ids this run investigated or dismissed itself.
+	carried := map[string]bool{}
+	handled := map[string]bool{}
+	decided := map[string]bool{}
+	if r.resume != nil {
+		handled = r.resume.handled
+		for _, f := range r.resume.findings {
+			carried[f.ID] = true
+		}
+		for i := range findings {
+			decided[findings[i].ID] = true
+		}
+	}
 	for _, l := range leads {
 		state := leadState[l.ID]
 		var f finding.Finding
 		switch {
 		case state == "found":
+			// The investigated finding stands for this lead, also where
+			// the earlier run reported the lead by itself.
+			if r.resume != nil {
+				decided[FromLead(l, "").ID] = true
+			}
 			continue
 		case strings.HasPrefix(state, "dismissed:"):
 			f = FromLead(l, "Investigated by reading the code and not confirmed.")
@@ -393,7 +420,14 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			f = FromLead(l, "The investigation of this lead did not produce a usable result ("+textx.Clip(strings.TrimPrefix(state, "incomplete:"), 200)+"), so it is reported as an unconfirmed lead.")
 		default:
 			f = FromLead(l, "This lead was not selected for investigation in this run, so it is reported as an unconfirmed lead.")
+			// This run did not look at the lead. When the earlier run
+			// did, or already reported it, what it found is carried over
+			// below and says more than a fresh unconfirmed lead.
+			if carried[f.ID] || handled[l.ID] {
+				continue
+			}
 		}
+		decided[f.ID] = true
 		if verr := f.Validate(); verr != nil {
 			if _, err := r.led.Append(leadSeq[l.ID], ledger.TypeReject, ledger.Reject{Stage: "seed", Intent: l.ID, Reason: verr.Error()}); err != nil {
 				return nil, nil, "", err
@@ -410,6 +444,17 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			parent[f.ID] = leadSeq[l.ID]
 		}
 		findings = append(findings, f)
+	}
+	if r.resume != nil {
+		for _, f := range r.resume.findings {
+			if decided[f.ID] {
+				continue
+			}
+			if _, seen := parent[f.ID]; !seen {
+				parent[f.ID] = mapSeq
+			}
+			findings = append(findings, f)
+		}
 	}
 	findings = finding.Dedup(findings)
 

@@ -162,6 +162,14 @@ func FallbackPlan(m mapper.Map, leads []seed.Lead, limit int) []Intent {
 	return validateIntents(intents, m, leads, limit, "fallback")
 }
 
+// ResumePlan returns the plan of a resumed run: the investigations an
+// earlier run planned and did not reach. They are checked against the
+// current map and leads like any other plan, so a file or a lead that is
+// gone since then drops out.
+func ResumePlan(left []Intent, m mapper.Map, leads []seed.Lead, limit int) []Intent {
+	return validateIntents(left, m, leads, limit, "resumed")
+}
+
 func capSlice[T any](s []T, n int) []T {
 	if n >= 0 && len(s) > n {
 		return s[:n]

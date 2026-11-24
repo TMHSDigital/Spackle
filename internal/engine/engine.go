@@ -57,6 +57,12 @@ type Options struct {
 	// Since limits a scan of a directory to the files changed since this
 	// revision (see gitx.ChangedSince). Empty scans everything.
 	Since string
+	// Resume is the id of a stored scan to continue ("latest" for the
+	// newest): its remaining investigations are run with a fresh budget
+	// and its findings are carried into the new run. Force allows that
+	// when the target's commit has changed since.
+	Resume string
+	Force  bool
 	// ScopeFile is the --authorize scope file for a live target.
 	ScopeFile string
 	// Yes is true for --yes and CI: never prompt for authorization.

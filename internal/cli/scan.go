@@ -26,6 +26,8 @@ func runScan(env Env, args []string) int {
 	dryRun := fs.Bool("dry-run", false, "show what would be scanned and the cost estimate; call no model and store no run")
 	ref := fs.String("ref", "", "`branch or tag` to scan, for a git URL target (default: the remote's default branch)")
 	since := fs.String("since", "", "report only on files changed since this `revision`, for a directory in a git repository (for example the base commit of a pull request)")
+	resume := fs.String("resume", "", "continue the stored scan with this `run id` (or \"latest\") where its budget ran out, with a new budget")
+	force := fs.Bool("force", false, "with --resume, continue although the target's commit changed since that run")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
 		return flagExit(err)
@@ -48,7 +50,7 @@ func runScan(env Env, args []string) int {
 	defer stop()
 
 	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
-		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, DryRun: *dryRun,
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, Resume: *resume, Force: *force, DryRun: *dryRun,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
@@ -69,6 +71,9 @@ func runScan(env Env, args []string) int {
 		return ExitError
 	}
 	fmt.Fprintf(env.Stderr, "Run %s stored in %s\n", res.RunID, res.RunDir)
+	if engine.Resumable(res.Run) {
+		fmt.Fprintf(env.Stderr, "The budget ran out before every planned investigation was done. To continue with the rest under a new budget:\n  spackle scan %s --resume %s\n", tgt, res.RunID)
+	}
 	if res.Run.Outcome == "interrupted" {
 		// The report holds what was found before the interrupt. The run
 		// did not finish, so it is not a pass whatever it found.
