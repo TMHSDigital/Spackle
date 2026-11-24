@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Action input `spackle-dir`, to run the Action with an existing binary instead of a downloaded release, and output `has-sarif`.
 - `spackle doctor --format json` prints the checks as JSON, with the same rows the MCP `doctor` tool returns.
 - `spackle scan <git URL> --ref <branch or tag>` scans a named branch or tag instead of the default branch. The ref is recorded in the run.
+- `spackle scan <directory> --since <revision>` reports only on files changed since that revision, so a pull request is judged on what it changes. Leads in other files are left out and the report says how many; with a model only the changed files are planned for investigation. The Action exposes it as the `diff-base` input, which needs a checkout with `fetch-depth: 0`.
 - `spackle scan --dry-run` shows what a scan would read, each seeder and its lead count, the leads by class, the number of investigations that would be planned and the cost estimate. It calls no model and stores no run.
 - SARIF reports now carry the traced data flow of a finding as `codeFlows`, readable rule names, descriptions and remediation help from the class table, and the verification text and fix branch of a finding that has a patch.
 - `spackle runs` lists the stored runs, and `spackle runs prune --keep <n>` or `--older-than <age>` deletes old runs with their clones and fix worktrees after listing them.

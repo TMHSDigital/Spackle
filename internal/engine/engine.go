@@ -54,6 +54,9 @@ type Options struct {
 	// Ref is the branch or tag to scan for a git URL target. Empty means
 	// the remote's default branch.
 	Ref string
+	// Since limits a scan of a directory to the files changed since this
+	// revision (see gitx.ChangedSince). Empty scans everything.
+	Since string
 	// ScopeFile is the --authorize scope file for a live target.
 	ScopeFile string
 	// Yes is true for --yes and CI: never prompt for authorization.

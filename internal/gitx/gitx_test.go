@@ -243,3 +243,46 @@ func TestDirtyAndResetWorktree(t *testing.T) {
 		t.Fatalf("after a reset: clean=%v err=%v", clean, err)
 	}
 }
+
+func TestChangedSince(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, dir, "keep.txt", "one\n")
+	writeFile(t, dir, "gone.txt", "one\n")
+	commit(t, dir, "base")
+	git(t, dir, "checkout", "-q", "-b", "feature")
+	writeFile(t, dir, "a.txt", "two\n")
+	writeFile(t, dir, "sub/new file.txt", "one\n")
+	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "feature work")
+	// The base branch moves on after the fork: that is not part of the change.
+	git(t, dir, "checkout", "-q", "main")
+	writeFile(t, dir, "keep.txt", "two\n")
+	commit(t, dir, "main moves on")
+	git(t, dir, "checkout", "-q", "feature")
+	// Work that is not committed is not part of the change either.
+	writeFile(t, dir, "keep.txt", "wip\n")
+
+	ctx := context.Background()
+	got, err := ChangedSince(ctx, dir, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, "|") != "a.txt|sub/new file.txt" {
+		t.Fatalf("changed = %q, want the added and the modified file", got)
+	}
+	// From a subdirectory the paths are relative to it and limited to it.
+	got, err = ChangedSince(ctx, filepath.Join(dir, "sub"), "main")
+	if err != nil || strings.Join(got, "|") != "new file.txt" {
+		t.Fatalf("changed under sub = %q, err = %v", got, err)
+	}
+	if got, err = ChangedSince(ctx, dir, "HEAD"); err != nil || len(got) != 0 {
+		t.Fatalf("against HEAD itself: %q, err = %v", got, err)
+	}
+	for _, rev := range []string{"", "-x", "--output=/tmp/x", "no-such-rev"} {
+		if _, err := ChangedSince(ctx, dir, rev); err == nil {
+			t.Errorf("revision %q was accepted", rev)
+		}
+	}
+}

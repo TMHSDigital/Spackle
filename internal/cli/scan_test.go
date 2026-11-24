@@ -470,6 +470,24 @@ func TestScanUnattendedDollarCapNeedsAPrice(t *testing.T) {
 	}
 }
 
+// TestScanSinceNeedsARepository checks that --since reaches the engine and
+// that a target git cannot compare is a usage error, not a full scan.
+func TestScanSinceNeedsARepository(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	t.Setenv("PATH", t.TempDir())
+	code, out, stderr := run("scan", target, "--config", cfg, "--format", "json", "--since", "main")
+	if code != ExitUsage || !strings.Contains(stderr, "--since needs a git repository") {
+		t.Fatalf("exit = %d, want %d\nstderr: %s", code, ExitUsage, stderr)
+	}
+	if out != "" {
+		t.Errorf("a refused run printed a report: %q", out)
+	}
+	if dirs := runDirs(t, stateDir); len(dirs) != 0 {
+		t.Errorf("a refused run left a run directory behind: %v", dirs)
+	}
+}
+
 func TestConfirmer(t *testing.T) {
 	paid := engine.Estimate{Investigations: 3, Model: "some-model", USD: 1.5, CostKnown: true}
 	local := engine.Estimate{Investigations: 3, Model: "some-model", Local: true}

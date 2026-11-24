@@ -38,6 +38,8 @@ type runner struct {
 	budget   *budget.Budget
 	sealer   *envelope.Sealer
 	lab      *lab
+	// changed is the file set of a diff scan (--since); nil for a full scan.
+	changed map[string]bool
 }
 
 func (r *runner) say(format string, a ...any) {
@@ -64,6 +66,9 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if tgt.Live() {
 		if opts.DryRun {
 			return Result{}, fmt.Errorf("%w: --dry-run is for a directory or a git URL. For a running target, the scope file states what a scan may send", ErrRefused)
+		}
+		if opts.Since != "" {
+			return Result{}, fmt.Errorf("%w: --since limits a scan of a directory to its changed files, and %s is a running target", ErrRefused, tgt.Display)
 		}
 		return runLive(ctx, opts, tgt, clock)
 	}
@@ -99,6 +104,9 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if opts.Ref != "" && tgt.Kind != target.KindGit {
 		return Result{}, fmt.Errorf("%w: --ref names a branch or tag of a git URL target, and %s is not one. For a directory, check out the branch yourself", ErrRefused, tgt.Display)
 	}
+	if opts.Since != "" && tgt.Kind != target.KindPath {
+		return Result{}, fmt.Errorf("%w: --since compares a checkout with a base revision, and %s is not a directory. Clone the repository with the history you need and scan the directory", ErrRefused, tgt.Display)
+	}
 	if tgt.Kind == target.KindGit {
 		root = filepath.Join(stateDir, "clones", runID)
 		if opts.Ref != "" {
@@ -126,6 +134,15 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		root = abs
 	}
 
+	// A diff scan needs its file list before anything else is done, so a
+	// revision git does not know refuses the run at once.
+	var changed map[string]bool
+	if opts.Since != "" {
+		if changed, err = changedSince(ctx, root, opts.Since); err != nil {
+			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
+		}
+	}
+
 	// Map and seed before asking for confirmation, so the estimate reflects
 	// the real number of leads. Neither stage uses a model or costs money.
 	say("Mapping %s", tgt.Display)
@@ -146,6 +163,11 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	say("Running %d seeders", len(seeders))
 	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files, texts)
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
+	if changed != nil {
+		var note string
+		leads, note = keepChanged(leads, changed, opts.Since)
+		scanNotes = append(scanNotes, note)
+	}
 
 	if opts.DryRun {
 		plan := &Plan{
@@ -190,7 +212,7 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	runCreated = true
-	r := &runner{opts: opts, cfg: opts.Config, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs}
+	r := &runner{opts: opts, cfg: opts.Config, led: led, runDir: runDir, runID: runID, progress: opts.Progress, clock: clock, provs: provs, changed: changed}
 	defer func() { _ = led.Close() }()
 	if agentic {
 		detect := opts.DetectRuntime

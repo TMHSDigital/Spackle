@@ -44,6 +44,13 @@ inputs:
     description: Write and verify fixes. Off by default in CI; findings are still reported.
     required: false
     default: 'false'
+  diff-base:
+    description: >-
+      Report only on files changed since this revision, for example
+      github.event.pull_request.base.sha. The checkout must contain that commit
+      (fetch-depth 0). Empty scans and reports on the whole path.
+    required: false
+    default: ''
   args:
     description: >-
       Extra arguments passed to "spackle scan". The value is split on spaces and line
@@ -135,6 +142,7 @@ runs:
         SPACKLE_BASE_URL: ${{ inputs.base-url }}
         SPACKLE_BUDGET_USD: ${{ inputs.budget-usd }}
         SPACKLE_FIX: ${{ inputs.fix }}
+        SPACKLE_DIFF_BASE: ${{ inputs.diff-base }}
         SPACKLE_ARGS: ${{ inputs.args }}
       run: |
         set -uo pipefail
@@ -147,6 +155,7 @@ runs:
           if [ -n "${SPACKLE_BASE_URL}" ]; then args+=(--base-url "${SPACKLE_BASE_URL}"); fi
         fi
         if [ "${SPACKLE_FIX}" = "true" ]; then args+=(--fix); else args+=(--no-fix); fi
+        if [ -n "${SPACKLE_DIFF_BASE}" ]; then args+=(--since "${SPACKLE_DIFF_BASE}"); fi
         if [ -n "${SPACKLE_ARGS}" ]; then
           # The value is split on whitespace, line breaks included. Quotes
           # would not group words, so a quoted value is refused instead of

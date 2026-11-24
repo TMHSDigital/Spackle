@@ -180,7 +180,14 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 	// stops, and everything found so far is still reported.
 	interrupted := false
 	planCap := ""
-	intents, perr := agent.Plan(ctx, planner, mapSeq, sealer, m, leads, limit)
+	// In a diff scan the planner sees the entry points and trust boundaries
+	// of the changed files only, and may plan for those files only. The
+	// investigators still read the whole tree.
+	planMap := m
+	if r.changed != nil {
+		planMap = changedMap(m, r.changed)
+	}
+	intents, perr := agent.Plan(ctx, planner, mapSeq, sealer, planMap, leads, limit)
 	if perr != nil || len(intents) == 0 {
 		switch {
 		case ctx.Err() != nil:
@@ -195,7 +202,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 			if _, err := r.led.Append(mapSeq, ledger.TypeNote, note); err != nil {
 				return nil, nil, "", err
 			}
-			intents = agent.FallbackPlan(m, leads, limit)
+			intents = agent.FallbackPlan(planMap, leads, limit)
 		}
 	}
 	intentSeq := map[string]int64{}

@@ -25,6 +25,7 @@ func runScan(env Env, args []string) int {
 	g.register(fs)
 	dryRun := fs.Bool("dry-run", false, "show what would be scanned and the cost estimate; call no model and store no run")
 	ref := fs.String("ref", "", "`branch or tag` to scan, for a git URL target (default: the remote's default branch)")
+	since := fs.String("since", "", "report only on files changed since this `revision`, for a directory in a git repository (for example the base commit of a pull request)")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
 		return flagExit(err)
@@ -47,7 +48,7 @@ func runScan(env Env, args []string) int {
 	defer stop()
 
 	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
-		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, DryRun: *dryRun,
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, DryRun: *dryRun,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)

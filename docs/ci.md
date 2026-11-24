@@ -58,6 +58,7 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `base-url` | empty | Endpoint for the `openai-compatible` provider |
 | `budget-usd` | `2` | Hard cap on model spend for the run, in USD. Used only when `provider` is set |
 | `fix` | `false` | Write and verify fixes. Off by default in CI; findings are still reported |
+| `diff-base` | empty | Report only on files changed since this revision. See [Scan only what a pull request changed](#scan-only-what-a-pull-request-changed) |
 | `args` | empty | Extra arguments passed to `spackle scan`, split on spaces and line breaks, so the value may span several lines. One argument cannot contain a space, and a value with a quote character is refused with exit code 2 |
 | `github-token` | the workflow token | Used to download the release and verify its provenance |
 | `spackle-dir` | empty | Directory that already holds a `spackle` binary. When set, no release is downloaded or verified. Meant for testing a build from source |
@@ -106,6 +107,33 @@ The variable depends on the provider:
 With a model, the run spends money, up to `budget-usd`. The action passes `--yes`, so nobody is asked to confirm the estimate: setting `provider` is the consent. If Spackle has no price for the model (every `openai` model, and most `openai-compatible` endpoints other than OpenRouter), the dollar cap cannot be enforced, so the scan is refused with exit code 2 and the message shows the `[pricing]` table to commit in `spackle.toml`. To run under the token cap alone, set `args: --allow-unpriced`. See [config.md](config.md#pricing).
 
 A committed `spackle.toml` in the scanned repository's working directory is read as usual. Use it for per-stage models, budgets other than the dollar cap, or pricing. Point at a file elsewhere with `args: --config path/to/spackle.toml`.
+
+### Scan only what a pull request changed
+
+By default a scan reports on the whole path, so the first pull request on an existing codebase fails on findings that were there before it. `diff-base` makes the gate about the change under review: only leads in files the pull request added or changed are reported, and with a model only those files are planned for investigation.
+
+```yaml
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: TMHSDigital/Spackle@<release>
+        with:
+          version: <release>
+          fail-on: high
+          diff-base: ${{ github.event.pull_request.base.sha }}
+```
+
+`fetch-depth: 0` matters: the default checkout holds one commit, and git cannot compare against a base it does not have. The scan is then refused with exit code 2 and a message that says so. On a `push` event the expression is empty and the whole path is scanned.
+
+The `diff-base` input and the `--since` flag behind it are not in v0.1.0. They are on `main` and come with the next release: `<release>` in the example stands for that tag. The v0.1.0 binary does not know the flag and exits with a usage error.
+
+What a diff scan does and does not do:
+
+- The changed files are the ones `git diff --diff-filter=ACMR <base>...HEAD` lists: added, copied, modified or renamed since the branch left the base. Deleted files and uncommitted work are not part of it.
+- The whole tree is still mapped and read by the scanners, so the scan is not faster without a model. With a model it is cheaper, because investigations are planned for the changed files only.
+- A lead in an unchanged file is left out, and the report says how many were. A dependency lead is tied to its lockfile, so it is reported when the lockfile changed.
+- With a model, an investigation that starts in a changed file may end in a finding located in an unchanged file that the changed code reaches. That finding is reported, at the place where the flaw is.
+- Findings that predate the change are not accepted or recorded anywhere. Run a full scan on the default branch to see them.
 
 Pull requests from forks do not receive repository secrets, so a model step has no key there. Keep the deterministic default for those runs.
 
@@ -160,7 +188,7 @@ spackle scan . --yes --format sarif,markdown --out spackle-report --fail-on high
 
 The reports land in `spackle-report/report.sarif` and `spackle-report/report.md`. Status lines go to standard error. Use the exit code to pass or fail the job. All five formats are also kept under `.spackle/runs/<run-id>/reports/`.
 
-To add a model, export the key variable from your CI system's secret store and pass `--provider`, `--model` and `--budget-usd`, or commit a `spackle.toml`.
+To add a model, export the key variable from your CI system's secret store and pass `--provider`, `--model` and `--budget-usd`, or commit a `spackle.toml`. To report only on what a change touched, pass `--since <base revision>` after fetching that revision.
 
 ## Two rules for CI
 

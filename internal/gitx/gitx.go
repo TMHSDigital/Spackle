@@ -277,6 +277,31 @@ func RevList(ctx context.Context, dir, good, bad string) ([]string, error) {
 	return strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n"), nil
 }
 
+// ChangedSince lists the files under dir that were added, copied, modified
+// or renamed between the merge base of rev and HEAD, and HEAD. It is the
+// set of files a pull request against rev changes. Paths use forward
+// slashes and are relative to dir; a change outside dir is not listed, and
+// neither is a deleted file or a change that is not committed.
+func ChangedSince(ctx context.Context, dir, rev string) ([]string, error) {
+	if rev == "" || strings.HasPrefix(rev, "-") {
+		return nil, fmt.Errorf("revision %q is not valid", rev)
+	}
+	// -z keeps a file name with a quote, a newline or a non-ASCII character
+	// intact. --no-textconv and --no-ext-diff keep the repository's own
+	// configuration from starting a program.
+	out, err := run(ctx, dir, "diff", "--name-only", "-z", "--relative", "--no-textconv", "--no-ext-diff", "--diff-filter=ACMR", rev+"...HEAD", "--")
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, f := range strings.Split(out, "\x00") {
+		if f != "" {
+			files = append(files, f)
+		}
+	}
+	return files, nil
+}
+
 // Archive exports the tree at rev into dest (which must exist), without any
 // .git directory. It is how a specific commit is handed to the sandbox.
 func Archive(ctx context.Context, dir, rev, dest string) error {
