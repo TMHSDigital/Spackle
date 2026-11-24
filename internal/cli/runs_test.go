@@ -198,3 +198,17 @@ func TestRunsCompare(t *testing.T) {
 		t.Fatalf("one run id exited %d", code)
 	}
 }
+
+// The prune help shows no internal default for --keep and describes --yes
+// for deleting, and a negative count is a usage error.
+func TestRunsPruneHelpAndKeepValue(t *testing.T) {
+	var out, errb strings.Builder
+	Main([]string{"runs", "prune", "--help"}, strings.NewReader(""), &out, &errb)
+	help := out.String() + errb.String()
+	if strings.Contains(help, "default -1") || !strings.Contains(help, "delete the runs listed without asking") {
+		t.Fatalf("help = %s", help)
+	}
+	if code := Main([]string{"runs", "prune", "--keep", "-1"}, strings.NewReader(""), &out, &errb); code != ExitUsage {
+		t.Fatalf("--keep -1 exit = %d, want usage", code)
+	}
+}

@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `spackle runs prune --help` no longer shows an internal default of -1 for `--keep` or the scan wording for `--yes`, and a negative `--keep` is a usage error. The docs and help text now say that `patch-available` findings count toward `fail_on`, that `verify` exits 1 when a proof could not be verified, that `--resume` also continues an interrupted scan, which flags `doctor` and `runs` take, that finding ids made from a rule hit include the rule, and that `[sandbox] network = "scope"` attaches an unfiltered bridge network to code-scan proofs.
 - `spackle verify` now keeps the output of each proof it re-runs in the finding's `evidence/` folder and links it from the ledger, as a scan does, and a proof that could not be run in the sandbox leaves an `inconclusive` verdict in the ledger. Before, the output behind a `fixed` verdict was discarded and a sandbox error left no trace.
 - A `spackle debug` run now records the absolute directory it debugged, so `spackle verify` re-runs its reproduction there. Verified from another directory, it used to run against the target as typed (often `.`), resolved against the current directory, and could mark the finding fixed.
 - A cap reached while a finding is reviewed, proved or fixed now ends the run as `budget-exhausted` whichever investigation it happens on, and the report names the step that was cut for that finding. On the last planned investigation the run used to end as `completed`.

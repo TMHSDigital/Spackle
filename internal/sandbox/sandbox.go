@@ -90,8 +90,8 @@ var fixedEnvTail = [][2]string{
 
 // Profile is the isolation applied to one run.
 type Profile struct {
-	// Network is "none" (default) or "scope". "scope" attaches the default bridge network so a
-	// proof can reach an authorized running target; it is never chosen by this package.
+	// Network is "none" (default) or "scope". "scope" attaches the runtime's default bridge
+	// network, unfiltered, to the run; it is never chosen by this package.
 	Network  string
 	MemoryMB int           // default 1024
 	CPUs     float64       // default 2

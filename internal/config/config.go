@@ -109,7 +109,7 @@ type Scope struct {
 // Sandbox configures the container runtime.
 type Sandbox struct {
 	Runtime  string            `toml:"runtime"` // auto|docker|podman|none
-	Network  string            `toml:"network"` // none, or scope to let a proof reach an authorized running target
+	Network  string            `toml:"network"` // none, or scope to attach the runtime's unfiltered bridge network to code-scan proofs
 	MemoryMB int               `toml:"memory_mb"`
 	CPUs     float64           `toml:"cpus"`
 	PIDs     int               `toml:"pids"`
@@ -413,7 +413,7 @@ func (c Config) Validate() error {
 	switch c.Sandbox.Network {
 	case "none", "scope":
 	default:
-		add("[sandbox] network %q is not one of none, scope. \"scope\" lets the sandbox reach the authorized scope and nothing is enforced beyond the container runtime's own networking, so use it only for running-target proofs", c.Sandbox.Network)
+		add("[sandbox] network %q is not one of none, scope. \"scope\" attaches the runtime's default bridge network to every proof and fix check, and nothing filters it beyond the container runtime's own networking, so a proof can reach whatever that network reaches", c.Sandbox.Network)
 	}
 	// The sandbox package owns the limits of a run. Ask it now, so a value
 	// it would refuse later (a timeout above its hard cap, a negative

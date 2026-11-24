@@ -149,7 +149,7 @@ The report is SARIF 2.1.0. What it carries:
 - One rule per finding class, with CWE tags.
 - `level`: `error` for critical and high, `warning` for medium, `note` for low and none.
 - `security-severity`: the CVSS 4.0 score, which code scanning uses for its own severity labels. Unscored findings carry none.
-- A fingerprint equal to the finding id. Ids are derived from the class and the location, so the same flaw keeps its alert across runs.
+- A fingerprint equal to the finding id. Ids are derived from the class and the location (and the rule, for a finding made straight from a rule hit), so the same flaw keeps its alert across runs.
 - `confidence` and `proof_status` as result properties.
 
 Set `upload-sarif: false` to skip the upload and handle the file yourself through the `sarif` output.

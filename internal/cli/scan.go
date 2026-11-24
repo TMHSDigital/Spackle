@@ -27,7 +27,7 @@ func runScan(env Env, args []string) int {
 	dryRun := fs.Bool("dry-run", false, "show what would be scanned and the cost estimate; call no model and store no run")
 	ref := fs.String("ref", "", "`branch or tag` to scan, for a git URL target (default: the remote's default branch)")
 	since := fs.String("since", "", "report only on files changed since this `revision`, for a directory in a git repository (for example the base commit of a pull request)")
-	resume := fs.String("resume", "", "continue the stored scan with this `run id` (or \"latest\") where its budget ran out, with a new budget")
+	resume := fs.String("resume", "", "continue the stored scan with this `run id` (or \"latest\") where its budget ran out or it was interrupted, with a new budget")
 	force := fs.Bool("force", false, "with --resume, continue although the target's commit changed since that run")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {

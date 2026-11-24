@@ -28,7 +28,7 @@ Field names are the JSON names. Fields marked optional are left out when empty.
 
 | Field | Type | Meaning |
 | :--- | :--- | :--- |
-| `id` | string | `SPK-` and eight hex digits. Derived from the class, file, start line, method, endpoint and parameter, so the same flaw gets the same id on every run of the same target |
+| `id` | string | `SPK-` and eight hex digits. Derived from the class, file, start line, method, endpoint and parameter, and for a finding made straight from a rule hit also the rule id, so the same flaw gets the same id on every run of the same target |
 | `title` | string | Short and specific |
 | `surface` | string | `code`, `running-target`, `infrastructure` or `debug` |
 | `class` | string | One of the classes listed below |
@@ -174,7 +174,7 @@ SQL injection is reported as `reasoned` with confidence `high`, not `demonstrate
 
 A dismissal needs a reason. A reviewer that says "refuted" without one does not dismiss anything: the finding is kept and the verdict is recorded as uncertain.
 
-Dismissed findings stay in the report, ranked last. Only `open` findings count toward `fail_on`.
+Dismissed findings stay in the report, ranked last. Only `open` and `patch-available` findings count toward `fail_on`.
 
 ## How severity is computed
 
@@ -314,7 +314,7 @@ It is `findings/SPK-790860CA/finding.json` from that run, verbatim. The block is
 ```
 <!-- finding-json:end -->
 
-The same finding in `reports/report.md`, verbatim and pasted in the same way:
+The same finding in `reports/report.md`, verbatim. Unlike the JSON above, this excerpt is not regenerated or checked by a tool, so it can lag behind the current output:
 
 <!-- finding-md:start -->
 ````markdown

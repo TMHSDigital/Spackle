@@ -144,6 +144,29 @@ func storedRuns(stateDir string) ([]runRow, error) {
 }
 
 // parseAge reads a duration that may also be given in days ("30d").
+// countFlag is a count that may be left unset. Unset is not zero ("--keep 0"
+// deletes every run), and the help shows no default for it.
+type countFlag struct {
+	n   int
+	set bool
+}
+
+func (c *countFlag) String() string {
+	if c == nil || !c.set {
+		return ""
+	}
+	return strconv.Itoa(c.n)
+}
+
+func (c *countFlag) Set(s string) error {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return errors.New("must be a whole number, 0 or more")
+	}
+	c.n, c.set = n, true
+	return nil
+}
+
 func parseAge(s string) (time.Duration, error) {
 	if days, ok := strings.CutSuffix(s, "d"); ok {
 		n, err := strconv.Atoi(days)
@@ -162,8 +185,10 @@ func parseAge(s string) (time.Duration, error) {
 func runRunsPrune(env Env, args []string) int {
 	fs := newFlagSet(env, "runs prune", "", "Delete stored runs, with the clone and the fix worktree each one left in the state directory.\nGive --keep, --older-than, or both: a run is deleted when either rule selects it.\nThe runs to delete are listed first. Nothing is deleted without --yes or a typed confirmation.")
 	var g globalFlags
-	g.registerGroups(fs, flagsConfig|flagsYes)
-	keep := fs.Int("keep", -1, "keep the newest `n` runs and delete the rest")
+	g.registerGroups(fs, flagsConfig)
+	fs.BoolVar(&g.yes, "yes", false, "delete the runs listed without asking for confirmation")
+	var keep countFlag
+	fs.Var(&keep, "keep", "keep the newest `n` runs and delete the rest")
 	olderThan := fs.String("older-than", "", "delete runs started more than this `age` ago, for example 30d or 72h")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -173,7 +198,7 @@ func runRunsPrune(env Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "spackle runs prune: unexpected argument %q. Runs are selected with --keep and --older-than, not by name.\n", pos[0])
 		return ExitUsage
 	}
-	if *keep < 0 && *olderThan == "" {
+	if !keep.set && *olderThan == "" {
 		fmt.Fprintln(env.Stderr, "spackle runs prune: say what to delete with --keep <n>, --older-than <age>, or both.")
 		return ExitUsage
 	}
@@ -197,7 +222,7 @@ func runRunsPrune(env Env, args []string) int {
 	cutoff := time.Now().Add(-age)
 	var doomed []runRow
 	for i, r := range rows {
-		beyondKeep := *keep >= 0 && i >= *keep
+		beyondKeep := keep.set && i >= keep.n
 		tooOld := *olderThan != "" && !r.started.IsZero() && r.started.Before(cutoff)
 		if beyondKeep || tooOld {
 			doomed = append(doomed, r)

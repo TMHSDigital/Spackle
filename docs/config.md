@@ -102,7 +102,7 @@ Stored runs accumulate under `state_dir`. `spackle runs` lists them, newest firs
 
 `spackle runs compare <older-run-id> <newer-run-id>` joins two stored runs on finding id and lists the findings that are new in the newer run, gone from it, and present in both (with any change of status or severity), as text or with `--format json`. Dismissed findings are left out. A finding id includes the line, so code that moved to another line shows as one finding gone and one new. There is no flag for `state_dir`, the sandbox settings, `wall_time`, `sandbox_runs` or `max_turns`: set those in the file.
 
-Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr` and `--fail-on`. `report` takes `--config`, `--format` and `--out`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline` and the three model flags. `spackle <command> --help` lists them.
+Each command accepts only the flags it reads, and any other flag is a usage error (exit code 2). `scan` and `bench` take all of them. `debug` takes all but `--authorize`, `--pr` and `--fail-on`. `report` takes `--config`, `--format` and `--out`. `verify` takes `--config` and `--offline`. `doctor` takes `--config`, `--offline`, `--format` and the three model flags. `runs` takes `--config` and `--format`; `runs prune` takes `--config`, `--keep`, `--older-than` and `--yes`. `spackle <command> --help` lists them.
 
 ## Providers
 
@@ -359,7 +359,7 @@ What happens when a cap is reached:
 
 - **Tokens, spend or wall time.** No new model call is made. Before each investigation Spackle also checks that roughly one more would fit, and stops planning new ones when it would not. Findings already produced are kept. The run ends with outcome `budget-exhausted`, and a `budget.skip` ledger event lists what was not investigated. The report shows that list. Leads that were never investigated are still reported, as `plausible`.
 
-  To continue such a run, pass its id: `spackle scan <directory> --resume <run id>` (or `--resume latest`). The new run does not plan again. It investigates what the earlier run planned and did not reach, with a new budget, and carries the earlier findings into its report, so that report is complete on its own. A finding the new run investigates or dismisses replaces the earlier entry for it. The new run's `run.start` event names the earlier run in `resumed_from`, and the earlier run is left as it is. A resume is refused when the earlier run has nothing left to investigate, when it scanned another directory, and when the directory's commit has changed since (pass `--force` to continue anyway: the plan and the carried findings then describe older code). It needs a model, and it works for a directory, not for a git URL or a running target. After a run that stopped on its budget, `spackle scan` prints the command to continue it.
+  To continue such a run, or one that was interrupted, pass its id: `spackle scan <directory> --resume <run id>` (or `--resume latest`). The new run does not plan again. It investigates what the earlier run planned and did not reach, with a new budget, and carries the earlier findings into its report, so that report is complete on its own. A finding the new run investigates or dismisses replaces the earlier entry for it. The new run's `run.start` event names the earlier run in `resumed_from`, and the earlier run is left as it is. A resume is refused when the earlier run has nothing left to investigate, when it scanned another directory, and when the directory's commit has changed since (pass `--force` to continue anyway: the plan and the carried findings then describe older code). It needs a model, and it works for a directory, not for a git URL or a running target. After a run that stopped on its budget, `spackle scan` prints the command to continue it.
 - **Interrupt (Ctrl-C).** An agentic scan stops at the next step and keeps what it has: each finding is written to the ledger as soon as its investigation, review, proof and fix are done. The run ends with outcome `interrupted`, the reports are written, the report lists what was not investigated, and the command exits 3 because the run did not finish.
 - **Sandbox runs.** No further container is started. A finding that could not be demonstrated or fix-checked for that reason keeps the labels it had earned.
 - **Max findings.** Findings are ranked, the list is cut, and the ones dropped are named in a `budget.skip` event. One run plans at most 30 investigations whatever the other caps say.
@@ -423,7 +423,7 @@ Proofs of concept, compile checks, test runs and fix checks run only in a contai
 | Key | Default | Meaning |
 | :--- | :--- | :--- |
 | `runtime` | `auto` | `auto` tries Docker, then Podman. `none` disables the sandbox |
-| `network` | `none` | `none`, or `scope` to attach the runtime's default bridge network |
+| `network` | `none` | `none`, or `scope` to attach the runtime's default bridge network to every proof and fix check of a code scan. Nothing filters that network: a proof can reach whatever the bridge reaches. There are no running-target proofs that need it in this version |
 | `memory_mb` | 1024 | Memory limit. Swap is set to the same value, so there is no extra swap |
 | `cpus` | 2 | CPU limit |
 | `pids` | 256 | Process limit |
@@ -502,7 +502,7 @@ Progress and status lines go to standard error, so standard output is safe to re
 
 ### Exit codes
 
-`fail_on` (or `--fail-on`) is the lowest severity that makes `scan` exit 1. Only findings with status `open` count. `never` always exits 0 when the run itself succeeds.
+`fail_on` (or `--fail-on`) is the lowest severity that makes `scan` exit 1. Findings with status `open` or `patch-available` count: a checked patch that is not applied leaves the flaw in the scanned code. `never` always exits 0 when the run itself succeeds.
 
 | Code | Meaning |
 | :--- | :--- |
@@ -513,7 +513,7 @@ Progress and status lines go to standard error, so standard output is safe to re
 
 Other commands use the same codes with their own meaning of 1:
 
-- `spackle verify` exits 1 when at least one stored proof still succeeds.
+- `spackle verify` exits 1 when at least one stored proof still succeeds or could not be verified (it timed out, was killed, or the sandbox failed).
 - `spackle debug` exits 1 when the failure is still open or the run ended early. `fail_on` does not apply to it.
 - `spackle doctor` exits 2 when a required check fails.
 - `spackle report` exits 0 when the report was rendered, whatever it contains.
