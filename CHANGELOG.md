@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The lead count shown for each seeder is now the number of its leads the scan reports. In a diff scan (`--since`), and with `[scan] exclude` or `disable_rules`, it used to be the count for the whole target, so the seeder lines did not add up to the lead total.
 - A scan that is cancelled no longer hands further files to the built-in seeders, and a cancelled scan of a small target is reported as stopped early instead of complete.
 - Different rules of the same class that fire at one place (several container hardening rules on one line, several advisories on one lockfile, several missing headers on one page) are now reported as separate findings instead of one. Finding ids of uninvestigated leads change as a result.
 - Findings in files whose name contains two dots, such as the Next.js catch-all route `pages/api/auth/[...nextauth].js`, are no longer dropped. Only a real `..` path segment is refused.

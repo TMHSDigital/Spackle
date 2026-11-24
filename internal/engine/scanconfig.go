@@ -63,3 +63,20 @@ func applyScanConfig(leads []seed.Lead, sc config.Scan) ([]seed.Lead, []string) 
 	}
 	return kept, notes
 }
+
+// countLeads sets each seeder's lead count to the number of its leads among
+// the ones the scan keeps. A seeder counts what it found in the whole
+// target; [scan] exclude, disable_rules and a diff scan drop leads after
+// that, and the report should show counts that add up to its leads.
+func countLeads(statuses []seed.Status, leads []seed.Lead) []seed.Status {
+	bySource := map[string]int{}
+	for _, l := range leads {
+		bySource[l.Source]++
+	}
+	out := make([]seed.Status, len(statuses))
+	for i, st := range statuses {
+		st.Leads = bySource[st.Name]
+		out[i] = st
+	}
+	return out
+}

@@ -180,6 +180,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		leads, note = keepChanged(leads, changed, opts.Since)
 		scanNotes = append(scanNotes, note)
 	}
+	statuses = countLeads(statuses, leads)
 	if resume != nil {
 		scanNotes = append(scanNotes, fmt.Sprintf("Resumed from run %s: the %d investigations it planned and did not reach are continued with a new budget, and its findings are carried into this report.", resume.runID, len(resume.intents)))
 	}

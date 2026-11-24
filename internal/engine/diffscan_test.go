@@ -168,3 +168,68 @@ func TestChangedMapNarrowsWhatThePlannerSees(t *testing.T) {
 		t.Fatal("the full map was changed")
 	}
 }
+
+// A seeder's lead count is taken after the leads were filtered, so the
+// counts add up to the leads the scan reports.
+func TestSeederLeadCountsMatchTheLeadsTheScanReports(t *testing.T) {
+	inOld := sqlLead()
+	inOld.File, inOld.RuleID, inOld.Class, inOld.Title = "old.py", "py-os-system", "command-injection", "os.system with a variable"
+	seeders := func() []seed.Seeder {
+		return []seed.Seeder{
+			fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), inOld}},
+			fakeSeeder{name: "other", leads: []seed.Lead{inOld}},
+		}
+	}
+	total := func(statuses []seed.Status) int {
+		n := 0
+		for _, st := range statuses {
+			n += st.Leads
+		}
+		return n
+	}
+
+	t.Run("diff scan, dry run", func(t *testing.T) {
+		o := opts(t, seeders()...)
+		o.Since, o.DryRun = diffTarget(t, o.Target), true
+		res, err := Run(context.Background(), o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := res.Plan
+		if p.Leads != 1 || total(p.Seeders) != p.Leads || p.Seeders[0].Leads != 1 || p.Seeders[1].Leads != 0 {
+			t.Fatalf("leads = %d, seeders = %+v", p.Leads, p.Seeders)
+		}
+	})
+	t.Run("diff scan, stored run", func(t *testing.T) {
+		o := opts(t, seeders()...)
+		o.Since = diffTarget(t, o.Target)
+		res, err := Run(context.Background(), o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := res.Run.Seeders; len(res.Run.Findings) != 1 || len(got) != 2 || got[0].Leads != 1 || got[1].Leads != 0 {
+			t.Fatalf("findings = %d, seeders = %+v", len(res.Run.Findings), got)
+		}
+	})
+	t.Run("excluded path and disabled rule", func(t *testing.T) {
+		o := opts(t, seeders()...)
+		o.DryRun = true
+		o.Config.Scan.Exclude = []string{"old.py"}
+		res, err := Run(context.Background(), o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p := res.Plan; p.Leads != 1 || total(p.Seeders) != 1 {
+			t.Fatalf("exclude: leads = %d, seeders = %+v", p.Leads, p.Seeders)
+		}
+		o = opts(t, seeders()...)
+		o.DryRun = true
+		o.Config.Scan.DisableRules = []string{"py-os-system"}
+		if res, err = Run(context.Background(), o); err != nil {
+			t.Fatal(err)
+		}
+		if p := res.Plan; p.Leads != 1 || total(p.Seeders) != 1 {
+			t.Fatalf("disable_rules: leads = %d, seeders = %+v", p.Leads, p.Seeders)
+		}
+	})
+}
