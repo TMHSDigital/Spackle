@@ -1,45 +1,30 @@
-<div align="center">
+<img src="docs/assets/wordmark.svg" alt="spackle: Find it. Prove it. Explain it. Fix it." width="420"/>
 
-<img src="docs/assets/wordmark.svg" alt="spackle: Find it. Prove it. Explain it. Fix it." width="520"/>
+Agentic security and debugging that finds real flaws, proves them, explains how they would be exploited, and fixes them.
 
-<br>
+Point it at your own code, your own running application, or your own infrastructure files. It reports what is wrong, shows the evidence, says how sure it is, and hands you a checked patch. Built for developers, AppSec engineers and small security teams testing systems they own or are authorized to test.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/TMHSDigital/Spackle/ci.yml?branch=main&style=for-the-badge&label=ci&labelColor=1B1714&logo=githubactions&logoColor=F3EDE4)](https://github.com/TMHSDigital/Spackle/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/TMHSDigital/Spackle?style=for-the-badge&label=release&labelColor=1B1714&color=FF8A4C&logo=github&logoColor=F3EDE4)](https://github.com/TMHSDigital/Spackle/releases)
-[![Go Reference](https://img.shields.io/badge/go-reference-C4A1FF?style=for-the-badge&labelColor=1B1714&logo=go&logoColor=F3EDE4)](https://pkg.go.dev/github.com/TMHSDigital/spackle)
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/TMHSDigital/Spackle?style=for-the-badge&label=scorecard&labelColor=1B1714&color=FF8A4C)](https://scorecard.dev/viewer/?uri=github.com/TMHSDigital/Spackle)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-B5A999?style=for-the-badge&labelColor=1B1714)](LICENSE)
-[![Runs offline](https://img.shields.io/badge/runs-offline-7BD389?style=for-the-badge&labelColor=1B1714)](docs/PRIVACY.md)
+[![CI](https://img.shields.io/github/actions/workflow/status/TMHSDigital/Spackle/ci.yml?branch=main&label=ci)](https://github.com/TMHSDigital/Spackle/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/TMHSDigital/Spackle?label=release)](https://github.com/TMHSDigital/Spackle/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/TMHSDigital/spackle.svg)](https://pkg.go.dev/github.com/TMHSDigital/spackle)
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/TMHSDigital/Spackle?label=scorecard)](https://scorecard.dev/viewer/?uri=github.com/TMHSDigital/Spackle)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-### Agentic security and debugging that finds real flaws, proves them, explains how they would be exploited, and fixes them.
-
-Point it at your own code, your own running application, or your own infrastructure files.<br>
-It reports what is wrong, shows the evidence, says how sure it is, and hands you a checked patch.<br>
-<sub>Built for developers, AppSec engineers and small security teams testing systems they own or are authorized to test.</sub>
-
-<img src="docs/assets/demo.svg" alt="spackle in a terminal: a scan of the bundled demo app lists findings with their severity and confidence, then prints a one-line summary." width="860"/>
-
-**[Website](https://tmhsdigital.github.io/Spackle/)** &nbsp;·&nbsp; [Quick start](#quick-start) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Findings](#anatomy-of-a-finding) &nbsp;·&nbsp; [Running targets](#running-target-mode) &nbsp;·&nbsp; [CI](#ci) &nbsp;·&nbsp; [MCP](#mcp) &nbsp;·&nbsp; [Configuration](#configuration) &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
-
-</div>
+**[Website](https://tmhsdigital.github.io/Spackle/)** · [Quick start](#quick-start) · [How it works](#how-it-works) · [Findings](#anatomy-of-a-finding) · [Running targets](#running-target-mode) · [CI](#ci) · [MCP](#mcp) · [Configuration](#configuration) · [Changelog](CHANGELOG.md)
 
 > [!IMPORTANT]
 > **Authorized use only.** Point Spackle at systems you own or have explicit written permission to test. Testing someone else's system without consent is not security work and may be a crime. You are responsible for complying with the laws that apply to you.
 
-<details>
-<summary><strong>Contents</strong></summary>
+## One finding, start to finish
 
-<br>
+This is `SPK-8253B6AF`, real output from a running-target scan of the bundled demo app on localhost with no model configured. [The same finding in full](#anatomy-of-a-finding) is further down.
 
-- [Quick start](#quick-start) · [Why Spackle](#why-spackle) · [How it works](#how-it-works)
-- [Anatomy of a finding](#anatomy-of-a-finding)
-- [Modes](#running-target-mode): [Running targets](#running-target-mode) · [Debug](#debug-mode)
-- [Integrations](#ci): [CI](#ci) · [MCP](#mcp)
-- [Configuration](#configuration) · [Privacy](#privacy)
-- [Benchmark](#benchmark) · [Comparison](#comparison) · [Limits](#limits)
-- [Security](#security) · [Contributing](#contributing) · [Acknowledgements](#acknowledgements) · [License](#license)
-
-</details>
+| Step | What Spackle reported |
+| :--- | :--- |
+| **Find it** | `[HIGH 8.7]` Path traversal in parameter name of /file. `GET /file (parameter name)`, CWE-22. |
+| **Prove it** | Confidence `demonstrated`. GET /file with name set to `..\..\..\..\..\..\windows\win.ini` returned status 200 with the content of a system file. The exchange is stored in `evidence/exchanges/X-0020.json`. |
+| **Explain it** | The parameter is used as a file path without being confined to the intended directory, so any file the server process can read can be downloaded. Chains into credential theft from configuration files and key material. |
+| **Fix it** | Resolve the requested name against a fixed base directory and refuse any result outside it. Verification: unverified, because this run had no model and wrote no patch. With a model and a container runtime, this row is a patch that was checked in the sandbox. |
 
 ## Quick start
 
@@ -82,6 +67,8 @@ Download an archive for your platform from [Releases](https://github.com/TMHSDig
 
 </details>
 
+<img src="docs/assets/demo.svg" alt="spackle in a terminal: a scan of the bundled demo app lists findings with their severity and confidence, then prints a one-line summary." width="860"/>
+
 That scan is deterministic: built-in rules plus any scanners you have installed. Every finding it prints is labelled `plausible`, because nothing has confirmed it yet. To have Spackle investigate, prove and fix, give it a model and a container runtime:
 
 ```sh
@@ -92,11 +79,9 @@ spackle scan ./examples/demo-app --provider anthropic --model claude-opus-5-5
 
 Before a paid run Spackle prints an estimate and the hard caps, and waits for a yes. [Configuration](#configuration) covers OpenRouter, other OpenAI-compatible endpoints and fully local models.
 
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
-
 ## Why Spackle
 
-| | |
+| Property | In practice |
 | :--- | :--- |
 | **Proof, not a hunch** | A finding is demonstrated by a proof of concept run in a sandbox, or by the recorded request and response for a running target. When nothing was run, the finding says so. |
 | **The attacker's view** | Each finding gives preconditions, the attack step by step, what it chains into and the blast radius, written for the person who has to decide what to fix first. |
@@ -106,8 +91,6 @@ Before a paid run Spackle prints an estimate and the hard caps, and waits for a 
 | **Evidence ledger** | Every run writes an append-only ledger. Reports are rebuilt from it alone, so a report is the same bytes every time. |
 | **Honest confidence** | `demonstrated`, `high` or `plausible`, each with its reason. A separate reviewer tries to refute every finding, and what it refutes is listed with why. |
 | **Your secrets stay put** | Secret detection runs before anything reaches a model. Reports name the rule, the location and a short hash, never the value. |
-
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
 
 ## How it works
 
@@ -136,11 +119,9 @@ flowchart LR
 
 Scope, budgets and tool permissions are enforced in code. Nothing in a target can change them, because no tool exists whose effect is to change them. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the detail.
 
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
-
 ## Anatomy of a finding
 
-Every finding has the same parts: identity, severity with its CVSS 4.0 vector, the flaw, the exploitation scenario, the proof, the blast radius, the remediation, and a confidence label with its reason. The one below is real output, from a running-target scan of the bundled demo app on localhost with no model configured. With a model, the exploitation scenario and remediation are written for the specific application instead of the class.
+Every finding has the same parts: identity, severity with its CVSS 4.0 vector, the flaw, the exploitation scenario, the proof, the blast radius, the remediation, and a confidence label with its reason. The one below is the finding from the top of this page, complete. With a model, the exploitation scenario and remediation are written for the specific application instead of the class.
 
 <details>
 <summary><strong>A finding in full</strong></summary>
@@ -148,13 +129,13 @@ Every finding has the same parts: identity, severity with its CVSS 4.0 vector, t
 <br>
 
 <!-- finding:start -->
-#### SPK-9658B583: Path traversal in parameter name of /file
+#### SPK-8253B6AF: Path traversal in parameter name of /file
 
 **Severity:** HIGH 8.7. **Confidence:** demonstrated. **Status:** open.
 
 ##### Identity
 
-- **Id:** `SPK-9658B583`
+- **Id:** `SPK-8253B6AF`
 - **Title:** Path traversal in parameter name of /file
 - **Location:** `GET /file (parameter name)`
 - **Class:** path-traversal
@@ -241,8 +222,6 @@ Resolve the requested name against a fixed base directory and refuse any result 
 
 Reports render as terminal text, Markdown, HTML, JSON and SARIF. `spackle report <run-id> --format html` rebuilds any of them from the ledger. [docs/findings.md](docs/findings.md) documents every field.
 
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
-
 ## Verify a fix
 
 A scan that writes a fix leaves the patch in `findings/<id>/fix.patch` and, in a git repository, on a `spackle/<run-id>` branch. Your code is not changed, so the finding has status `patch-available`. After you apply the patch or merge the branch, re-run the stored proofs against the code as it is now:
@@ -272,8 +251,6 @@ spackle scan http://localhost:8081 --authorize scope.toml
 - Only GET, HEAD and OPTIONS are sent unless the scope file sets `allow_unsafe_methods = true`.
 - With a model configured, an investigator assesses each observation and may send follow-up requests through the same scope and the same request cap.
 
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
-
 ## Debug mode
 
 Start from a failing test or an issue. Spackle reproduces it in the sandbox, finds the root cause, writes a fix and verifies it.
@@ -284,8 +261,6 @@ spackle debug . --issue bug-report.md --good v1.4.0   # bisect from a known good
 ```
 
 Debug mode needs a model and a container runtime. Without them it tells you what is missing and prints the reproduction command it would have run.
-
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
 
 ## CI
 
@@ -317,8 +292,6 @@ claude mcp add spackle -- spackle mcp --root /absolute/path/to/project
 
 [docs/mcp.md](docs/mcp.md) has the tool list and client configuration.
 
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
-
 ## Configuration
 
 Spackle ships no model and no key. Configuration lives in `spackle.toml`; flags override it; API keys come only from environment variables.
@@ -340,7 +313,7 @@ tokens = 2000000
 wall_time = "30m"
 ```
 
-| | |
+| Setting | How |
 | :--- | :--- |
 | **Anthropic** | `--provider anthropic`, key in `ANTHROPIC_API_KEY` from the Anthropic console. A claude.ai subscription is not API access. |
 | **OpenAI-compatible** | `--provider openai-compatible --base-url <url>`: OpenRouter, OpenAI, Azure OpenAI, Together, Groq, Fireworks. |
@@ -359,8 +332,6 @@ wall_time = "30m"
 | `--offline` | Any non-loopback connection by Spackle is refused, and a remote provider is rejected before the run starts. |
 
 There is no telemetry and no update check. [docs/PRIVACY.md](docs/PRIVACY.md) has the full account.
-
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
 
 ## Benchmark
 
@@ -389,8 +360,6 @@ Spackle is new. Semgrep, CodeQL, Snyk, nuclei and the others are established, an
 - Running-target mode sends plain HTTP requests. It does not drive a browser or log in for you.
 - A model writes the proofs. `demonstrated` means the proof ran and printed an unguessable marker. Read the stored proof before you rely on it.
 
-<div align="right"><sub><a href="#readme">↑ back to top</a></sub></div>
-
 ## Security
 
 Report vulnerabilities in Spackle through [private vulnerability reporting](https://github.com/TMHSDigital/Spackle/security/advisories/new), not a public issue. [SECURITY.md](SECURITY.md) lists what counts, and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) is the threat model of Spackle itself, residual risks included.
@@ -408,11 +377,3 @@ Spackle runs these scanners when you have them, and is better for it: [Semgrep](
 ## License
 
 [Apache-2.0](LICENSE).
-
-<br>
-
-<div align="center">
-
-[Apache-2.0 License](LICENSE) &nbsp;·&nbsp; [Security policy](SECURITY.md) &nbsp;·&nbsp; [TM Hospitality Strategies](https://github.com/TMHSDigital)
-
-</div>
