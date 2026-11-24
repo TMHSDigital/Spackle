@@ -183,10 +183,7 @@ func render(title, alt string, lines []line) string {
 	fmt.Fprintf(&b, `<rect width="%d" height="%d" rx="12" fill="%s"/>`+"\n", width, height, bg)
 	fmt.Fprintf(&b, `<path d="M0 12a12 12 0 0 1 12-12h%da12 12 0 0 1 12 12v24H0z" fill="%s"/>`+"\n", width-24, bar)
 	fmt.Fprintf(&b, `<rect x="0.5" y="0.5" width="%d" height="%d" rx="11.5" fill="none" stroke="%s"/>`+"\n", width-1, height-1, border)
-	for i, c := range []string{crit, medium, okGreen} {
-		fmt.Fprintf(&b, `<circle cx="%d" cy="18" r="5.5" fill="%s"/>`, 24+i*18, c)
-	}
-	fmt.Fprintf(&b, "\n"+`<text x="%d" y="22" text-anchor="middle" fill="%s" font-family="%s" font-size="12" font-weight="600">%s</text>`+"\n", width/2, dim, sans, esc(title))
+	fmt.Fprintf(&b, `<text x="%d" y="22" fill="%s" font-family="%s" font-size="12" font-weight="600">%s</text>`+"\n", padX, muted, sans, esc(title))
 	fmt.Fprintf(&b, `<g font-family="%s" font-size="13">`+"\n", mono)
 	for i, l := range lines {
 		if len(l) == 0 {
