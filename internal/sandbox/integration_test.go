@@ -9,16 +9,50 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 )
 
+// Whether an integration test runs side by side with the other parallel ones.
+const (
+	serial   = false
+	parallel = true
+)
+
+// The runtime and the test image are set up once for the package, under
+// their own deadline, so that no test's deadline pays for the image pull.
+var (
+	setupOnce sync.Once
+	setupRT   Runtime
+	setupMsg  string // why the runtime is unavailable; "" when it is ready
+	setupErr  error
+)
+
+func setupRuntime() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	rt, err := Detect(ctx, "auto")
+	if err != nil {
+		setupMsg, setupErr = "no container runtime found; install Docker or Podman to run sandbox tests", err
+		return
+	}
+	if !rt.ImagePresent(ctx, testImage) {
+		if err := rt.Pull(ctx, testImage); err != nil {
+			setupMsg, setupErr = "could not pull "+testImage+"; pull it by hand to run sandbox tests", err
+			return
+		}
+	}
+	setupRT = rt
+}
+
 // integrationRuntime returns a real runtime with the test image present. Without one the test
 // is skipped, unless SPACKLE_REQUIRE_RUNTIME=1 (set in CI on Linux) so the job cannot pass by
-// skipping everything.
-func integrationRuntime(t *testing.T) (Runtime, context.Context) {
+// skipping everything. A parallel test is marked parallel before its deadline starts, so the
+// time it waits for the serial tests does not count against it.
+func integrationRuntime(t *testing.T, runParallel bool) (Runtime, context.Context) {
 	t.Helper()
 	// go test -short is the fast loop: it leaves out the tests that start
 	// containers. SPACKLE_REQUIRE_RUNTIME=1 (the CI sandbox job) wins, so
@@ -26,25 +60,19 @@ func integrationRuntime(t *testing.T) (Runtime, context.Context) {
 	if testing.Short() && os.Getenv("SPACKLE_REQUIRE_RUNTIME") != "1" {
 		t.Skip("skipped in short mode: this test starts a container")
 	}
+	if runParallel {
+		t.Parallel()
+	}
+	setupOnce.Do(setupRuntime)
+	if setupRT == nil {
+		if os.Getenv("SPACKLE_REQUIRE_RUNTIME") == "1" {
+			t.Fatalf("SPACKLE_REQUIRE_RUNTIME=1 but %s: %v", setupMsg, setupErr)
+		}
+		t.Skip(setupMsg)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	t.Cleanup(cancel)
-	unavailable := func(msg string, err error) {
-		t.Helper()
-		if os.Getenv("SPACKLE_REQUIRE_RUNTIME") == "1" {
-			t.Fatalf("SPACKLE_REQUIRE_RUNTIME=1 but %s: %v", msg, err)
-		}
-		t.Skip(msg)
-	}
-	rt, err := Detect(ctx, "auto")
-	if err != nil {
-		unavailable("no container runtime found; install Docker or Podman to run sandbox tests", err)
-	}
-	if !rt.ImagePresent(ctx, testImage) {
-		if err := rt.Pull(ctx, testImage); err != nil {
-			unavailable("could not pull "+testImage+"; pull it by hand to run sandbox tests", err)
-		}
-	}
-	return rt, ctx
+	return setupRT, ctx
 }
 
 func mustRun(t *testing.T, rt Runtime, ctx context.Context, spec Spec) Result { //nolint:revive // context-as-argument: t first reads better in a test helper
@@ -100,9 +128,8 @@ func writeSource(t *testing.T, dir string) {
 }
 
 func TestIntegrationDefaultProfileHasNoNetwork(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"wget", "-q", "-T", "3", "-O-", "http://1.1.1.1"}})
 	if res.ExitCode == 0 {
 		t.Fatalf("wget reached the network from the default profile: stdout %q", res.Stdout)
@@ -113,9 +140,8 @@ func TestIntegrationDefaultProfileHasNoNetwork(t *testing.T) {
 }
 
 func TestIntegrationSourceMountIsReadOnly(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	src := t.TempDir()
 	writeSource(t, src)
 	before := snapshot(t, src)
@@ -133,9 +159,8 @@ func TestIntegrationSourceMountIsReadOnly(t *testing.T) {
 }
 
 func TestIntegrationWorkDirIsWritableWithSourceAndFiles(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	src := t.TempDir()
 	writeSource(t, src)
 	res := mustRun(t, rt, ctx, Spec{
@@ -157,9 +182,8 @@ func TestIntegrationWorkDirIsWritableWithSourceAndFiles(t *testing.T) {
 }
 
 func TestIntegrationProcessIsNotRoot(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"id", "-u"}})
 	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "65534" {
 		t.Errorf("id -u: exit %d, stdout %q, stderr %q; want 65534", res.ExitCode, res.Stdout, res.Stderr)
@@ -186,7 +210,7 @@ func assertContainerGone(t *testing.T, ctx context.Context, rt Runtime, res Resu
 }
 
 func TestIntegrationTimeoutKillsContainer(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
+	rt, ctx := integrationRuntime(t, serial)
 	start := time.Now()
 	res := mustRun(t, rt, ctx, Spec{
 		Image:   testImage,
@@ -205,7 +229,7 @@ func TestIntegrationTimeoutKillsContainer(t *testing.T) {
 func TestIntegrationTimeoutDuringStartupLeavesNoContainer(t *testing.T) {
 	// The timeout fires while the engine is still creating the container. Killing the CLI at
 	// that moment would leave a created, never removed container behind.
-	rt, ctx := integrationRuntime(t)
+	rt, ctx := integrationRuntime(t, serial)
 	res, err := rt.Run(ctx, Spec{
 		Image:   testImage,
 		Cmd:     []string{"sleep", "60"},
@@ -223,9 +247,8 @@ func TestIntegrationTimeoutDuringStartupLeavesNoContainer(t *testing.T) {
 }
 
 func TestIntegrationRootFilesystemIsReadOnly(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"touch", "/etc/x"}})
 	if res.ExitCode == 0 {
 		t.Error("touch /etc/x succeeded; the root filesystem is writable")
@@ -233,9 +256,8 @@ func TestIntegrationRootFilesystemIsReadOnly(t *testing.T) {
 }
 
 func TestIntegrationNonZeroExitIsResult(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	res, err := rt.Run(ctx, Spec{Image: testImage, Cmd: []string{"sh", "-c", "echo out; echo err >&2; exit 7"}})
 	if err != nil {
 		t.Fatalf("exit 7 must be a Result, not an error: %v", err)
@@ -246,9 +268,8 @@ func TestIntegrationNonZeroExitIsResult(t *testing.T) {
 }
 
 func TestIntegrationSourceDirWithSpace(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	src := filepath.Join(t.TempDir(), "dir with space")
 	writeSource(t, src)
 	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"cat", "a.txt", "sub/b.txt"}, SourceDir: src})
@@ -258,9 +279,8 @@ func TestIntegrationSourceDirWithSpace(t *testing.T) {
 }
 
 func TestIntegrationHostileCmdIsNotInterpreted(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	hostile := "; echo injected > /work/pwned #"
 	res := mustRun(t, rt, ctx, Spec{Image: testImage, Cmd: []string{"sh", "-c", `printf '%s\n' "$1"; ls /work`, "sh", hostile}})
 	if res.ExitCode != 0 || res.Stdout != hostile+"\n" {
@@ -269,9 +289,8 @@ func TestIntegrationHostileCmdIsNotInterpreted(t *testing.T) {
 }
 
 func TestIntegrationMissingSubdirIsAnError(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	_, err := rt.Run(ctx, Spec{Image: testImage, Cmd: []string{"true"}, Subdir: "nope"})
 	if err == nil || !strings.Contains(err.Error(), "subdirectory") {
 		t.Errorf("a missing Subdir must be reported as a setup error, got %v", err)
@@ -279,9 +298,8 @@ func TestIntegrationMissingSubdirIsAnError(t *testing.T) {
 }
 
 func TestIntegrationMissingImageIsAnError(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
 	// Container startup dominates these tests; run them side by side.
-	t.Parallel()
+	rt, ctx := integrationRuntime(t, parallel)
 	const missing = "spackle-test/no-such-image:0"
 	_, err := rt.Run(ctx, Spec{Image: missing, Cmd: []string{"true"}})
 	if err == nil || !strings.Contains(err.Error(), "pull "+missing) {
@@ -292,7 +310,7 @@ func TestIntegrationMissingImageIsAnError(t *testing.T) {
 // A commit exported for bisect must be readable by the unprivileged
 // container user, like the staged proof files are.
 func TestIntegrationRunsAgainstAnArchiveExport(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
+	rt, ctx := integrationRuntime(t, serial)
 	if !gitx.Available() {
 		t.Skip("git is not installed")
 	}
@@ -337,7 +355,7 @@ func TestIntegrationRunsAgainstAnArchiveExport(t *testing.T) {
 // Directories a run cannot need are left out of the work directory, and the
 // bootstrap's own ready line never shows up in the program output.
 func TestIntegrationCopyLeavesOutVersionControlAndState(t *testing.T) {
-	rt, ctx := integrationRuntime(t)
+	rt, ctx := integrationRuntime(t, serial)
 	src := t.TempDir()
 	for _, rel := range []string{
 		"main.py", ".env.example", "pkg/mod.py", "node_modules/dep/index.js", "vendor/lib/lib.go",
