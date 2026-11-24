@@ -159,7 +159,7 @@ func BuildFinding(root string, d Draft, origin []string) (finding.Finding, error
 	info := finding.Info(d.Class)
 	f := finding.Finding{
 		ID: finding.MakeID(d.Class, loc), Title: textx.Clip(strings.TrimSpace(d.Title), 200),
-		Surface: surfaceFor(d.Class), Class: d.Class,
+		Surface: finding.SurfaceOf(d.Class), Class: d.Class,
 		CWE: cleanCWE(d.CWE), OWASP: info.OWASP, Location: loc, Severity: sev,
 		Flaw: finding.Flaw{Description: textx.Clip(strings.TrimSpace(d.Description), 2000), Flow: flow},
 		Exploitation: finding.Exploitation{
@@ -295,15 +295,6 @@ func locateQuote(lines []string, quote string, hint int) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-func surfaceFor(class string) string {
-	switch class {
-	case "container-privilege", "container-hardening", "supply-chain", "ci-injection", "ci-permissions",
-		"network-exposure", "public-storage", "unencrypted-storage":
-		return finding.SurfaceInfra
-	}
-	return finding.SurfaceCode
 }
 
 func cleanCWE(in []string) []string {

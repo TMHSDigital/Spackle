@@ -375,11 +375,6 @@ func (r *runner) recordFindings(mapSeq int64, findings []finding.Finding, parent
 	return nil
 }
 
-// networkSeeders are the external scanners that download rules or a
-// vulnerability database when they run. Offline mode promises that nothing
-// leaves the machine, so they are not run in it.
-var networkSeeders = map[string]bool{"semgrep": true, "osv-scanner": true, "trivy": true}
-
 // offlineSeeder stands in for a scanner that offline mode does not run, so
 // the report still shows it and says why it was skipped.
 type offlineSeeder struct{ name string }
@@ -392,10 +387,14 @@ func (o offlineSeeder) Run(context.Context, string, []walk.File) ([]seed.Lead, e
 	return nil, nil
 }
 
+// offlineSeeders replaces every seeder that uses the network when it runs
+// (it downloads rules or a vulnerability database). Offline mode promises
+// that nothing leaves the machine. Whether a seeder does is its own
+// property, declared where the seeder is defined.
 func offlineSeeders(in []seed.Seeder) []seed.Seeder {
 	out := make([]seed.Seeder, 0, len(in))
 	for _, s := range in {
-		if networkSeeders[s.Name()] {
+		if n, ok := s.(seed.NetworkUser); ok && n.UsesNetwork() {
 			out = append(out, offlineSeeder{name: s.Name()})
 			continue
 		}

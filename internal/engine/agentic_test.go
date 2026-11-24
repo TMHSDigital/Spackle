@@ -350,18 +350,37 @@ func TestUnattendedDollarCapNeedsAPrice(t *testing.T) {
 	}
 }
 
+// networkSeeder is a seeder that says it uses the network when it runs.
+type networkSeeder struct{ fakeSeeder }
+
+func (networkSeeder) UsesNetwork() bool { return true }
+
 func TestOfflineSkipsNetworkScannersAndRefusesClones(t *testing.T) {
-	in := []seed.Seeder{fakeSeeder{name: "semgrep"}, fakeSeeder{name: "gitleaks"}, fakeSeeder{name: "trivy"}, fakeSeeder{name: "osv-scanner"}, fakeSeeder{name: "builtin-code"}}
+	// The real seeder set: which scanners use the network is declared on
+	// each adapter, and offline mode skips exactly those.
+	in := seed.All()
 	out := offlineSeeders(in)
-	for _, s := range out {
+	if len(out) != len(in) {
+		t.Fatalf("%d seeders in, %d out: a skipped scanner must still be listed", len(in), len(out))
+	}
+	skipped := map[string]bool{"semgrep": true, "osv-scanner": true, "trivy": true}
+	for i, s := range out {
+		if s.Name() != in[i].Name() {
+			t.Fatalf("seeder %d is %s, want %s", i, s.Name(), in[i].Name())
+		}
 		ok, note := s.Available()
-		wantSkipped := networkSeeders[s.Name()]
-		if ok == wantSkipped {
-			t.Errorf("%s: available=%v in offline mode", s.Name(), ok)
+		byOffline := strings.Contains(note, "offline mode")
+		if byOffline != skipped[s.Name()] {
+			t.Errorf("%s: skipped by offline mode = %v, want %v (note %q)", s.Name(), byOffline, skipped[s.Name()], note)
 		}
-		if wantSkipped && !strings.Contains(note, "offline mode") {
-			t.Errorf("%s: note = %q", s.Name(), note)
+		if byOffline && ok {
+			t.Errorf("%s is available in offline mode", s.Name())
 		}
+	}
+	// A seeder that does not say whether it uses the network is left alone
+	// only when it is not a scanner adapter at all, such as a built-in one.
+	if kept := offlineSeeders([]seed.Seeder{fakeSeeder{name: "builtin-like"}}); len(kept) != 1 || kept[0].Name() != "builtin-like" {
+		t.Fatalf("a seeder with no network property was replaced: %+v", kept)
 	}
 
 	o := opts(t)
@@ -372,7 +391,7 @@ func TestOfflineSkipsNetworkScannersAndRefusesClones(t *testing.T) {
 	}
 
 	// The skipped scanners still appear in the report, with the reason.
-	o = opts(t, fakeSeeder{name: "semgrep", leads: []seed.Lead{sqlLead()}})
+	o = opts(t, networkSeeder{fakeSeeder{name: "semgrep", leads: []seed.Lead{sqlLead()}}})
 	o.Config.Offline = true
 	res, err := Run(context.Background(), o)
 	if err != nil {

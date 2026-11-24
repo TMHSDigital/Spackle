@@ -86,3 +86,29 @@ func TestInfoUnknownClass(t *testing.T) {
 		t.Errorf("Fix = %q, want empty", ci.Fix)
 	}
 }
+
+// The infrastructure classes are named by hand. Each must be a real class,
+// and SurfaceOf must sort every class one way or the other.
+func TestSurfaceOfKnowsEveryClass(t *testing.T) {
+	for class := range infraClasses {
+		if _, ok := classVectors[class]; !ok {
+			t.Errorf("infraClasses names %q, which is not a finding class", class)
+		}
+	}
+	infra := 0
+	for class := range classVectors {
+		switch SurfaceOf(class) {
+		case SurfaceInfra:
+			infra++
+		case SurfaceCode:
+		default:
+			t.Errorf("%s: SurfaceOf = %q", class, SurfaceOf(class))
+		}
+	}
+	if infra != len(infraClasses) {
+		t.Errorf("%d classes are infrastructure, want %d", infra, len(infraClasses))
+	}
+	if SurfaceOf("container-privilege") != SurfaceInfra || SurfaceOf("sql-injection") != SurfaceCode || SurfaceOf("no-such-class") != SurfaceCode {
+		t.Error("SurfaceOf sorted a known class wrongly")
+	}
+}

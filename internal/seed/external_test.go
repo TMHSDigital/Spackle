@@ -444,3 +444,49 @@ func TestExternalScannersInstalled(t *testing.T) {
 		})
 	}
 }
+
+// Every scanner adapter states whether the tool uses the network when it
+// runs, because offline mode relies on it. One that does not state it
+// counts as a network user, the safe side.
+func TestEveryScannerStatesItsNetworkUse(t *testing.T) {
+	want := map[string]bool{"semgrep": true, "gitleaks": false, "osv-scanner": true, "trivy": true, "hadolint": false}
+	for _, s := range External() {
+		e, ok := s.(*external)
+		if !ok {
+			t.Fatalf("%s is not a scanner adapter", s.Name())
+		}
+		uses, listed := want[e.name]
+		if !listed {
+			t.Errorf("%s is a new scanner: add it to this test with whether it uses the network", e.name)
+			continue
+		}
+		if e.network == netUnstated {
+			t.Errorf("%s does not state whether it uses the network", e.name)
+		}
+		if got := s.(NetworkUser).UsesNetwork(); got != uses {
+			t.Errorf("%s: UsesNetwork = %v, want %v", e.name, got, uses)
+		}
+	}
+	if !(&external{name: "new-scanner"}).UsesNetwork() {
+		t.Error("an adapter that states nothing must count as using the network")
+	}
+	for _, s := range Builtin() {
+		if n, ok := s.(NetworkUser); ok && n.UsesNetwork() {
+			t.Errorf("built-in seeder %s claims to use the network", s.Name())
+		}
+	}
+}
+
+// The CWE table maps scanner results to finding classes. Every class it
+// names must exist, or the results it maps would be dropped as unclassified.
+func TestCWETableNamesRealClasses(t *testing.T) {
+	known := map[string]bool{}
+	for _, c := range finding.Classes() {
+		known[c] = true
+	}
+	for cwe, class := range cweClasses {
+		if !known[class] {
+			t.Errorf("CWE-%s maps to %q, which is not a finding class", cwe, class)
+		}
+	}
+}

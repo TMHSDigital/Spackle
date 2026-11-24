@@ -852,3 +852,21 @@ var classInfo = map[string]ClassInfo{
 		Fix: "Remove the file from the web root, block such paths in the server configuration, and rotate any secret it contained. Exclude these files from deployment artifacts.",
 	},
 }
+
+// infraClasses are the classes whose findings concern deployment and CI
+// configuration, not application code.
+var infraClasses = map[string]bool{
+	"container-privilege": true, "container-hardening": true, "supply-chain": true,
+	"ci-injection": true, "ci-permissions": true, "network-exposure": true,
+	"public-storage": true, "unencrypted-storage": true,
+}
+
+// SurfaceOf returns the surface a finding of the class belongs to when
+// nothing more specific is known about it: SurfaceInfra for the deployment
+// and CI classes, SurfaceCode for every other class.
+func SurfaceOf(class string) string {
+	if infraClasses[class] {
+		return SurfaceInfra
+	}
+	return SurfaceCode
+}

@@ -66,28 +66,51 @@ type external struct {
 	// quietExit lists exit codes that mean "nothing to scan" for this tool
 	// when it printed no JSON.
 	quietExit []int
+	// network says whether the tool reaches out when it runs. Every adapter
+	// states it; one that does not counts as using the network, so a new
+	// adapter is kept out of offline mode until someone decides otherwise.
+	network netUse
 
 	mu   sync.Mutex
 	note string
 }
 
+// netUse says whether a scanner uses the network when it runs.
+type netUse int
+
+const (
+	netUnstated  netUse = iota // not declared: treated as downloads
+	netLocal                   // works on local files only
+	netDownloads               // fetches rules or a vulnerability database
+)
+
+// NetworkUser is implemented by a seeder that may use the network when it
+// runs. Offline mode promises that nothing leaves the machine, so it does
+// not run a seeder that reports true.
+type NetworkUser interface {
+	UsesNetwork() bool
+}
+
+// UsesNetwork implements NetworkUser.
+func (e *external) UsesNetwork() bool { return e.network != netLocal }
+
 // External returns the adapters for scanners the operator may have installed.
 func External() []Seeder {
 	return []Seeder{
 		&external{
-			name: "semgrep", bin: "semgrep", site: "semgrep.dev", leads: semgrepLeads,
+			name: "semgrep", bin: "semgrep", network: netDownloads, site: "semgrep.dev", leads: semgrepLeads,
 			args: func(root string, _ []walk.File) ([]string, bool) {
 				return []string{"scan", "--json", "--quiet", "--config", "auto", "--metrics", "off", root}, true
 			},
 		},
 		&external{
-			name: "gitleaks", bin: "gitleaks", site: "gitleaks.io", leads: gitleaksLeads,
+			name: "gitleaks", bin: "gitleaks", network: netLocal, site: "gitleaks.io", leads: gitleaksLeads,
 			args: func(root string, _ []walk.File) ([]string, bool) {
 				return []string{"dir", "--report-format", "json", "--report-path", "-", "--redact", "--no-banner", "--exit-code", "0", root}, true
 			},
 		},
 		&external{
-			name: "osv-scanner", bin: "osv-scanner", site: "google.github.io/osv-scanner", leads: osvLeads,
+			name: "osv-scanner", bin: "osv-scanner", network: netDownloads, site: "google.github.io/osv-scanner", leads: osvLeads,
 			// 128 is osv-scanner's "no package sources found".
 			quietExit: []int{128},
 			args: func(root string, _ []walk.File) ([]string, bool) {
@@ -95,13 +118,13 @@ func External() []Seeder {
 			},
 		},
 		&external{
-			name: "trivy", bin: "trivy", site: "trivy.dev", leads: trivyLeads,
+			name: "trivy", bin: "trivy", network: netDownloads, site: "trivy.dev", leads: trivyLeads,
 			args: func(root string, _ []walk.File) ([]string, bool) {
 				return []string{"fs", "--format", "json", "--quiet", "--scanners", "vuln,misconfig", root}, true
 			},
 		},
 		&external{
-			name: "hadolint", bin: "hadolint", site: "hadolint.github.io/hadolint", leads: hadolintLeads,
+			name: "hadolint", bin: "hadolint", network: netLocal, site: "hadolint.github.io/hadolint", leads: hadolintLeads,
 			args: func(_ string, files []walk.File) ([]string, bool) {
 				argv := []string{"--format", "json"}
 				for _, f := range files {
@@ -309,20 +332,6 @@ func classForCWE(cwe string) string {
 	return cweClasses[strings.TrimPrefix(normalizeCWE(cwe), "CWE-")]
 }
 
-// infraClasses are the classes whose leads concern deployment, not code.
-var infraClasses = map[string]bool{
-	"container-privilege": true, "container-hardening": true, "supply-chain": true,
-	"ci-injection": true, "ci-permissions": true, "network-exposure": true,
-	"public-storage": true, "unencrypted-storage": true,
-}
-
-func surfaceFor(class string) string {
-	if infraClasses[class] {
-		return finding.SurfaceInfra
-	}
-	return finding.SurfaceCode
-}
-
 // severityWord maps the severity vocabularies of the scanners to Spackle's.
 func severityWord(s, fallback string) string {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
@@ -426,7 +435,7 @@ func semgrepLeads(data []byte, root string, st *parseStats) ([]Lead, error) {
 			RuleID:   scrub(r.CheckID, 200),
 			Title:    ruleTitle(r.CheckID),
 			Class:    class,
-			Surface:  surfaceFor(class),
+			Surface:  finding.SurfaceOf(class),
 			CWE:      cwes,
 			Severity: severityWord(r.Extra.Severity, "medium"),
 			File:     rel,

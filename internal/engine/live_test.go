@@ -388,3 +388,18 @@ func TestLiveRefusalOnAForgeMentionsTheCloneURL(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// The running-target classes that count as demonstrated by the exchange
+// alone are named here by hand. Each must be a real class, or a renamed
+// class would quietly be reported as reasoned.
+func TestObservedClassesAreRealClasses(t *testing.T) {
+	known := map[string]bool{}
+	for _, c := range finding.Classes() {
+		known[c] = true
+	}
+	for class := range observedClasses {
+		if !known[class] {
+			t.Errorf("observedClasses names %q, which is not a finding class", class)
+		}
+	}
+}
