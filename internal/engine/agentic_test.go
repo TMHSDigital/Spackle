@@ -167,6 +167,38 @@ func TestReviewerRefutationDismissesWithReason(t *testing.T) {
 	}
 }
 
+// An investigated finding is in the ledger as soon as it is finished, so the
+// max-findings cap must keep it: cutting it would list it as skipped while
+// the report still loads it. Here it ranks last (dismissed by the review)
+// against a lead that was not investigated.
+func TestMaxFindingsKeepsInvestigatedFindings(t *testing.T) {
+	other := seed.Lead{RuleID: "md5", Title: "MD5 used", Class: "weak-hash", Surface: finding.SurfaceCode, CWE: []string{"CWE-328"}, Severity: "high", File: "app.py", Line: 1, Detail: "d", Fix: "Use SHA-256."}
+	fake := script{
+		plan: planFor(leadID(sqlLead(), "fake")), investigate: goodDraft(),
+		review: `{"verdict":"refuted","reason":"find is only called from tests with a constant"}`,
+	}.provider()
+	o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), other}})
+	o.Config.Budget.MaxFindings = 1
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Run.Findings) != 1 {
+		t.Fatalf("findings = %d, want the cap of 1", len(res.Run.Findings))
+	}
+	kept := res.Run.Findings[0]
+	if kept.Class != "sql-injection" || kept.Status != finding.StatusDismissed {
+		t.Fatalf("kept %s (%s), want the investigated finding", kept.Class, kept.Status)
+	}
+	for _, s := range res.Run.Skipped {
+		for _, line := range s.Skipped {
+			if strings.HasPrefix(line, kept.ID+" ") {
+				t.Errorf("%s is both reported and skipped: %q", kept.ID, line)
+			}
+		}
+	}
+}
+
 func TestInvestigatorNoFindingDismissesTheLead(t *testing.T) {
 	fake := script{
 		plan:        planFor(leadID(sqlLead(), "fake")),

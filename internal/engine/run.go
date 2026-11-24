@@ -43,6 +43,10 @@ type runner struct {
 	resume *resumeState
 	// ended is set once the ledger has its run.end event.
 	ended bool
+	// recorded holds the ids of findings already appended to the ledger
+	// before recordFindings runs. An event cannot be taken back, so the
+	// max-findings cap keeps them.
+	recorded map[string]bool
 }
 
 func (r *runner) say(format string, a ...any) {
@@ -334,16 +338,29 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 // recordFindings applies the max-findings cap and appends the findings to the
 // ledger. It is the one place a finding of a code scan or a running-target
 // scan enters the ledger. findings must be ranked: the cap keeps the first
-// ones and lists the rest in a budget skip event under mapSeq. A finding
-// that does not validate is a Spackle bug, not a target problem, and is
-// recorded as a reject instead of being reported.
+// ones and lists the rest in a budget skip event under mapSeq. Findings that
+// are already in the ledger (see runner.recorded) are kept first, whatever
+// their rank, because the report would load them anyway. A finding that
+// does not validate is a Spackle bug, not a target problem, and is recorded
+// as a reject instead of being reported.
 func (r *runner) recordFindings(mapSeq int64, findings []finding.Finding, parent map[string]int64) error {
 	if limit := r.cfg.Budget.MaxFindings; limit > 0 && len(findings) > limit {
+		var kept, rest []finding.Finding
+		for _, f := range findings {
+			if r.recorded[f.ID] {
+				kept = append(kept, f)
+			} else {
+				rest = append(rest, f)
+			}
+		}
+		// The investigations are planned within the cap, so kept fits.
+		room := max(limit-len(kept), 0)
+		room = min(room, len(rest))
 		var dropped []string
-		for _, f := range findings[limit:] {
+		for _, f := range rest[room:] {
 			dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
 		}
-		findings = findings[:limit]
+		findings = finding.Rank(append(kept, rest[:room]...))
 		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: fmt.Sprintf("max findings (%d)", limit), Skipped: dropped}); err != nil {
 			return err
 		}

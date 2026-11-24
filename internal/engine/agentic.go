@@ -433,6 +433,10 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 		if _, err := r.led.Append(seq, ledger.TypeFinding, f); err != nil {
 			return goOn, err
 		}
+		if r.recorded == nil {
+			r.recorded = map[string]bool{}
+		}
+		r.recorded[f.ID] = true
 	}
 	st.settle(it.LeadIDs, fateFound, "")
 	return step, nil

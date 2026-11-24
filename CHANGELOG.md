@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- With a model, the `max_findings` cap now bounds the report. An investigated finding cut by the cap used to stay in the report and be listed as skipped too, and investigated findings could be cut in favour of leads nobody investigated. They are now kept first.
 - The Semgrep adapter runs Semgrep with the `p/default` rule set instead of `--config auto`, which Semgrep refuses with metrics off. It used to fail on every run, so a scan got no Semgrep leads. Metrics stay off.
 - The lead count shown for each seeder is now the number of its leads the scan reports. In a diff scan (`--since`), and with `[scan] exclude` or `disable_rules`, it used to be the count for the whole target, so the seeder lines did not add up to the lead total.
 - A scan that is cancelled no longer hands further files to the built-in seeders, and a cancelled scan of a small target is reported as stopped early instead of complete.
