@@ -160,14 +160,33 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 			return Result{}, fmt.Errorf("%w: --resume: run %s was %s, and this scan asks for %s. Resume it without --since or --changed to keep its file set",
 				ErrRefused, resume.runID, describeDiffBase(resume.since, resume.changed), describeDiffBase(opts.Since, opts.Changed))
 		}
+		// The same holds for the scope inside the changed files.
+		switch {
+		case opts.DiffScope == "":
+			opts.DiffScope = resume.diffScope
+		case (resume.since != "" || resume.changed) && linesScope(opts.DiffScope) != linesScope(resume.diffScope):
+			return Result{}, fmt.Errorf("%w: --resume: run %s reported %s, and this scan asks for --diff-scope %s. Resume it without --diff-scope to keep its scope",
+				ErrRefused, resume.runID, describeDiffScope(resume.diffScope), opts.DiffScope)
+		}
+	}
+	if err := checkDiffScope(opts); err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 
 	// A diff scan needs its file list before anything else is done, so a
 	// revision git does not know refuses the run at once.
 	var changed map[string]bool
+	var keep func(seed.Lead) bool
 	if diffBase(opts) != nil {
 		if changed, err = changedSince(ctx, root, diffBase(opts), stateDir); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
+		}
+		if linesScope(opts.DiffScope) {
+			lines, lerr := changedLines(ctx, root, diffBase(opts), stateDir)
+			if lerr != nil {
+				return Result{}, fmt.Errorf("%w: %w", ErrRefused, lerr)
+			}
+			keep = onChangedLines(lines)
 		}
 	}
 
@@ -197,10 +216,13 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	say("Running %d seeders", len(seeders))
 	// A diff scan seeds only the changed files, so leads elsewhere neither
 	// cost a read nor count against a seeder's lead cap.
-	leads, statuses, leftOut := seed.RunAllIn(ctx, seeders, root, m.Files, texts, changed)
+	leads, statuses, leftOut, outside := seed.RunAllScoped(ctx, seeders, root, m.Files, texts, changed, keep)
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 	if changed != nil {
 		scanNotes = append(scanNotes, diffNote(diffBase(opts).label, len(changed), leftOut))
+		if keep != nil {
+			scanNotes = append(scanNotes, diffLinesNote(outside))
+		}
 	}
 	statuses = countLeads(statuses, leads)
 	if resume != nil {
@@ -287,6 +309,9 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		start.ResumedFrom = resume.runID
 	}
 	start.Since, start.Changed = opts.Since, opts.Changed
+	if linesScope(opts.DiffScope) {
+		start.DiffScope = DiffScopeLines
+	}
 	if agentic {
 		start.Mode, start.Provider, start.Model = "agentic", defaultProv.Name(), defaultProv.Model()
 		start.Isolation = r.lab.isolation()

@@ -9,7 +9,79 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/mapper"
+	"github.com/TMHSDigital/spackle/internal/seed"
 )
+
+// The values of Options.DiffScope.
+const (
+	DiffScopeFile  = "file"
+	DiffScopeLines = "lines"
+)
+
+// linesScope reports whether a diff scope asks for the changed lines only.
+func linesScope(scope string) bool { return scope == DiffScopeLines }
+
+// checkDiffScope refuses a diff scope that is not one of the values, or
+// that asks for lines of a scan that is not a diff scan.
+func checkDiffScope(opts Options) error {
+	switch opts.DiffScope {
+	case "", DiffScopeFile, DiffScopeLines:
+	default:
+		return fmt.Errorf("--diff-scope is %q or %q, not %q", DiffScopeFile, DiffScopeLines, opts.DiffScope)
+	}
+	if linesScope(opts.DiffScope) && diffBase(opts) == nil {
+		return fmt.Errorf("--diff-scope %s narrows a diff scan to the changed lines; give --since or --changed with it", DiffScopeLines)
+	}
+	return nil
+}
+
+// describeDiffScope names a stored diff scope for a refusal.
+func describeDiffScope(scope string) string {
+	if linesScope(scope) {
+		return "only the changed lines (--diff-scope " + DiffScopeLines + ")"
+	}
+	return "whole changed files (--diff-scope " + DiffScopeFile + ")"
+}
+
+// changedLines returns the changed line ranges of each changed file of a
+// diff scan, for --diff-scope lines.
+func changedLines(ctx context.Context, root string, d *diffScan, stateDir string) (map[string][]gitx.LineRange, error) {
+	var lines map[string][]gitx.LineRange
+	var err error
+	if d.changed {
+		lines, err = gitx.ChangedLinesUncommitted(ctx, root, stateDirUnder(root, stateDir)...)
+	} else {
+		lines, err = gitx.ChangedLinesSince(ctx, root, d.rev)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s with --diff-scope %s: git could not list the changed lines (%w)", d.flag, DiffScopeLines, err)
+	}
+	return lines, nil
+}
+
+// onChangedLines returns the lead filter of --diff-scope lines: a lead is
+// kept when its lines meet a changed line of its file. A lead with no line
+// is about its file as a whole (a vulnerable dependency in a lockfile, for
+// example) and is kept, as in a scan by file.
+func onChangedLines(lines map[string][]gitx.LineRange) func(seed.Lead) bool {
+	return func(l seed.Lead) bool {
+		if l.Line <= 0 {
+			return true
+		}
+		for _, r := range lines[l.File] {
+			if r.Overlaps(l.Line, l.EndLine) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// diffLinesNote says how many leads in the changed files a scan limited to
+// the changed lines left out.
+func diffLinesNote(outside int) string {
+	return fmt.Sprintf("Only leads on the changed lines are reported (--diff-scope %s): %d leads elsewhere in the changed files were left out.", DiffScopeLines, outside)
+}
 
 // diffScan is what a diff scan compares against, built from the options.
 type diffScan struct {

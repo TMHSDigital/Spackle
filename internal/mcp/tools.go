@@ -257,7 +257,8 @@ func (s *server) buildTools() []tool {
 				`"path":{"type":"string","description":"The directory to scan: absolute and inside an allowed root, or relative to the first root. Use \".\" for the first root itself."},` +
 				`"max_findings":{"type":"integer","minimum":1,"maximum":100,"description":"Report at most this many findings, highest severity first. It can lower the operator's limit, never raise it."},` +
 				`"since":{"type":"string","description":"Report only on files changed since this git revision (a branch, tag or commit of the directory's repository), for example the base of your branch."},` +
-				`"changed":{"type":"boolean","description":"Report only on files that differ from the last commit, staged or not, and new files git does not ignore: the edits you have not committed. Cannot be combined with since."}},` +
+				`"changed":{"type":"boolean","description":"Report only on files that differ from the last commit, staged or not, and new files git does not ignore: the edits you have not committed. Cannot be combined with since."},` +
+				`"diff_scope":{"type":"string","enum":["file","lines"],"description":"With since or changed: file (the default) reports every lead in a changed file, lines only the leads on the changed lines."}},` +
 				`"required":["path"],"additionalProperties":false}`),
 			// A scan writes a run directory, and with a remote model allowed
 			// it sends redacted excerpts to the provider.
@@ -349,8 +350,9 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 		MaxFindings *int    `json:"max_findings"`
 		Since       *string `json:"since"`
 		Changed     *bool   `json:"changed"`
+		DiffScope   *string `json:"diff_scope"`
 	}
-	if err := decodeArgs("scan", raw, &a, "path (required), max_findings, since and changed"); err != nil {
+	if err := decodeArgs("scan", raw, &a, "path (required), max_findings, since, changed and diff_scope"); err != nil {
 		return errorf("%v", err)
 	}
 	if a.Path == nil {
@@ -383,6 +385,14 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 	}
 	if opts.Since != "" && opts.Changed {
 		return errorf("scan refused: since and changed choose different file sets; give one")
+	}
+	if a.DiffScope != nil {
+		switch opts.DiffScope = strings.TrimSpace(*a.DiffScope); {
+		case opts.DiffScope != engine.DiffScopeFile && opts.DiffScope != engine.DiffScopeLines:
+			return errorf("scan refused: diff_scope is %q or %q, not %q", engine.DiffScopeFile, engine.DiffScopeLines, opts.DiffScope)
+		case opts.DiffScope == engine.DiffScopeLines && opts.Since == "" && !opts.Changed:
+			return errorf("scan refused: diff_scope %q narrows a diff scan to the changed lines; give since or changed with it", engine.DiffScopeLines)
+		}
 	}
 	res, err := s.scanFn(ctx, opts)
 	if err != nil {

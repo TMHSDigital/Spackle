@@ -62,6 +62,7 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `budget-usd` | `2` | Hard cap on model spend for the run, in USD. Used only when `provider` is set |
 | `fix` | `false` | Write and verify fixes. Off by default in CI; findings are still reported |
 | `diff-base` | empty | Report only on files changed since this revision. See [Scan only what a pull request changed](#scan-only-what-a-pull-request-changed) |
+| `diff-scope` | empty | With `diff-base`: `file` (the default) reports every lead in a changed file, `lines` only the leads on the changed lines. See [Scan only what a pull request changed](#scan-only-what-a-pull-request-changed) |
 | `args` | empty | Extra arguments passed to `spackle scan`, split on spaces and line breaks, so the value may span several lines. One argument cannot contain a space, and a value with a quote character is refused with exit code 2 |
 | `github-token` | the workflow token | Used to download the release and verify its provenance |
 | `spackle-dir` | empty | Directory that already holds a `spackle` binary. When set, no release is downloaded or verified. Meant for testing a build from source |
@@ -142,6 +143,8 @@ What a diff scan does and does not do:
 - A lead in an unchanged file is left out, and the report says how many were. A dependency lead is tied to its lockfile, so it is reported when the lockfile changed.
 - With a model, an investigation that starts in a changed file may end in a finding located in an unchanged file that the changed code reaches. That finding is reported, at the place where the flaw is.
 - Findings that predate the change are not accepted or recorded anywhere. Run a full scan on the default branch to see them.
+
+By default a lead anywhere in a changed file is reported, so touching one line of an old file reports every lead already in it. `--diff-scope lines` (the Action's `diff-scope: lines`) reports only the leads on lines the change added or modified, and the report says how many leads elsewhere in the changed files were left out. A deletion counts as touching the lines on either side of it. A lead with no line, such as a vulnerable dependency in a lockfile, is still reported when its file changed. With a model, the scope narrows the leads the investigations start from; a finding an investigation reaches is still reported where the flaw is. `--diff-scope lines` works with `--changed` too, where a new file counts as changed on every line. Like `diff-base`, it is not in v0.1.0.
 
 To scan work you have not committed yet, use `spackle scan . --changed` instead of `--since`. It reports only on files that differ from the last commit, staged or not, and on new files git does not ignore; the two flags cannot be combined. As a git pre-commit hook (`.git/hooks/pre-commit`, made executable):
 

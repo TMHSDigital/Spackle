@@ -92,6 +92,15 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 // crowd out a lead in a wanted file. A lead with no file is dropped too.
 // leftOut is how many leads were dropped that way.
 func RunAllIn(ctx context.Context, seeders []Seeder, root string, files []walk.File, texts *walk.Texts, only map[string]bool) (leads []Lead, statuses []Status, leftOut int) {
+	leads, statuses, leftOut, _ = RunAllScoped(ctx, seeders, root, files, texts, only, nil)
+	return leads, statuses, leftOut
+}
+
+// RunAllScoped is RunAllIn with a second, finer filter for the leads in the
+// wanted files: when keep is not nil, a lead it returns false for is
+// dropped too, before the lead cap, and counted in outside. A diff scan
+// limited to the changed lines uses it.
+func RunAllScoped(ctx context.Context, seeders []Seeder, root string, files []walk.File, texts *walk.Texts, only map[string]bool, keep func(Lead) bool) (leads []Lead, statuses []Status, leftOut, outside int) {
 	sharedFiles := files
 	if only != nil {
 		sharedFiles = nil
@@ -162,11 +171,15 @@ func RunAllIn(ctx context.Context, seeders []Seeder, root string, files []walk.F
 			if only != nil {
 				kept := got[:0:0]
 				for _, l := range got {
-					if only[l.File] {
+					switch {
+					case !only[l.File]:
+						leftOut++
+					case keep != nil && !keep(l):
+						outside++
+					default:
 						kept = append(kept, l)
 					}
 				}
-				leftOut += len(got) - len(kept)
 				got = kept
 			}
 			got, capNote := capLeads(got)
@@ -182,7 +195,7 @@ func RunAllIn(ctx context.Context, seeders []Seeder, root string, files []walk.F
 		}
 		statuses = append(statuses, st)
 	}
-	return Sort(Unique(leads)), statuses, leftOut
+	return Sort(Unique(leads)), statuses, leftOut, outside
 }
 
 // maxConcurrentScanners is how many external scanners run at once. Each is

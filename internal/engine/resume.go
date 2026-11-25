@@ -33,9 +33,11 @@ type resumeState struct {
 	// new report unless this run reaches its own conclusion about one.
 	findings []finding.Finding
 	// since and changed are the earlier run's diff base, so the resumed
-	// run covers the same files.
-	since   string
-	changed bool
+	// run covers the same files. diffScope is its --diff-scope as stored
+	// ("lines", or empty for whole files).
+	since     string
+	changed   bool
+	diffScope string
 }
 
 // describeDiffBase names a diff base the way the scan flags give it.
@@ -121,7 +123,7 @@ func loadResume(ctx context.Context, stateDir, id, root string, force bool) (*re
 	if left == 0 {
 		return nil, fmt.Errorf("--resume: run %s (%s) has no planned investigation left to continue. Start a new scan instead", run.ID, run.Outcome)
 	}
-	st := &resumeState{runID: run.ID, intents: intents[len(intents)-left:], handled: map[string]bool{}, findings: run.Findings, since: run.Since, changed: run.Changed}
+	st := &resumeState{runID: run.ID, intents: intents[len(intents)-left:], handled: map[string]bool{}, findings: run.Findings, since: run.Since, changed: run.Changed, diffScope: run.DiffScope}
 	for _, it := range intents[:len(intents)-left] {
 		for _, id := range it.LeadIDs {
 			st.handled[id] = true

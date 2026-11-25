@@ -284,3 +284,38 @@ func TestResumeKeepsTheDiffBase(t *testing.T) {
 		t.Fatalf("the resumed run did not keep the diff base: since = %q, notes = %q", res.Run.Since, res.Run.Notes)
 	}
 }
+
+// A resumed diff scan keeps the earlier run's --diff-scope: without the
+// flag it applies the stored one, and the other scope is refused.
+func TestResumeKeepsTheDiffScope(t *testing.T) {
+	plan := `{"intents":[{"title":"find query","class":"sql-injection","hypothesis":"Does q reach SQL?","files":["app.py"],"lead_ids":["` + leadID(sqlLead(), "fake") + `"],"priority":1}]}`
+	onChanged := sqlLead()
+	onChanged.RuleID, onChanged.Line = "on-changed-line", 6
+	exhausted := script{plan: plan, investigate: goodDraft(), usage: llm.Usage{InputTokens: 900, OutputTokens: 200, CostKnown: true}}.provider()
+	first := agenticOpts(t, exhausted, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), onChanged}})
+	first.Since, first.DiffScope = diffTarget(t, first.Target), DiffScopeLines
+	first.Config.Budget.Tokens = 1000 // the planner call alone uses it up
+	res, err := Run(context.Background(), first)
+	if err != nil || !Resumable(res.Run) || res.Run.DiffScope != DiffScopeLines {
+		t.Fatalf("first run: resumable = %v, diff scope = %q, err = %v", err == nil && Resumable(res.Run), res.Run.DiffScope, err)
+	}
+
+	fake := script{investigate: goodDraft(), review: `{"verdict":"confirmed","reason":"ok"}`}.provider()
+	o := resumeOpts(first, fake)
+	o.Resume, o.Since, o.DiffScope = first.RunID, "", DiffScopeFile
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--diff-scope lines") {
+		t.Fatalf("other diff scope: err = %v", err)
+	}
+	if len(fake.Requests) != 0 {
+		t.Fatal("a refused resume called the model")
+	}
+
+	o = resumeOpts(first, fake)
+	o.Resume, o.Since, o.DiffScope = first.RunID, "", ""
+	if res, err = Run(context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.DiffScope != DiffScopeLines || !containsNote(res.Run.Notes, "--diff-scope lines") {
+		t.Fatalf("the resumed run did not keep the diff scope: %q, notes = %q", res.Run.DiffScope, res.Run.Notes)
+	}
+}

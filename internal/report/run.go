@@ -35,8 +35,11 @@ type Run struct {
 	Commit string
 	// Since and Changed are the diff base of a diff scan: the --since
 	// revision, or true for --changed. Both are empty for a full scan.
-	Since       string
-	Changed     bool
+	Since   string
+	Changed bool
+	// DiffScope is "lines" when a diff scan reported only the leads on the
+	// changed lines, and empty when it reported whole changed files.
+	DiffScope   string
 	Mode        string // deterministic|agentic
 	Provider    string
 	Model       string
@@ -165,7 +168,7 @@ func Load(runDir string) (Run, error) {
 				run.ID, run.Version, run.Command = d.RunID, d.Version, d.Command
 				run.Target, run.TargetKind, run.Commit, run.TargetPath = d.Target, d.TargetKind, d.Commit, d.TargetPath
 				run.RepoPrefix, run.Ref = d.RepoPrefix, d.Ref
-				run.Since, run.Changed = d.Since, d.Changed
+				run.Since, run.Changed, run.DiffScope = d.Since, d.Changed, d.DiffScope
 				run.Mode, run.Provider, run.Model, run.Offline = d.Mode, d.Provider, d.Model, d.Offline
 				run.Scope, run.ScopeSource, run.Isolation = d.Scope, d.ScopeSource, d.Isolation
 				run.StartedAt = ev.TS

@@ -1224,12 +1224,19 @@ func TestScanSinceAndCompareRuns(t *testing.T) {
 	if tr := c.tool("scan", map[string]any{"path": ".", "since": "main"}); tr.IsError {
 		t.Logf("scan with since: %s", tr.text())
 	}
-	if tr := c.tool("scan", map[string]any{"path": ".", "changed": true}); tr.IsError {
+	if tr := c.tool("scan", map[string]any{"path": ".", "changed": true, "diff_scope": "lines"}); tr.IsError {
 		t.Logf("scan with changed: %s", tr.text())
 	}
 	seen := *fx.seen
-	if len(seen) != 2 || seen[0].Since != "main" || seen[0].Changed || !seen[1].Changed || seen[1].Since != "" {
+	if len(seen) != 2 || seen[0].Since != "main" || seen[0].Changed || seen[0].DiffScope != "" || !seen[1].Changed || seen[1].Since != "" || seen[1].DiffScope != "lines" {
 		t.Fatalf("engine options = %+v", seen)
+	}
+	// diff_scope is checked in the tool's own words too.
+	if tr := c.tool("scan", map[string]any{"path": ".", "diff_scope": "lines"}); !tr.IsError || !strings.Contains(tr.text(), "give since or changed") || strings.Contains(tr.text(), "--") {
+		t.Fatalf("diff_scope without a diff scan: %s", tr.text())
+	}
+	if tr := c.tool("scan", map[string]any{"path": ".", "since": "main", "diff_scope": "hunks"}); !tr.IsError || !strings.Contains(tr.text(), `not "hunks"`) {
+		t.Fatalf("unknown diff_scope: %s", tr.text())
 	}
 	// A blank since, and since with changed, are refused in the tool's
 	// own argument names before the engine is called.

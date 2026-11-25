@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -332,5 +333,97 @@ func TestStateDirUnder(t *testing.T) {
 		if got != c.want {
 			t.Errorf("stateDirUnder(%q) = %q, want %q", c.stateDir, got, c.want)
 		}
+	}
+}
+
+// --diff-scope lines reports a lead in a changed file only when it is on a
+// changed line. A lead with no line (a dependency in a lockfile, say) is
+// about the whole file and stays. The note counts what was left out.
+func TestDiffScopeLinesReportsOnlyTheChangedLines(t *testing.T) {
+	// diffTarget's second commit appends lines 5 and 6 to app.py; the lead
+	// of sqlLead is on line 4, which did not change.
+	onChanged := sqlLead()
+	onChanged.RuleID, onChanged.Line = "on-changed-line", 6
+	wholeFile := sqlLead()
+	wholeFile.RuleID, wholeFile.Line, wholeFile.Class, wholeFile.Title = "whole-file", 0, "vulnerable-dependency", "a dependency"
+	inOld := sqlLead()
+	inOld.File, inOld.RuleID, inOld.Class, inOld.Title = "old.py", "py-os-system", "command-injection", "os.system with a variable"
+	leads := []seed.Lead{sqlLead(), onChanged, wholeFile, inOld}
+
+	o := opts(t, fakeSeeder{name: "fake", leads: leads})
+	o.Since, o.DiffScope = diffTarget(t, o.Target), DiffScopeLines
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range res.Run.Findings {
+		got = append(got, f.Location.String())
+	}
+	if len(got) != 2 || !slices.Contains(got, "app.py:6") || !slices.Contains(got, "app.py") {
+		t.Fatalf("findings at %q, want app.py:6 and the whole-file lead", got)
+	}
+	if !containsNote(res.Run.Notes, "1 leads in other files were left out") || !containsNote(res.Run.Notes, diffLinesNote(1)) {
+		t.Fatalf("notes = %q", res.Run.Notes)
+	}
+	if res.Run.DiffScope != DiffScopeLines {
+		t.Fatalf("the run does not record its diff scope: %q", res.Run.DiffScope)
+	}
+
+	// The default scope, and "file", report every lead of the changed file.
+	for _, scope := range []string{"", DiffScopeFile} {
+		o = opts(t, fakeSeeder{name: "fake", leads: leads})
+		o.Since, o.DiffScope = diffTarget(t, o.Target), scope
+		if res, err = Run(context.Background(), o); err != nil || len(res.Run.Findings) != 3 || containsNote(res.Run.Notes, "changed lines") || res.Run.DiffScope != "" {
+			t.Fatalf("scope %q: findings = %d, notes = %q, err = %v", scope, len(res.Run.Findings), res.Run.Notes, err)
+		}
+	}
+}
+
+// --diff-scope lines with --changed covers the edited lines of a tracked
+// file and every line of an untracked one.
+func TestDiffScopeLinesWithChanged(t *testing.T) {
+	onEdit := sqlLead()
+	onEdit.RuleID, onEdit.Line = "on-edit", 7
+	inNew := sqlLead()
+	inNew.File = "new.py"
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), onEdit, inNew}})
+	diffTarget(t, o.Target)
+	if err := os.WriteFile(filepath.Join(o.Target, "new.py"), []byte("1\n2\n3\n4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// app.py has 6 committed lines; line 7 is the uncommitted edit.
+	if err := os.WriteFile(filepath.Join(o.Target, "app.py"), append(mustReadFile(t, filepath.Join(o.Target, "app.py")), []byte("# edited\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.Changed, o.DiffScope = true, DiffScopeLines
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range res.Run.Findings {
+		got = append(got, f.Location.String())
+	}
+	if len(got) != 2 || !slices.Contains(got, "app.py:7") || !slices.Contains(got, "new.py:4") {
+		t.Fatalf("findings at %q, want app.py:7 and new.py:4", got)
+	}
+	if !containsNote(res.Run.Notes, diffLinesNote(1)) {
+		t.Fatalf("notes = %q", res.Run.Notes)
+	}
+}
+
+func TestDiffScopeRefusals(t *testing.T) {
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	o.DiffScope = DiffScopeLines
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "give --since or --changed") {
+		t.Fatalf("lines without a diff scan: err = %v", err)
+	}
+	o.Since, o.DiffScope = "main", "hunks"
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), `not "hunks"`) {
+		t.Fatalf("unknown scope: err = %v", err)
+	}
+	if entries, _ := os.ReadDir(RunsDir(o.Config.StateDir)); len(entries) != 0 {
+		t.Fatal("a refused run left a run directory")
 	}
 }

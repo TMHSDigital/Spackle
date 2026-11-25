@@ -63,6 +63,12 @@ inputs:
       (fetch-depth 0). Empty scans and reports on the whole path.
     required: false
     default: ''
+  diff-scope:
+    description: >-
+      With diff-base: "file" reports every lead in a changed file, "lines" only the
+      leads on the changed lines. Empty uses the default, "file".
+    required: false
+    default: ''
   args:
     description: >-
       Extra arguments passed to "spackle scan". The value is split on spaces and line
@@ -174,6 +180,7 @@ runs:
         SPACKLE_BUDGET_USD: ${{ inputs.budget-usd }}
         SPACKLE_FIX: ${{ inputs.fix }}
         SPACKLE_DIFF_BASE: ${{ inputs.diff-base }}
+        SPACKLE_DIFF_SCOPE: ${{ inputs.diff-scope }}
         SPACKLE_ARGS: ${{ inputs.args }}
       run: |
         set -uo pipefail
@@ -188,6 +195,7 @@ runs:
         if [ -n "${SPACKLE_FAIL_ON_CONFIDENCE}" ]; then args+=(--fail-on-confidence "${SPACKLE_FAIL_ON_CONFIDENCE}"); fi
         if [ "${SPACKLE_FIX}" = "true" ]; then args+=(--fix); else args+=(--no-fix); fi
         if [ -n "${SPACKLE_DIFF_BASE}" ]; then args+=(--since "${SPACKLE_DIFF_BASE}"); fi
+        if [ -n "${SPACKLE_DIFF_SCOPE}" ]; then args+=(--diff-scope "${SPACKLE_DIFF_SCOPE}"); fi
         if [ -n "${SPACKLE_ARGS}" ]; then
           # The value is split on whitespace, line breaks included. Quotes
           # would not group words, so a quoted value is refused instead of
