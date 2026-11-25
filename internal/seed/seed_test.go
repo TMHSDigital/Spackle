@@ -350,3 +350,74 @@ func TestRunAllInKeepsOnlyTheChangedFiles(t *testing.T) {
 		t.Fatalf("the cap applied to leads that were dropped anyway: %q", statuses[0].Note)
 	}
 }
+
+// inFlight is an external scanner that counts how many run at once.
+type inFlight struct {
+	name      string
+	available bool
+	fail      bool
+	now, max  *int32
+}
+
+func (s inFlight) Name() string { return s.name }
+func (s inFlight) Available() (bool, string) {
+	if !s.available {
+		return false, "not installed"
+	}
+	return true, ""
+}
+func (s inFlight) Run(context.Context, string, []walk.File) ([]Lead, error) {
+	if !s.available {
+		panic(s.name + " ran although it is not available")
+	}
+	n := atomic.AddInt32(s.now, 1)
+	for {
+		m := atomic.LoadInt32(s.max)
+		if n <= m || atomic.CompareAndSwapInt32(s.max, m, n) {
+			break
+		}
+	}
+	time.Sleep(50 * time.Millisecond)
+	atomic.AddInt32(s.now, -1)
+	if s.fail {
+		return nil, errors.New(s.name + " broke")
+	}
+	return []Lead{{RuleID: s.name, Class: "debug-enabled", File: s.name + ".py", Line: 1, Title: "t", Detail: "d", Fix: "f"}}, nil
+}
+
+// At most maxConcurrentScanners external scanners run at once; a failure
+// stays in its own status, an unavailable scanner never starts, and the
+// statuses keep seeder order.
+func TestRunAllCapsConcurrentScanners(t *testing.T) {
+	var now, peak int32
+	var seeders []Seeder
+	for i := 0; i < 6; i++ {
+		seeders = append(seeders, inFlight{name: fmt.Sprintf("s%d", i), available: i != 4, fail: i == 2, now: &now, max: &peak})
+	}
+	leads, statuses := RunAll(context.Background(), seeders, "", nil, nil)
+	if peak != maxConcurrentScanners {
+		t.Fatalf("at most %d scanners ran at once, want %d", peak, maxConcurrentScanners)
+	}
+	for i, st := range statuses {
+		if st.Name != fmt.Sprintf("s%d", i) {
+			t.Fatalf("statuses out of seeder order: %+v", statuses)
+		}
+		switch i {
+		case 2:
+			if !strings.Contains(st.Error, "s2 broke") || st.Leads != 0 {
+				t.Errorf("failing scanner: %+v", st)
+			}
+		case 4:
+			if st.Available || st.Leads != 0 {
+				t.Errorf("unavailable scanner: %+v", st)
+			}
+		default:
+			if st.Error != "" || st.Leads != 1 {
+				t.Errorf("scanner %d: %+v", i, st)
+			}
+		}
+	}
+	if len(leads) != 4 {
+		t.Fatalf("leads = %d, want 4", len(leads))
+	}
+}

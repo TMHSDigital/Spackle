@@ -85,6 +85,26 @@ jobs:
           upload-sarif: 'false'
           upload-run: 'true'
           fail-on: never
+      # An offline run demonstrates nothing, so with this gate the findings
+      # that fail the default run do not count.
+      - name: fail-on-confidence demonstrated
+        id: confidence
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          fail-on-confidence: demonstrated
+      - name: fail-on-confidence with an unknown value
+        id: badconfidence
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/demo-app
+          spackle-dir: ${{ runner.temp }}/spackle-bin
+          upload-sarif: 'false'
+          fail-on-confidence: certain
       - name: Arguments on several lines
         id: multiline
         continue-on-error: true
@@ -141,6 +161,8 @@ jobs:
         env:
           DEFAULT: ${{ steps.default.outputs.exit-code }}
           NEVER: ${{ steps.never.outputs.exit-code }}
+          CONFIDENCE: ${{ steps.confidence.outputs.exit-code }}
+          BADCONFIDENCE: ${{ steps.badconfidence.outputs.exit-code }}
           MULTILINE: ${{ steps.multiline.outputs.exit-code }}
           QUOTED: ${{ steps.quoted.outputs.exit-code }}
           BADFLAG: ${{ steps.badflag.outputs.exit-code }}
@@ -153,6 +175,8 @@ jobs:
           }
           check "default threshold" "${DEFAULT}" 1
           check "fail-on never" "${NEVER}" 0
+          check "fail-on-confidence demonstrated" "${CONFIDENCE}" 0
+          check "fail-on-confidence unknown" "${BADCONFIDENCE}" 2
           # The second line of args must be applied too: it turns the failure off.
           check "arguments on several lines" "${MULTILINE}" 0
           check "quoted arguments" "${QUOTED}" 2
