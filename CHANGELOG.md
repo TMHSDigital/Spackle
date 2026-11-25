@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A running target whose host has non-ASCII letters is now refused before the interactive confirmation, with the hint to write the host in punycode in a scope file. The operator used to be asked to type the host and then be refused anyway.
 - A model tool call with a path that contains a NUL byte is now refused before the file system is touched, and an OS error about a path is reduced to its cause. The error used to include the absolute path of the scanned checkout, which was sent to the provider.
 - `spackle runs` and `spackle runs compare` now clean control characters out of finding titles, locations and targets before printing them, as the reports do, so a scanned repository cannot send terminal escape sequences through them.
 - `spackle report --finding <id> --out <dir>` without `--format` now writes the configured file formats under `<dir>`, or exits 2 and asks for `--format` when only the terminal format is configured. It used to print to the terminal, write nothing and exit 0.

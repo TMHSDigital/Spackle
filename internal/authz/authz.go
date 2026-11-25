@@ -82,6 +82,11 @@ func Gate(target *url.URL, opts Options) (*Grant, error) {
 	case !opts.Interactive:
 		return nil, fmt.Errorf("%w: %s is a live target, no scope was given, and stdin is not a terminal (piped input is not consent). %s", ErrNotAuthorized, ep, howToAuthorize)
 	default:
+		// The confirmed host becomes the scope, so a host a scope cannot
+		// hold is refused before the operator is asked about it.
+		if _, err := parseScopeHost(ep.String()); err != nil {
+			return nil, fmt.Errorf("%w: %s cannot be confirmed: %w. Pass --authorize <scope-file> with the host written that way", ErrNotAuthorized, ep, err)
+		}
 		if err := confirm(ep, opts); err != nil {
 			return nil, err
 		}

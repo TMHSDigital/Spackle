@@ -441,6 +441,19 @@ func TestGateInteractive(t *testing.T) {
 	}
 }
 
+// A host no scope can hold is refused before the prompt, with the hint on
+// how to write it.
+func TestGateInteractiveRefusesANonASCIIHostBeforeAsking(t *testing.T) {
+	var stderr bytes.Buffer
+	_, err := Gate(mustURL(t, "http://bücher.example/"), Options{Interactive: true, Stdin: strings.NewReader("bücher.example\n"), Stderr: &stderr})
+	if !errors.Is(err, ErrNotAuthorized) || !strings.Contains(err.Error(), "punycode") || strings.Contains(err.Error(), "interactive confirmation") {
+		t.Fatalf("err = %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("the operator was asked before the refusal: %q", stderr.String())
+	}
+}
+
 func TestGateInteractiveLeavesRestOfStdin(t *testing.T) {
 	in := strings.NewReader("localhost\nnext answer\n")
 	if _, err := Gate(mustURL(t, "http://localhost/"), Options{Interactive: true, Stdin: in, Stderr: &bytes.Buffer{}}); err != nil {
