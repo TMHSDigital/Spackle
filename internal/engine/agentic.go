@@ -427,18 +427,11 @@ func (r *runner) investigateOne(ctx context.Context, st *agenticState, sg agenti
 	}
 	st.parent[f.ID] = seq
 	st.findings = append(st.findings, f)
-	// The finished finding goes into the ledger at once, so an interrupt or
-	// a later failure cannot lose it. The ranked findings are appended again
-	// at the end of the run; the ledger keeps the latest event per id. One
-	// that does not validate is reported as a reject when the run ends.
-	if f.Validate() == nil {
-		if _, err := r.led.Append(seq, ledger.TypeFinding, f); err != nil {
-			return goOn, err
-		}
-		if r.recorded == nil {
-			r.recorded = map[string]bool{}
-		}
-		r.recorded[f.ID] = true
+	// The finished finding goes into the ledger at once. The ranked findings
+	// are appended again at the end of the run; the ledger keeps the latest
+	// event per id.
+	if err := r.persist(seq, f); err != nil {
+		return goOn, err
 	}
 	st.settle(it.LeadIDs, fateFound, "")
 	return step, nil

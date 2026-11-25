@@ -43,9 +43,9 @@ type runner struct {
 	resume *resumeState
 	// ended is set once the ledger has its run.end event.
 	ended bool
-	// recorded holds the ids of findings already appended to the ledger
+	// recorded holds the ids of findings persist appended to the ledger
 	// before recordFindings runs. An event cannot be taken back, so the
-	// max-findings cap keeps them.
+	// max-findings cap keeps them. Only persist writes it.
 	recorded map[string]bool
 }
 
@@ -380,34 +380,73 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	return r.end(startSeq, outcome)
 }
 
-// recordFindings applies the max-findings cap and appends the findings to the
-// ledger. It is the one place a finding of a code scan or a running-target
-// scan enters the ledger. findings must be ranked: the cap keeps the first
-// ones and lists the rest in a budget skip event under mapSeq. Findings that
-// are already in the ledger (see runner.recorded) are kept first, whatever
-// their rank, because the report would load them anyway. A finding that
-// does not validate is a Spackle bug, not a target problem, and is recorded
-// as a reject instead of being reported.
+// persist appends one finished finding to the ledger at once, so an
+// interrupt or a later failure cannot lose it, and remembers it in
+// runner.recorded so the max-findings cap keeps it. A finding that does not
+// validate is not written here: recordFindings writes its reject when the
+// run ends. persist and recordFindings are the only two writers of
+// findings to the ledger of a code scan or a running-target scan.
+func (r *runner) persist(seq int64, f finding.Finding) error {
+	if f.Validate() != nil {
+		return nil
+	}
+	if _, err := r.led.Append(seq, ledger.TypeFinding, f); err != nil {
+		return err
+	}
+	if r.recorded == nil {
+		r.recorded = map[string]bool{}
+	}
+	r.recorded[f.ID] = true
+	return nil
+}
+
+// capFindings applies a max-findings limit to ranked findings. The ones in
+// recorded are already in the ledger, and an event cannot be taken back, so
+// they are always kept and come first in the count; the rest fill what
+// room is left, in rank order. dropped describes the findings left out,
+// and over is how many recorded findings exceed the limit on their own
+// (zero while investigations are planned within the cap).
+func capFindings(findings []finding.Finding, recorded map[string]bool, limit int) (kept []finding.Finding, dropped []string, over int) {
+	if limit <= 0 || len(findings) <= limit {
+		return findings, nil, 0
+	}
+	var rest []finding.Finding
+	for _, f := range findings {
+		if recorded[f.ID] {
+			kept = append(kept, f)
+		} else {
+			rest = append(rest, f)
+		}
+	}
+	over = max(len(kept)-limit, 0)
+	room := min(max(limit-len(kept), 0), len(rest))
+	for _, f := range rest[room:] {
+		dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
+	}
+	return finding.Rank(append(kept, rest[:room]...)), dropped, over
+}
+
+// recordFindings applies the max-findings cap and appends the findings to
+// the ledger when the run ends. findings must be ranked: the cap keeps the
+// first ones and lists the rest in a budget skip event under mapSeq.
+// Findings that persist already wrote are kept whatever their rank (see
+// capFindings), because the report would load them anyway; if they alone
+// exceed the cap, a note says so. A finding that does not validate is a
+// Spackle bug, not a target problem, and is recorded as a reject instead
+// of being reported.
 func (r *runner) recordFindings(mapSeq int64, findings []finding.Finding, parent map[string]int64) error {
 	if limit := r.cfg.Budget.MaxFindings; limit > 0 && len(findings) > limit {
-		var kept, rest []finding.Finding
-		for _, f := range findings {
-			if r.recorded[f.ID] {
-				kept = append(kept, f)
-			} else {
-				rest = append(rest, f)
-			}
-		}
-		// The investigations are planned within the cap, so kept fits.
-		room := max(limit-len(kept), 0)
-		room = min(room, len(rest))
 		var dropped []string
-		for _, f := range rest[room:] {
-			dropped = append(dropped, fmt.Sprintf("%s %s (%s)", f.ID, f.Title, f.Location))
-		}
-		findings = finding.Rank(append(kept, rest[:room]...))
+		var over int
+		findings, dropped, over = capFindings(findings, r.recorded, limit)
 		if _, err := r.led.Append(mapSeq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: fmt.Sprintf("max findings (%d)", limit), Skipped: dropped}); err != nil {
 			return err
+		}
+		if over > 0 {
+			note := fmt.Sprintf("%d findings were already recorded when the max findings cap of %d applied, so the report holds %d more than the cap.", limit+over, limit, over)
+			if _, err := r.led.Append(mapSeq, ledger.TypeNote, note); err != nil {
+				return err
+			}
 		}
 	}
 	for _, f := range findings {
