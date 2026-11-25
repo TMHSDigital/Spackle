@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `spackle scan --changed` on a git URL now names `--changed` in its refusal instead of `--since`, and `--since` given the report's label for `--changed` is treated as a revision instead of starting a `--changed` scan. The MCP `scan` tool refuses a blank `since`, and `since` together with `changed`, in its own argument names.
 - `spackle scan --changed` now works in a repository with no commit yet, where every staged or untracked file counts as changed, and no longer counts the files of the state directory as changed files in its note.
 - Pressing Ctrl-C while `spackle debug` bisects or looks for the root cause now ends the run `interrupted` and keeps the reproduced failure as its finding, as an interrupted scan keeps its findings. It used to end the run `failed` and drop the reproduction.
 - `spackle scan --resume` of a `--since` or `--changed` scan now keeps that run's file set. The run records its diff base, the resume command printed when the budget runs out includes the flag, a resume without it applies the stored one, and a different one is refused. A resumed diff scan used to report every lead in the tree.

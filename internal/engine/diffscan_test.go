@@ -195,6 +195,20 @@ func TestSinceRefusals(t *testing.T) {
 			t.Fatalf("%s: err = %v", target, err)
 		}
 	}
+	// --changed on a git URL names --changed, not --since.
+	o = opts(t)
+	o.Target, o.Changed = "https://example.test/owner/repo.git", true
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--changed lists the uncommitted work") || strings.Contains(err.Error(), "--since") {
+		t.Fatalf("--changed on a git URL: err = %v", err)
+	}
+	// The report's label for --changed given as a revision is a revision,
+	// not a request for a --changed scan.
+	o = opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	diffTarget(t, o.Target)
+	o.Since = diffBase(Options{Changed: true}).label
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "fetch-depth") {
+		t.Fatalf("the --changed label as --since: err = %v", err)
+	}
 }
 
 func TestChangedMapNarrowsWhatThePlannerSees(t *testing.T) {

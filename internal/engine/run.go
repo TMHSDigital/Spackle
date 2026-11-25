@@ -67,7 +67,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		if opts.DryRun {
 			return Result{}, fmt.Errorf("%w: --dry-run is for a directory or a git URL. For a running target, the scope file states what a scan may send", ErrRefused)
 		}
-		if diffBase(opts) != "" {
+		if diffBase(opts) != nil {
 			return Result{}, fmt.Errorf("%w: --since and --changed limit a scan of a directory to its changed files, and %s is a running target", ErrRefused, tgt.Display)
 		}
 		if opts.Resume != "" {
@@ -115,8 +115,8 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if opts.Since != "" && opts.Changed {
 		return Result{}, fmt.Errorf("%w: --since and --changed choose different file sets; give one", ErrRefused)
 	}
-	if diffBase(opts) != "" && tgt.Kind != target.KindPath {
-		return Result{}, fmt.Errorf("%w: --since compares a checkout with a base revision, and %s is not a directory. Clone the repository with the history you need and scan the directory", ErrRefused, tgt.Display)
+	if d := diffBase(opts); d != nil && tgt.Kind != target.KindPath {
+		return Result{}, fmt.Errorf("%w: %s", ErrRefused, d.notLocal(tgt.Display))
 	}
 	if tgt.Kind == target.KindGit {
 		root = filepath.Join(stateDir, "clones", runID)
@@ -154,7 +154,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		// a diff flag it takes the earlier run's; a different one would
 		// mix two file sets in one report.
 		switch {
-		case diffBase(opts) == "":
+		case diffBase(opts) == nil:
 			opts.Since, opts.Changed = resume.since, resume.changed
 		case opts.Since != resume.since || opts.Changed != resume.changed:
 			return Result{}, fmt.Errorf("%w: --resume: run %s was %s, and this scan asks for %s. Resume it without --since or --changed to keep its file set",
@@ -165,7 +165,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	// A diff scan needs its file list before anything else is done, so a
 	// revision git does not know refuses the run at once.
 	var changed map[string]bool
-	if diffBase(opts) != "" {
+	if diffBase(opts) != nil {
 		if changed, err = changedSince(ctx, root, diffBase(opts), stateDir); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
@@ -193,7 +193,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 	if changed != nil {
 		var note string
-		leads, note = keepChanged(leads, changed, diffBase(opts))
+		leads, note = keepChanged(leads, changed, diffBase(opts).label)
 		scanNotes = append(scanNotes, note)
 	}
 	statuses = countLeads(statuses, leads)

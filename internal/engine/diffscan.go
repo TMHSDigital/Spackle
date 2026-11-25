@@ -12,50 +12,68 @@ import (
 	"github.com/TMHSDigital/spackle/internal/seed"
 )
 
-// uncommitted is the diff base of a --changed scan, as the report names it.
-const uncommitted = "the last commit (uncommitted changes)"
+// diffScan is what a diff scan compares against, built from the options.
+type diffScan struct {
+	// flag is the option that asked for it: --since or --changed.
+	flag string
+	// changed is true for --changed, which lists uncommitted work. rev is
+	// the --since revision otherwise.
+	changed bool
+	rev     string
+	// label is what the report says the scan compared against.
+	label string
+}
 
-// diffBase returns what a diff scan compares against: the --since revision,
-// uncommitted for --changed, or "" for a full scan.
-func diffBase(opts Options) string {
-	if opts.Changed {
-		return uncommitted
+// diffBase returns the diff scan the options ask for, or nil for a full
+// scan.
+func diffBase(opts Options) *diffScan {
+	switch {
+	case opts.Changed:
+		return &diffScan{flag: "--changed", changed: true, label: "the last commit (uncommitted changes)"}
+	case opts.Since != "":
+		return &diffScan{flag: "--since", rev: opts.Since, label: opts.Since}
 	}
-	return opts.Since
+	return nil
+}
+
+// notLocal is the refusal of a diff scan of something that is not a
+// directory, in the words of the flag that asked for it.
+func (d *diffScan) notLocal(display string) string {
+	if d.changed {
+		return fmt.Sprintf("--changed lists the uncommitted work of a local checkout, and %s is not a directory. Scan the directory of your checkout", display)
+	}
+	return fmt.Sprintf("--since compares a checkout with a base revision, and %s is not a directory. Clone the repository with the history you need and scan the directory", display)
 }
 
 // changedSince returns the set of files a diff scan covers: the files under
-// root that were added or changed since rev. The error says what to do,
-// because the usual cause is a CI checkout that did not fetch the base.
-// The state directory, when it is inside root, is never a changed file.
-func changedSince(ctx context.Context, root, rev, stateDir string) (map[string]bool, error) {
-	flag := "--since"
-	if rev == uncommitted {
-		flag = "--changed"
-	}
+// root that were added or changed since the diff base. The error says what
+// to do, because the usual cause is a CI checkout that did not fetch the
+// base. The state directory, when it is inside root, is never a changed
+// file.
+func changedSince(ctx context.Context, root string, d *diffScan, stateDir string) (map[string]bool, error) {
 	switch {
 	case !gitx.Available():
-		return nil, fmt.Errorf("%s needs a git repository, and git is not installed", flag)
-	case rev != uncommitted && !gitx.HasTracked(ctx, root):
+		return nil, fmt.Errorf("%s needs a git repository, and git is not installed", d.flag)
+	case !d.changed && !gitx.HasTracked(ctx, root):
 		// Uncommitted work needs no tracked file: before the first commit,
 		// every file is uncommitted.
-		return nil, fmt.Errorf("%s needs a git repository, and %s has no tracked files", flag, root)
+		return nil, fmt.Errorf("%s needs a git repository, and %s has no tracked files", d.flag, root)
 	}
 	var files []string
 	var err error
-	if rev == uncommitted {
+	if d.changed {
 		files, err = gitx.ChangedUncommitted(ctx, root, stateDirUnder(root, stateDir)...)
 	} else {
-		files, err = gitx.ChangedSince(ctx, root, rev)
+		files, err = gitx.ChangedSince(ctx, root, d.rev)
 	}
 	if err != nil {
 		if errors.Is(err, gitx.ErrNotRepo) {
-			return nil, fmt.Errorf("%s needs a git repository, and %s is not inside one", flag, root)
+			return nil, fmt.Errorf("%s needs a git repository, and %s is not inside one", d.flag, root)
 		}
-		if rev == uncommitted {
+		if d.changed {
 			return nil, fmt.Errorf("--changed: git could not list the changes against HEAD (%w)", err)
 		}
-		return nil, fmt.Errorf("--since %s: git could not compare that revision with HEAD (%w). Check the name, and in CI fetch the base commit first, for example with fetch-depth: 0", rev, err)
+		return nil, fmt.Errorf("--since %s: git could not compare that revision with HEAD (%w). Check the name, and in CI fetch the base commit first, for example with fetch-depth: 0", d.rev, err)
 	}
 	changed := make(map[string]bool, len(files))
 	for _, f := range files {

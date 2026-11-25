@@ -373,9 +373,15 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 	opts := engine.Options{Target: dir, Config: cfg, Progress: s.progress()}
 	if a.Since != nil {
 		opts.Since = strings.TrimSpace(*a.Since)
+		if opts.Since == "" {
+			return errorf("scan refused: since is empty. Give a git revision to compare with, or leave since out for a full scan")
+		}
 	}
 	if a.Changed != nil {
 		opts.Changed = *a.Changed
+	}
+	if opts.Since != "" && opts.Changed {
+		return errorf("scan refused: since and changed choose different file sets; give one")
 	}
 	res, err := s.scanFn(ctx, opts)
 	if err != nil {

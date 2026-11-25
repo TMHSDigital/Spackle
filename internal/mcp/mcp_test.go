@@ -1231,6 +1231,17 @@ func TestScanSinceAndCompareRuns(t *testing.T) {
 	if len(seen) != 2 || seen[0].Since != "main" || seen[0].Changed || !seen[1].Changed || seen[1].Since != "" {
 		t.Fatalf("engine options = %+v", seen)
 	}
+	// A blank since, and since with changed, are refused in the tool's
+	// own argument names before the engine is called.
+	if tr := c.tool("scan", map[string]any{"path": ".", "since": "  "}); !tr.IsError || !strings.Contains(tr.text(), "since is empty") {
+		t.Fatalf("blank since: %s", tr.text())
+	}
+	if tr := c.tool("scan", map[string]any{"path": ".", "since": "main", "changed": true}); !tr.IsError || !strings.Contains(tr.text(), "since and changed choose different file sets") || strings.Contains(tr.text(), "--") {
+		t.Fatalf("since with changed: %s", tr.text())
+	}
+	if len(*fx.seen) != 2 {
+		t.Fatalf("a refused scan reached the engine: %+v", *fx.seen)
+	}
 	*fx.seen = nil
 	for i := 0; i < 2; i++ {
 		if tr := c.tool("scan", map[string]any{"path": "."}); tr.IsError {
