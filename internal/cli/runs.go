@@ -264,9 +264,9 @@ func runRunsPrune(env Env, args []string) int {
 }
 
 func runRunsCompare(env Env, args []string) int {
-	fs := newFlagSet(env, "runs compare", "<older-run-id> <newer-run-id>", "Compare the findings of two stored runs: new in the newer run, gone from it, and in both.\nA run id may be a unique prefix, or \"latest\". Findings are matched by id, which includes the\nline, so code that moved shows as one finding gone and one new.")
+	fs := newFlagSet(env, "runs compare", "<older-run-id> <newer-run-id>", "Compare the findings of two stored runs: new in the newer run, gone from it, and in both.\nA run id may be a unique prefix, or \"latest\". Findings are matched by id, which includes the\nline, so code that moved shows as one finding gone and one new.\nWith --fail-on, it exits 1 when a new finding is at or above that severity.")
 	var g globalFlags
-	g.registerGroups(fs, flagsConfig)
+	g.registerGroups(fs, flagsConfig|flagsFailOn)
 	format := fs.String("format", "text", "output `format`: text or json")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -298,6 +298,22 @@ func runRunsCompare(env Env, args []string) int {
 		}
 	}
 	c := report.Compare(loaded[0], loaded[1])
+	// Only the new findings can fail the comparison, and only when asked:
+	// the fail_on of the config file is for scans.
+	if g.failOn == "" {
+		cfg.Output.FailOn = "never"
+	}
+	isNew := map[string]bool{}
+	for _, r := range c.New {
+		isNew[r.ID] = true
+	}
+	var added report.Run
+	for _, f := range loaded[1].Findings {
+		if isNew[f.ID] {
+			added.Findings = append(added.Findings, f)
+		}
+	}
+	code := exitFor(cfg, added)
 	if *format == "json" {
 		enc := json.NewEncoder(env.Stdout)
 		enc.SetIndent("", "  ")
@@ -305,7 +321,7 @@ func runRunsCompare(env Env, args []string) int {
 			fmt.Fprintf(env.Stderr, "spackle runs compare: %v\n", err)
 			return ExitError
 		}
-		return ExitOK
+		return code
 	}
 	fmt.Fprintf(env.Stdout, "Comparing %s (older) with %s (newer).\n", c.Older, c.Newer)
 	if loaded[0].Target != loaded[1].Target {
@@ -325,5 +341,5 @@ func runRunsCompare(env Env, args []string) int {
 			fmt.Fprintln(env.Stdout, report.CleanText(line))
 		}
 	}
-	return ExitOK
+	return code
 }

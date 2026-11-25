@@ -198,6 +198,20 @@ func TestRunsCompare(t *testing.T) {
 		t.Fatalf("one run id exited %d", code)
 	}
 
+	// --fail-on fails the comparison on a new finding only. Without it the
+	// exit code is 0, as checked above, whatever the config's fail_on says.
+	for _, c := range []struct {
+		older, newer string
+		want         int
+	}{{names[0], names[1], ExitFindings}, {names[1], names[1], ExitOK}} {
+		for _, format := range []string{"text", "json"} {
+			code := Main([]string{"runs", "compare", c.older, c.newer, "--config", cfg, "--fail-on", "low", "--format", format}, strings.NewReader(""), &out, &errb)
+			if code != c.want {
+				t.Fatalf("compare %s %s --fail-on low --format %s exited %d, want %d", c.older, c.newer, format, code, c.want)
+			}
+		}
+	}
+
 	// Text from the target never reaches the terminal as control bytes. A
 	// stored title and target are given an escape sequence that would
 	// retitle the terminal.
