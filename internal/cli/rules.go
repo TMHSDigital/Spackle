@@ -11,7 +11,7 @@ import (
 
 func runRules(env Env, args []string) int {
 	fs := newFlagSet(env, "rules", "", "List the built-in rules: their source, id, class, severity, CWE and the files they read.\nAn id, or source:id, is what [scan] disable_rules takes.\nRules of external scanners (semgrep, gitleaks, ...) are not listed: see each scanner's own documentation.")
-	format := fs.String("format", "text", "`text` or json")
+	format := fs.String("format", "text", "output `format`: text or json")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
 		return flagExit(err)

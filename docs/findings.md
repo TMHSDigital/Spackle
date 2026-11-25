@@ -174,7 +174,7 @@ SQL injection is reported as `reasoned` with confidence `high`, not `demonstrate
 
 A dismissal needs a reason. A reviewer that says "refuted" without one does not dismiss anything: the finding is kept and the verdict is recorded as uncertain.
 
-Dismissed findings stay in the report, ranked last. Only `open` and `patch-available` findings count toward `fail_on`.
+Dismissed findings stay in the report, ranked last. Only `open` and `patch-available` findings count toward `fail_on`, and `fail_on_confidence` can leave out those below a confidence level (see [config.md](config.md)).
 
 ## How severity is computed
 

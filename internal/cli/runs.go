@@ -46,7 +46,7 @@ func runRuns(env Env, args []string) int {
 		return flagExit(err)
 	}
 	if len(pos) > 0 {
-		fmt.Fprintf(env.Stderr, "spackle runs: unexpected argument %q. Use \"spackle runs\" to list or \"spackle runs prune\" to delete.\n", pos[0])
+		fmt.Fprintf(env.Stderr, "spackle runs: unexpected argument %q. Use \"spackle runs\" to list, \"spackle runs compare\" to compare two runs or \"spackle runs prune\" to delete.\n", pos[0])
 		return ExitUsage
 	}
 	if *format != "text" && *format != "json" {
@@ -136,7 +136,6 @@ func storedRuns(stateDir string) ([]runRow, error) {
 	return rows, nil
 }
 
-// parseAge reads a duration that may also be given in days ("30d").
 // countFlag is a count that may be left unset. Unset is not zero ("--keep 0"
 // deletes every run), and the help shows no default for it.
 type countFlag struct {
@@ -160,6 +159,7 @@ func (c *countFlag) Set(s string) error {
 	return nil
 }
 
+// parseAge reads a duration that may also be given in days ("30d").
 func parseAge(s string) (time.Duration, error) {
 	if days, ok := strings.CutSuffix(s, "d"); ok {
 		n, err := strconv.Atoi(days)
