@@ -1007,3 +1007,37 @@ func TestNoTestMatched(t *testing.T) {
 		}
 	}
 }
+
+// An interrupt during the root cause analysis ends the run interrupted and
+// keeps the failure it reproduced, as an interrupted scan keeps its findings.
+func TestDebugInterruptKeepsTheReproducedFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake := debugModel{fix: fixedCalc}.provider()
+	play := fake.Handler
+	fake.Handler = func(req llm.Request, n int) (llm.Response, error) {
+		if strings.Contains(req.System, "find the root cause") {
+			cancel()
+			return llm.Response{}, context.Canceled
+		}
+		return play(req, n)
+	}
+	rt := &debugRuntime{}
+	res, err := Debug(ctx, debugOpts(t, fake, rt))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.Outcome != ledger.OutcomeInterrupted {
+		t.Fatalf("outcome = %s, want interrupted", res.Run.Outcome)
+	}
+	if len(res.Run.Skipped) != 1 || res.Run.Skipped[0].Cap != interruptedNote || !strings.Contains(strings.Join(res.Run.Skipped[0].Skipped, "|"), "Root cause analysis") {
+		t.Fatalf("skipped = %+v", res.Run.Skipped)
+	}
+	f := oneFinding(t, res)
+	if f.Proof.Status != finding.ProofDemonstrated || f.Remediation.Patch != "" || !strings.Contains(f.Flaw.Description, "interrupted by the operator") {
+		t.Fatalf("the reproduced failure was not kept: proof %s, patch %q, description %q", f.Proof.Status, f.Remediation.Patch, f.Flaw.Description)
+	}
+	if got := rt.purposes(t, res.RunDir); len(got) != 1 || got[0] != "repro" {
+		t.Fatalf("sandbox runs = %v, want only the reproduction", got)
+	}
+}

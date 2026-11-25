@@ -415,13 +415,29 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 
 	bisect := ""
 	outcome := ledger.OutcomeCompleted
+	// An interrupt after the failure was reproduced keeps the reproduction:
+	// the run ends interrupted with the finding built from what it has.
+	interrupted := false
+	interrupt := func(left ...string) error {
+		st := capState{}
+		st.interrupt(d.r.say, left...)
+		outcome, interrupted = st.outcome, true
+		_, err := d.r.led.Append(d.seq, ledger.TypeBudgetSkip, ledger.BudgetSkip{Cap: st.capNote, Skipped: st.skipped})
+		return err
+	}
 	if d.good != "" {
 		if bisect, err = d.bisect(ctx, rep); err != nil {
-			if !errors.Is(err, budget.ErrExhausted) {
-				return "", nil, err
-			}
-			outcome = ledger.OutcomeBudgetExhausted
-			if err := d.skip(err, "Bisect: stopped early, so the first bad commit was not found."); err != nil {
+			switch {
+			case errors.Is(err, budget.ErrExhausted):
+				outcome = ledger.OutcomeBudgetExhausted
+				if err := d.skip(err, "Bisect: stopped early, so the first bad commit was not found."); err != nil {
+					return "", nil, err
+				}
+			case ctx.Err() != nil:
+				if err := interrupt("Bisect: stopped early, so the first bad commit was not found.", "Root cause analysis and fix: not started."); err != nil {
+					return "", nil, err
+				}
+			default:
 				return "", nil, err
 			}
 		}
@@ -435,12 +451,19 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 	}
 	var diag agent.Diagnosis
 	derr := d.r.budget.Check()
-	if derr == nil {
+	if interrupted {
+		diag.Reason = "the run was interrupted by the operator before it was looked for"
+	} else if derr == nil {
 		d.r.say("Looking for the root cause")
 		diag, derr = agent.Diagnose(ctx, fixer, d.seq, d.r.sealer, newRegistry(), d.root, d.failureText(rep, bisect), wantFix, d.r.cfg.Fix.MaxAttempts, d.check(rep))
 	}
 	switch {
-	case derr == nil:
+	case derr == nil || interrupted:
+	case ctx.Err() != nil:
+		if err := interrupt("Root cause analysis and fix: not completed."); err != nil {
+			return "", nil, err
+		}
+		diag = agent.Diagnosis{Reason: "the run was interrupted by the operator before it was found"}
 	case errors.Is(derr, budget.ErrExhausted):
 		outcome = ledger.OutcomeBudgetExhausted
 		left := "Root cause analysis and fix: not completed."
@@ -454,11 +477,16 @@ func (d *debugRun) investigate(ctx context.Context, reproCmd []string, prover, f
 			return "", nil, err
 		}
 		diag.Reason = "the budget ran out first (" + derr.Error() + ")"
-	case ctx.Err() != nil:
-		return "", nil, ctx.Err()
 	default:
 		// A provider failure should not discard a reproduced failure.
 		diag.Reason = "the diagnosis step failed: " + textx.Clip(derr.Error(), 300)
+	}
+	if interrupted {
+		// The run's context is cancelled. The remaining steps are local and
+		// short, so they get a fresh context with its own limit.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		defer cancel()
 	}
 
 	f := d.finding(rep, bisect, diag, wantFix)

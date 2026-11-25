@@ -268,12 +268,7 @@ func (r *runner) assessLive(ctx context.Context, findings []finding.Finding, par
 	requestCap := fmt.Sprintf("request cap reached: all %d requests the scope allows for this run have been sent. Raise max_requests in the scope to assess the rest", client.MaxRequests())
 	// interrupt ends the assessment at finding i. The probe findings are
 	// complete, so they are kept and the rest listed as not assessed.
-	interrupt := func(i int) {
-		st.capNote = "interrupted by the operator"
-		st.skipped = append(st.skipped, notAssessed(findings[i:])...)
-		st.outcome = ledger.OutcomeInterrupted
-		r.say("Interrupted: writing the findings produced so far")
-	}
+	interrupt := func(i int) { st.interrupt(r.say, notAssessed(findings[i:])...) }
 	for i := range findings {
 		if ctx.Err() != nil {
 			interrupt(i)

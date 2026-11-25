@@ -306,9 +306,7 @@ func (r *runner) agentic(ctx context.Context, root string, m mapper.Map, leads [
 		}
 	}
 	if st.interrupted {
-		st.outcome = ledger.OutcomeInterrupted
-		st.capNote = "interrupted by the operator"
-		r.say("Interrupted: writing the findings produced so far")
+		st.interrupt(r.say)
 		// The run's context is cancelled. The remaining steps are local and
 		// short, so they get a fresh context with its own limit.
 		var cancel context.CancelFunc

@@ -142,6 +142,18 @@ type capState struct {
 	skipped []string
 }
 
+// interruptedNote is the cap note of a run the operator interrupted.
+const interruptedNote = "interrupted by the operator"
+
+// interrupt records that the operator interrupted the run and what it left
+// undone, and says that the run is writing what it has.
+func (c *capState) interrupt(say func(string, ...any), skipped ...string) {
+	c.capNote = interruptedNote
+	c.skipped = append(c.skipped, skipped...)
+	c.outcome = ledger.OutcomeInterrupted
+	say("Interrupted: writing the findings produced so far")
+}
+
 // exhaust records that a cap was reached and what it left undone.
 func (c *capState) exhaust(capNote string, skipped ...string) {
 	c.capNote = capNote
