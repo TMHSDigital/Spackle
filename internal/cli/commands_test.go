@@ -86,6 +86,22 @@ func TestReportFindingRendersOnlyThatFinding(t *testing.T) {
 	if code, stdout, _ := run("report", "latest", "--config", cfg, "--finding", keep); code != ExitOK || !strings.Contains(stdout, keep) || strings.Contains(stdout, other) {
 		t.Errorf("default format: code=%d", code)
 	}
+	// With --out and no --format, a file format is needed, and a configured
+	// one is written there with only the selection.
+	out := filepath.Join(t.TempDir(), "out")
+	if code, _, stderr := run("report", "latest", "--config", cfg, "--finding", keep, "--out", out); code != ExitUsage || !strings.Contains(stderr, "--format") {
+		t.Errorf("--out with only the terminal format: code=%d\nstderr: %s", code, stderr)
+	}
+	withJSON := filepath.Join(filepath.Dir(cfg), "json.toml")
+	if err := os.WriteFile(withJSON, append(mustRead(t, cfg), []byte("\n[output]\nformats = [\"json\"]\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := run("report", "latest", "--config", withJSON, "--finding", keep, "--out", out); code != ExitOK {
+		t.Fatalf("--out with a configured file format: code=%d\nstderr: %s", code, stderr)
+	}
+	if b := string(mustRead(t, filepath.Join(out, "report.json"))); !strings.Contains(b, keep) || strings.Contains(b, other) {
+		t.Errorf("report.json under --out does not hold only the selection")
+	}
 	for _, bad := range []string{"SPK-00000000", "not-an-id"} {
 		if code, _, stderr := run("report", "latest", "--config", cfg, "--format", "json", "--finding", bad); code != ExitUsage || stderr == "" {
 			t.Errorf("--finding %s: code=%d, want usage", bad, code)

@@ -51,8 +51,12 @@ func runReport(env Env, args []string) int {
 		}
 		// The stored reports hold every finding, so a selection is printed,
 		// or written under --out, and never pointed at the stored files.
-		if g.format == "" {
+		if g.format == "" && cfg.Output.Dir == "" {
 			cfg.Output.Formats = []string{"terminal"}
+		}
+		if cfg.Output.Dir != "" && !writesFile(cfg.Output.Formats) {
+			fmt.Fprintln(env.Stderr, "spackle report: --out writes report files, and the formats asked for are only printed. Add --format with a file format: markdown, json, sarif or html.")
+			return ExitUsage
 		}
 		if len(cfg.Output.Formats) > 1 && cfg.Output.Dir == "" {
 			fmt.Fprintln(env.Stderr, "spackle report: with --finding, give one --format to print, or --out to write several.")
@@ -64,6 +68,17 @@ func runReport(env Env, args []string) int {
 		return ExitError
 	}
 	return ExitOK
+}
+
+// writesFile reports whether any of the formats is written to a file under
+// --out. The terminal format is always printed instead.
+func writesFile(formats []string) bool {
+	for _, format := range formats {
+		if ext, _ := report.Ext(format); ext != "txt" {
+			return true
+		}
+	}
+	return false
 }
 
 // findingIDRe is the form of a finding id.
