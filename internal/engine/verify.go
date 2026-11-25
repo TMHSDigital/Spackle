@@ -29,6 +29,8 @@ type VerifyOptions struct {
 	Clock    func() time.Time
 	// DetectRuntime overrides container runtime detection, for tests.
 	DetectRuntime func(ctx context.Context, preferred string) (sandbox.Runtime, error)
+	// Findings, when set, limits verify to the proofs of these finding ids.
+	Findings []string
 }
 
 // VerifyOutcome is the result of re-running one stored proof.
@@ -82,7 +84,14 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 		man pocManifest
 	}
 	var jobs []job
+	only := map[string]bool{}
+	for _, id := range opts.Findings {
+		only[id] = true
+	}
 	for _, f := range run.Findings {
+		if len(only) > 0 && !only[f.ID] {
+			continue
+		}
 		raw, rerr := os.ReadFile(filepath.Join(opts.RunDir, "findings", f.ID, "poc", "poc.json")) //nolint:gosec // inside the run directory
 		if rerr != nil {
 			continue // no stored proof for this finding

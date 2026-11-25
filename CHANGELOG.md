@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `[output] fail_on_confidence` (also `--fail-on-confidence` and the Action input `fail-on-confidence`) sets the lowest confidence a finding needs to count toward `fail_on`: `plausible` (the default, every finding, as before), `high` or `demonstrated`. Unconfirmed leads can then be reported without failing CI.
 - `spackle report <run> --finding <id>` (repeatable) renders only the named findings, in any format. An id that is not in the run exits 2.
 - A `[scan]` configuration table: `exclude` (also `--exclude`, repeatable) keeps paths out of the scan, `include` reads a directory that is skipped by default, and `disable_rules` drops the leads of a rule. The report lists what was excluded.
+- `spackle verify --format json` prints every outcome as one JSON document with the counts, and `--finding <id>` (repeatable) re-runs only the proofs of the named findings. An id that is not in the run exits 2.
 - Action outputs `run-id`, `run-dir` and the per-severity counts `critical`, `high`, `medium` and `low`, and the input `upload-run`, which uploads the run directory (ledger, reports, proofs, patches) as a workflow artifact so it outlives the job. The Action now also writes a JSON report next to the SARIF and Markdown ones.
 - Action input `spackle-dir`, to run the Action with an existing binary instead of a downloaded release, and output `has-sarif`.
 - `spackle doctor --format json` prints the checks as JSON, with the same rows the MCP `doctor` tool returns.

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TMHSDigital/spackle/internal/config"
+	"github.com/TMHSDigital/spackle/internal/engine"
 	"github.com/TMHSDigital/spackle/internal/seed"
 )
 
@@ -638,5 +639,64 @@ func TestRulesListAndDisableRulesTypo(t *testing.T) {
 	_, _, stderr := run("scan", plantedTarget(t, criticalFlaw), "--config", cfg, "--offline", "--format", "json")
 	if !strings.Contains(stderr, "py-sql-fstrng") || strings.Contains(stderr, "semgrep:some.rule") {
 		t.Fatalf("stderr = %s", stderr)
+	}
+}
+
+// verify --format json prints every outcome as one document, and --finding
+// passes only the named, existing ids to the engine.
+func TestVerifyJSONAndFinding(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	if code, _, stderr := run("scan", target, "--config", cfg, "--offline", "--format", "json"); code != ExitFindings {
+		t.Fatalf("scan: exit = %d\nstderr: %s", code, stderr)
+	}
+	var stored struct {
+		Findings []struct {
+			ID string `json:"id"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(mustRead(t, filepath.Join(onlyRunDir(t, stateDir), "reports", "report.json")), &stored); err != nil || len(stored.Findings) == 0 {
+		t.Fatalf("stored findings: %v", err)
+	}
+	id := stored.Findings[0].ID
+
+	var asked []string
+	old := verifyEngine
+	verifyEngine = func(_ context.Context, o engine.VerifyOptions) ([]engine.VerifyOutcome, error) {
+		asked = o.Findings
+		return []engine.VerifyOutcome{
+			{FindingID: id, Title: "t1", Note: "no longer succeeds"},
+			{FindingID: "SPK-00000002", Title: "t2", Reproduces: true, Note: "still prints the marker"},
+			{FindingID: "SPK-00000003", Title: "t3", Inconclusive: true, Note: "timed out"},
+		}, nil
+	}
+	t.Cleanup(func() { verifyEngine = old })
+
+	code, stdout, stderr := run("verify", "latest", "--config", cfg, "--format", "json", "--finding", strings.ToLower(id))
+	var got struct {
+		Outcomes []struct {
+			FindingID string `json:"finding_id"`
+			State     string `json:"state"`
+		} `json:"outcomes"`
+		Still       int `json:"still"`
+		Fixed       int `json:"fixed"`
+		NotVerified int `json:"not_verified"`
+	}
+	if code != ExitFindings || json.Unmarshal([]byte(stdout), &got) != nil {
+		t.Fatalf("exit = %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if len(got.Outcomes) != 3 || got.Outcomes[0].State != "fixed" || got.Outcomes[1].State != "still_reproduces" || got.Outcomes[2].State != "not_verified" || got.Still != 1 || got.Fixed != 1 || got.NotVerified != 1 {
+		t.Fatalf("json = %+v", got)
+	}
+	if len(asked) != 1 || asked[0] != id {
+		t.Fatalf("the engine was asked for %v, want only %s", asked, id)
+	}
+	for _, bad := range []string{"SPK-00000000", "not-an-id"} {
+		if code, _, stderr := run("verify", "latest", "--config", cfg, "--finding", bad); code != ExitUsage || stderr == "" {
+			t.Errorf("--finding %s: exit = %d", bad, code)
+		}
+	}
+	if code, _, _ := run("verify", "latest", "--config", cfg, "--format", "xml"); code != ExitUsage {
+		t.Errorf("--format xml: exit = %d", code)
 	}
 }

@@ -544,3 +544,25 @@ func TestFixBranchLeavesOutUncommittedEdits(t *testing.T) {
 		t.Fatalf("no note explains why there is no branch: %s", notes)
 	}
 }
+
+// VerifyOptions.Findings limits verify to the named findings' proofs.
+func TestVerifyOnlyTheNamedFindings(t *testing.T) {
+	rt := &fakeRuntime{}
+	o := labOpts(t, rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := res.Run.Findings[0].ID
+	detect := func(context.Context, string) (sandbox.Runtime, error) { return rt, nil }
+	out, err := Verify(context.Background(), VerifyOptions{Config: o.Config, RunDir: res.RunDir, DetectRuntime: detect, Findings: []string{"SPK-00000000"}})
+	if err == nil && len(out) != 0 {
+		t.Fatalf("a filter naming another finding re-ran %+v", out)
+	}
+	out, err = Verify(context.Background(), VerifyOptions{Config: o.Config, RunDir: res.RunDir, DetectRuntime: detect, Findings: []string{id}})
+	if err != nil || len(out) != 1 || out[0].FindingID != id {
+		t.Fatalf("outcomes = %+v, err = %v", out, err)
+	}
+}
