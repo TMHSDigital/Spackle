@@ -297,7 +297,7 @@ The direct dependencies in `go.mod`:
 | Module | Why |
 | :--- | :--- |
 | `github.com/BurntSushi/toml` | Parses `spackle.toml` and scope files, and reports unknown keys so a typo cannot silently change a scope or a budget |
-| `go.yaml.in/yaml/v3` | Parses Kubernetes manifests and CI workflows for the infrastructure rules |
+| `go.yaml.in/yaml/v4` | Parses Kubernetes manifests and CI workflows for the infrastructure rules |
 | `github.com/pandatix/go-cvss` | CVSS 4.0 validation and scoring. The scoring tables are easy to get subtly wrong, and a wrong score misranks every finding |
 
 Everything else is the standard library: the command line (`flag`), SARIF, the MCP server and HTML rendering (`html/template`).
