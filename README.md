@@ -77,6 +77,8 @@ export ANTHROPIC_API_KEY=...       # your own key; Spackle ships none
 spackle scan ./examples/demo-app --provider anthropic --model claude-opus-5-5
 ```
 
+In Windows PowerShell, set the key with `$env:ANTHROPIC_API_KEY = "..."` instead of `export`.
+
 Before a paid run Spackle prints an estimate and the hard caps, and waits for a yes. [Configuration](#configuration) covers OpenRouter, other OpenAI-compatible endpoints and fully local models.
 
 ## Why Spackle

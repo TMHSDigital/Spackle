@@ -221,6 +221,9 @@ section {
   border-top: 1px solid var(--border);
 }
 h2 { font: 600 1.6rem/1.2 var(--serif); margin: 0; text-wrap: balance; }
+/* section permalinks: shown on hover and keyboard focus */
+.anchor { margin-left: 0.4rem; color: var(--dim); text-decoration: none; opacity: 0; }
+h2:hover .anchor, .anchor:focus-visible { opacity: 1; }
 .cmd { display: block; font: 0.78rem/1.5 var(--mono); color: var(--dim); margin-top: 0.5rem; }
 .body { min-width: 0; }
 .body > :last-child { margin-bottom: 0; }
@@ -369,8 +372,8 @@ footer p { margin: 0; }
   <p><strong>Authorized use only.</strong> Point Spackle at systems you own or have explicit written permission to test. Testing someone else's system without consent is not security work and may be a crime. You are responsible for complying with the laws that apply to you.</p>
 </aside>
 
-<section id="confidence" aria-labelledby="h-confidence">
-  <h2 id="h-confidence">It says how sure it is</h2>
+<section id="confidence" aria-labelledby="h-confidence-text">
+  <h2 id="h-confidence"><span id="h-confidence-text">It says how sure it is</span><a class="anchor" href="#h-confidence" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <dl class="terms">
       <div><dt class="l3">demonstrated</dt><dd><b>The flaw's effect was observed.</b> A proof of concept ran in the sandbox and printed the marker Spackle gave it, or the behavior itself is in a recorded request and response.</dd></div>
@@ -381,8 +384,8 @@ footer p { margin: 0; }
   </div>
 </section>
 
-<section id="quick-start" aria-labelledby="h-quick-start">
-  <h2 id="h-quick-start">Quick start</h2>
+<section id="quick-start" aria-labelledby="h-quick-start-text">
+  <h2 id="h-quick-start"><span id="h-quick-start-text">Quick start</span><a class="anchor" href="#h-quick-start" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>Spackle is one static binary. The first run below needs no model, no key and no container runtime.</p>
 
@@ -410,13 +413,17 @@ spackle scan ./examples/demo-app</code></pre>
 <pre tabindex="0"><code>spackle doctor                     <span class="c"># what is installed, what is missing</span>
 export ANTHROPIC_API_KEY=...       <span class="c"># your own key; Spackle ships none</span>
 spackle scan ./examples/demo-app --provider anthropic --model claude-opus-5-5</code></pre>
+    <h3 class="label">With a model, in Windows PowerShell</h3>
+<pre tabindex="0"><code>spackle doctor
+$env:ANTHROPIC_API_KEY = "..."     <span class="c"># your own key; Spackle ships none</span>
+spackle scan .\examples\demo-app --provider anthropic --model claude-opus-5-5</code></pre>
 
     <p>Before a paid run Spackle prints an estimate and the hard caps, and waits for a yes.</p>
   </div>
 </section>
 
-<section id="how-it-works" aria-labelledby="h-how">
-  <h2 id="h-how">How it works</h2>
+<section id="how-it-works" aria-labelledby="h-how-text">
+  <h2 id="h-how"><span id="h-how-text">How it works</span><a class="anchor" href="#h-how" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <div class="scroll" tabindex="0" role="region" aria-label="Pipeline stages, in order">
       <table class="stages">
@@ -440,8 +447,8 @@ spackle scan ./examples/demo-app --provider anthropic --model claude-opus-5-5</c
   </div>
 </section>
 
-<section id="why" aria-labelledby="h-why">
-  <h2 id="h-why">Why Spackle</h2>
+<section id="why" aria-labelledby="h-why-text">
+  <h2 id="h-why"><span id="h-why-text">Why Spackle</span><a class="anchor" href="#h-why" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <dl class="why">
       <div><dt>The attacker's view</dt><dd>Each finding gives preconditions, the attack step by step, what it chains into and the blast radius, written for the person who has to decide what to fix first.</dd></div>
@@ -454,16 +461,16 @@ spackle scan ./examples/demo-app --provider anthropic --model claude-opus-5-5</c
   </div>
 </section>
 
-<section id="findings" aria-labelledby="h-findings">
-  <h2 id="h-findings">Anatomy of a finding</h2>
+<section id="findings" aria-labelledby="h-findings-text">
+  <h2 id="h-findings"><span id="h-findings-text">Anatomy of a finding</span><a class="anchor" href="#h-findings" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>Every finding has the same parts: identity, severity with its CVSS 4.0 vector, the flaw, the exploitation scenario, the proof, the blast radius, the remediation, and a confidence label with its reason. The finding at the top of this page is one of them, shortened. With a model, the exploitation scenario and remediation are written for the specific application instead of the class.</p>
     <p>Reports render as terminal text, Markdown, HTML, JSON and SARIF. <code>spackle report &lt;run-id&gt; --format html</code> rebuilds any of them from the ledger. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/findings.md">docs/findings.md</a> documents every field, and the <a href="https://github.com/TMHSDigital/Spackle#anatomy-of-a-finding">README</a> prints this finding in full.</p>
   </div>
 </section>
 
-<section id="running-targets" aria-labelledby="h-running">
-  <h2 id="h-running">Running targets <span class="cmd">spackle scan &lt;url&gt;</span></h2>
+<section id="running-targets" aria-labelledby="h-running-text">
+  <h2 id="h-running"><span id="h-running-text">Running targets <span class="cmd">spackle scan &lt;url&gt;</span></span><a class="anchor" href="#h-running" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>Point Spackle at an application you run. It crawls within scope, probes without changing state, and ties each finding to the stored request and response that show it.</p>
 <pre tabindex="0"><code><span class="c"># scope.toml</span>
@@ -479,8 +486,8 @@ statement = "My own dev server."</code></pre>
   </div>
 </section>
 
-<section id="debug" aria-labelledby="h-debug">
-  <h2 id="h-debug">Debug mode <span class="cmd">spackle debug</span></h2>
+<section id="debug" aria-labelledby="h-debug-text">
+  <h2 id="h-debug"><span id="h-debug-text">Debug mode <span class="cmd">spackle debug</span></span><a class="anchor" href="#h-debug" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>Start from a failing test or an issue. Spackle reproduces it in the sandbox, finds the root cause, writes a fix and verifies it.</p>
 <pre tabindex="0"><code>spackle debug . --test TestCheckoutTotal
@@ -489,8 +496,8 @@ spackle debug . --issue bug-report.md --good v1.4.0   <span class="c"># bisect f
   </div>
 </section>
 
-<section id="verify" aria-labelledby="h-verify">
-  <h2 id="h-verify">Verify a fix <span class="cmd">spackle verify</span></h2>
+<section id="verify" aria-labelledby="h-verify-text">
+  <h2 id="h-verify"><span id="h-verify-text">Verify a fix <span class="cmd">spackle verify</span></span><a class="anchor" href="#h-verify" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>A scan that writes a fix leaves the patch in <code>findings/&lt;id&gt;/fix.patch</code> and, in a git repository, on a <code>spackle/&lt;run-id&gt;</code> branch. Your code is not changed, so the finding has status <code>patch-available</code>. After you apply the patch or merge the branch, re-run the stored proofs against the code as it is now:</p>
 <pre tabindex="0"><code>spackle verify latest</code></pre>
@@ -498,8 +505,8 @@ spackle debug . --issue bug-report.md --good v1.4.0   <span class="c"># bisect f
   </div>
 </section>
 
-<section id="ci" aria-labelledby="h-ci">
-  <h2 id="h-ci">CI</h2>
+<section id="ci" aria-labelledby="h-ci-text">
+  <h2 id="h-ci"><span id="h-ci-text">CI</span><a class="anchor" href="#h-ci" aria-label="Link to this section">#</a></h2>
   <div class="body">
 <pre tabindex="0"><code>name: spackle
 on: [pull_request]
@@ -518,8 +525,8 @@ jobs:
   </div>
 </section>
 
-<section id="mcp" aria-labelledby="h-mcp">
-  <h2 id="h-mcp">MCP <span class="cmd">spackle mcp</span></h2>
+<section id="mcp" aria-labelledby="h-mcp-text">
+  <h2 id="h-mcp"><span id="h-mcp-text">MCP <span class="cmd">spackle mcp</span></span><a class="anchor" href="#h-mcp" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p><code>spackle mcp</code> serves Spackle's tools to an MCP client over stdin and stdout. You set the limits on the command line and the model chooses only within them: it can scan directories under <code class="nb">--root</code>, read reports and findings, and nothing else. It cannot pick a provider, raise a budget or reach a live target.</p>
 <pre tabindex="0"><code>claude mcp add spackle -- spackle mcp --root /absolute/path/to/project</code></pre>
@@ -527,8 +534,8 @@ jobs:
   </div>
 </section>
 
-<section id="configuration" aria-labelledby="h-config">
-  <h2 id="h-config">Configuration</h2>
+<section id="configuration" aria-labelledby="h-config-text">
+  <h2 id="h-config"><span id="h-config-text">Configuration</span><a class="anchor" href="#h-config" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>Spackle ships no model and no key. Configuration lives in <code>spackle.toml</code>; flags override it; API keys come only from environment variables.</p>
     <dl class="terms">
@@ -541,8 +548,8 @@ jobs:
   </div>
 </section>
 
-<section id="privacy" aria-labelledby="h-privacy">
-  <h2 id="h-privacy">Privacy</h2>
+<section id="privacy" aria-labelledby="h-privacy-text">
+  <h2 id="h-privacy"><span id="h-privacy-text">Privacy</span><a class="anchor" href="#h-privacy" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <div class="scroll">
       <table class="privacy">
@@ -561,8 +568,8 @@ jobs:
   </div>
 </section>
 
-<section id="benchmark" aria-labelledby="h-benchmark">
-  <h2 id="h-benchmark">Benchmark</h2>
+<section id="benchmark" aria-labelledby="h-benchmark-text">
+  <h2 id="h-benchmark"><span id="h-benchmark-text">Benchmark</span><a class="anchor" href="#h-benchmark" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p><code>bench/corpus</code> holds small fixture projects in Go, Python and TypeScript/JavaScript with planted, documented flaws, plus clean decoys that only look risky. <code>make bench</code> scores a run against the ground truth. This table is generated from the results files committed under <a href="https://github.com/TMHSDigital/Spackle/tree/main/bench/results">bench/results</a> and is never edited by hand.</p>
     <div class="scroll" tabindex="0" role="region" aria-label="Benchmark results">
@@ -580,15 +587,15 @@ jobs:
   </div>
 </section>
 
-<section id="comparison" aria-labelledby="h-comparison">
-  <h2 id="h-comparison">Comparison</h2>
+<section id="comparison" aria-labelledby="h-comparison-text">
+  <h2 id="h-comparison"><span id="h-comparison-text">Comparison</span><a class="anchor" href="#h-comparison" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <p>Spackle is new. Semgrep, CodeQL, Snyk, nuclei and the others are established, and each does something better than Spackle does; Spackle uses several of them as lead sources. <a href="https://github.com/TMHSDigital/Spackle/blob/main/docs/comparison.md">docs/comparison.md</a> says what each does better, tool by tool.</p>
   </div>
 </section>
 
-<section id="limits" aria-labelledby="h-limits">
-  <h2 id="h-limits">Limits</h2>
+<section id="limits" aria-labelledby="h-limits-text">
+  <h2 id="h-limits"><span id="h-limits-text">Limits</span><a class="anchor" href="#h-limits" aria-label="Link to this section">#</a></h2>
   <div class="body">
     <ul class="plain">
       <li>Proofs and fixes are run automatically for Go, Python and TypeScript/JavaScript. Other languages get findings and analysis only.</li>
