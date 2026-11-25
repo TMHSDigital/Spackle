@@ -636,6 +636,41 @@ func TestScanDryRun(t *testing.T) {
 	}
 }
 
+// An agentic dry run that nobody will confirm (--yes) says when the real
+// run would be refused because its dollar cap cannot hold for the model.
+// The dry run itself still exits 0 and calls no model: the base URL is not
+// a host that answers.
+func TestScanDryRunSaysAnUnpricedRunWouldBeRefused(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "spackle.toml")
+	body := "state_dir = " + strconv.Quote(filepath.ToSlash(filepath.Join(dir, "state"))) + "\n\n" +
+		"[sandbox]\nruntime = \"none\"\n\n" +
+		"[budget]\nusd = 2.0\n\n" +
+		"[model]\nprovider = \"openai-compatible\"\nmodel = \"unpriced-test-model\"\n" +
+		"base_url = \"https://models.example.test/v1\"\napi_key_env = \"SPACKLE_TEST_KEY\"\n"
+	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPACKLE_TEST_KEY", "placeholder-"+"not-a-key")
+	target := plantedTarget(t, criticalFlaw)
+
+	code, out, stderr := run("scan", target, "--config", cfg, "--dry-run", "--yes")
+	if code != ExitOK {
+		t.Fatalf("exit = %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+	for _, want := range []string{"agentic mode", "Investigations planned", "Note: A real run with these settings would be refused: the dollar cap of $2.00 cannot be enforced", "--allow-unpriced"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout lacks %q:\n%s", want, out)
+		}
+	}
+
+	// Opting in to an unpriced model removes the note.
+	code, out, stderr = run("scan", target, "--config", cfg, "--dry-run", "--yes", "--allow-unpriced")
+	if code != ExitOK || strings.Contains(out, "would be refused") {
+		t.Fatalf("with --allow-unpriced: exit = %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+}
+
 // fakeEngine makes the scan command get res and err from the engine.
 func fakeEngine(t *testing.T, res engine.Result, err error) {
 	t.Helper()

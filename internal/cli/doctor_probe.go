@@ -16,7 +16,7 @@ import (
 func doctorProbe(ctx context.Context, cfg config.Config, stage string, m config.Model) []check {
 	label := m.Provider + " " + m.Model
 	name := "model (" + stage + ")"
-	prov, err := llm.New(m, llm.Options{Offline: cfg.Offline})
+	prov, err := newProvider(m, llm.Options{Offline: cfg.Offline})
 	if err != nil {
 		return []check{{"Model", name, "fail", label + ": " + err.Error()}}
 	}
@@ -48,6 +48,10 @@ func doctorProbe(ctx context.Context, cfg config.Config, stage string, m config.
 	}
 	return out
 }
+
+// newProvider is llm.New. Tests replace it to probe a remote provider
+// without sending a request to another machine.
+var newProvider = llm.New
 
 func prefixed(note string) string {
 	if note == "" {
