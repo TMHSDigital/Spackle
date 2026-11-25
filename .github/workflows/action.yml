@@ -55,15 +55,27 @@ jobs:
           path: examples/demo-app
           spackle-dir: ${{ runner.temp }}/spackle-bin
           upload-sarif: 'false'
-      - name: Check the SARIF report of the default run
+      - name: Check the SARIF report and the run outputs of the default run
         shell: bash
         env:
           SARIF: ${{ steps.default.outputs.sarif }}
           HAS_SARIF: ${{ steps.default.outputs.has-sarif }}
+          RUN_ID: ${{ steps.default.outputs.run-id }}
+          RUN_DIR: ${{ steps.default.outputs.run-dir }}
+          CRITICAL: ${{ steps.default.outputs.critical }}
+          HIGH: ${{ steps.default.outputs.high }}
+          MEDIUM: ${{ steps.default.outputs.medium }}
+          LOW: ${{ steps.default.outputs.low }}
         run: |
           test "${HAS_SARIF}" = "true" || { echo "::error::has-sarif is '${HAS_SARIF}', want true"; exit 1; }
           jq -e '.runs[0].results | length > 0' "${SARIF}" > /dev/null || { echo "::error::the SARIF report does not parse or has no results"; exit 1; }
-      - name: fail-on never
+          test -n "${RUN_ID}" || { echo "::error::run-id is empty"; exit 1; }
+          test -f "${RUN_DIR}/ledger.jsonl" || { echo "::error::run-dir '${RUN_DIR}' holds no ledger"; exit 1; }
+          for n in "${CRITICAL}" "${HIGH}" "${MEDIUM}" "${LOW}"; do
+            case "${n}" in ''|*[!0-9]*) echo "::error::a severity count is '${n}', want a number"; exit 1 ;; esac
+          done
+          test $((CRITICAL + HIGH)) -gt 0 || { echo "::error::the default run fails, so it has a critical or high finding, but the counts say none"; exit 1; }
+      - name: fail-on never, with the run uploaded
         id: never
         continue-on-error: true
         uses: ./
@@ -71,6 +83,7 @@ jobs:
           path: examples/demo-app
           spackle-dir: ${{ runner.temp }}/spackle-bin
           upload-sarif: 'false'
+          upload-run: 'true'
           fail-on: never
       - name: Arguments on several lines
         id: multiline

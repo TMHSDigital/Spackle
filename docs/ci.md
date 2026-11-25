@@ -38,10 +38,11 @@ jobs:
 What the action does, in order:
 
 1. Downloads the release archive for the runner's operating system and architecture, and verifies it (see below).
-2. Runs `spackle scan <path> --yes --format sarif,markdown --out <temp dir> --fail-on <fail-on>`, with `--no-fix` unless you set `fix: true`.
+2. Runs `spackle scan <path> --yes --format sarif,markdown,json --out <temp dir> --fail-on <fail-on>`, with `--no-fix` unless you set `fix: true`.
 3. Appends the Markdown report to the job summary.
 4. Uploads the SARIF report to code scanning, under the category `spackle`.
-5. Fails the job with the scan's exit code. The upload runs first, so a failing scan still shows its alerts.
+5. With `upload-run: true`, uploads the run directory as a workflow artifact.
+6. Fails the job with the scan's exit code. The uploads run first, so a failing scan still shows its alerts.
 
 Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 
@@ -54,6 +55,7 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `fail-on` | `high` | Lowest severity that fails the job: `critical`, `high`, `medium`, `low` or `never` |
 | `fail-on-confidence` | empty | Lowest confidence a finding needs to count toward `fail-on`: `plausible` (every finding), `high` or `demonstrated`. Empty uses `fail_on_confidence` from a committed `spackle.toml`, whose default is `plausible` |
 | `upload-sarif` | `true` | Upload the SARIF report to code scanning. Needs `security-events: write` |
+| `upload-run` | `false` | Upload the run directory (ledger, reports, proofs, patches) as the artifact `spackle-run-<run id>`, so you can download it and run `spackle report` or `spackle verify` on it later. It holds code excerpts and proof output, so treat it as sensitive |
 | `provider` | empty | Model provider: `anthropic`, `openai`, `openai-compatible` or `ollama`. Empty runs the deterministic stages only, unless a committed `spackle.toml` has a `[model]` table (see below) |
 | `model` | empty | Model name for the provider |
 | `base-url` | empty | Endpoint for the `openai-compatible` provider |
@@ -71,6 +73,9 @@ Release archives exist for Linux, macOS and Windows runners on x64 and arm64.
 | `sarif` | Path of the SARIF report |
 | `exit-code` | Exit code of the scan: 0, 1, 2 or 3 (see [Exit codes](#exit-codes)) |
 | `has-sarif` | `true` when the scan wrote a SARIF report |
+| `run-id` | Id of the stored run. Empty when the scan was refused before a run was stored |
+| `run-dir` | Directory of the stored run, in the workspace. It is gone when the job ends unless `upload-run` is set |
+| `critical`, `high`, `medium`, `low` | Number of findings of that severity in the report, not counting dismissed ones |
 
 Give the step an `id` to read them:
 
