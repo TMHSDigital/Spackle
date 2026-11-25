@@ -855,25 +855,36 @@ func hadolintLeads(data []byte, root string, st *parseStats) ([]Lead, error) {
 	return leads, nil
 }
 
-// maxScannerOutput bounds the report one external scanner may write.
-const maxScannerOutput = 256 << 20
+// maxScannerOutput bounds the report one external scanner may write. It is a
+// variable only so that tests can lower it; nothing else changes it.
+var maxScannerOutput = 256 << 20
 
 // limitedBuffer is a bytes.Buffer that stops growing at limit and records
 // that it had to drop output. Writes always succeed, so the scanner is not
 // killed by a closed pipe and can finish and exit normally.
+//
+// The buffer is a named field, not embedded: an embedded bytes.Buffer would
+// bring its ReadFrom method along, and io.Copy (which os/exec uses to fill a
+// non-file Stdout) prefers ReadFrom over Write, so the limit would never run.
 type limitedBuffer struct {
-	bytes.Buffer
+	buf       bytes.Buffer
 	limit     int
 	truncated bool
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if room := b.limit - b.Len(); room < len(p) {
+	if room := b.limit - b.buf.Len(); room < len(p) {
 		b.truncated = true
 		if room > 0 {
-			b.Buffer.Write(p[:room])
+			b.buf.Write(p[:room])
 		}
 		return len(p), nil
 	}
-	return b.Buffer.Write(p)
+	return b.buf.Write(p)
 }
+
+// Bytes returns the output kept so far.
+func (b *limitedBuffer) Bytes() []byte { return b.buf.Bytes() }
+
+// String returns the output kept so far.
+func (b *limitedBuffer) String() string { return b.buf.String() }

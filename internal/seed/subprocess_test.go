@@ -105,6 +105,20 @@ func TestExternalScannerSubprocess(t *testing.T) {
 		})
 	}
 
+	t.Run("report larger than the limit", func(t *testing.T) {
+		old := maxScannerOutput
+		maxScannerOutput = 16
+		t.Cleanup(func() { maxScannerOutput = old })
+		e := stubScanner(t, `["a.py","b.py","c.py","d.py"]`, "", 1)
+		leads, err := e.Run(context.Background(), root, nil)
+		if err == nil || !strings.Contains(err.Error(), "larger than") {
+			t.Fatalf("err = %v, want it to mention %q", err, "larger than")
+		}
+		if leads != nil {
+			t.Fatalf("leads = %v, want none", leads)
+		}
+	})
+
 	t.Run("cancelled", func(t *testing.T) {
 		e := stubScanner(t, `["a.py"]`, "", 0)
 		ctx, cancel := context.WithCancel(context.Background())

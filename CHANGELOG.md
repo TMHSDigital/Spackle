@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The 256 MiB limit on an external scanner's report now holds. The report was copied into memory in a way that bypassed the limit, so a scanner that wrote more was read in full.
 - `spackle bench` no longer accepts `--authorize`, `--pr`, `--fail-on`, `--fail-on-confidence` and `--format`, which it ignored, and never asks a fixture scan to open a pull request, even with `[fix] pr = true` in the config.
 - A running target whose host has non-ASCII letters is now refused before the interactive confirmation, with the hint to write the host in punycode in a scope file. The operator used to be asked to type the host and then be refused anyway.
 - A model tool call with a path that contains a NUL byte is now refused before the file system is touched, and an OS error about a path is reduced to its cause. The error used to include the absolute path of the scanned checkout, which was sent to the provider.

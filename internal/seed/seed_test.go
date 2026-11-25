@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -265,6 +266,16 @@ func TestLimitedBufferStopsAtItsLimit(t *testing.T) {
 	}
 	if b.String() != "123456789a" || !b.truncated {
 		t.Fatalf("buffer = %q truncated = %v", b.String(), b.truncated)
+	}
+
+	// os/exec fills a non-file Stdout with io.Copy, which uses ReadFrom when
+	// the writer has one and so would skip the limit in Write.
+	c := &limitedBuffer{limit: 10}
+	if _, err := io.Copy(c, strings.NewReader("123456789abcdef")); err != nil {
+		t.Fatal(err)
+	}
+	if c.String() != "123456789a" || !c.truncated {
+		t.Fatalf("after io.Copy: buffer = %q truncated = %v", c.String(), c.truncated)
 	}
 }
 
