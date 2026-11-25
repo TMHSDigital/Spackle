@@ -292,40 +292,62 @@ func ChangedSince(ctx context.Context, dir, rev string) ([]string, error) {
 // ChangedUncommitted returns the files under dir, relative to it, that
 // differ from HEAD (staged or not) plus the untracked files git does not
 // ignore: what a commit made now could add. Deleted files are left out.
-func ChangedUncommitted(ctx context.Context, dir string) ([]string, error) {
-	files, err := changedFiles(ctx, dir, "HEAD")
+// Before the first commit every file in the index counts as changed.
+// exclude names directories under dir, relative to it, that are left out,
+// such as the state directory.
+func ChangedUncommitted(ctx context.Context, dir string, exclude ...string) ([]string, error) {
+	pathspec := []string{"--", "."}
+	for _, e := range exclude {
+		pathspec = append(pathspec, ":(exclude)"+filepath.ToSlash(e))
+	}
+	var files []string
+	if _, err := run(ctx, dir, "rev-parse", "--verify", "-q", "HEAD"); err == nil {
+		if files, err = changedFiles(ctx, dir, "HEAD", pathspec...); err != nil {
+			return nil, err
+		}
+	} else {
+		if errors.Is(err, ErrNotRepo) {
+			return nil, err
+		}
+		out, err := run(ctx, dir, append([]string{"ls-files", "-z"}, pathspec...)...)
+		if err != nil {
+			return nil, err
+		}
+		files = splitNUL(out)
+	}
+	out, err := run(ctx, dir, append([]string{"ls-files", "-z", "--others", "--exclude-standard"}, pathspec...)...)
 	if err != nil {
 		return nil, err
 	}
-	out, err := run(ctx, dir, "ls-files", "-z", "--others", "--exclude-standard")
-	if err != nil {
-		return nil, err
-	}
+	return append(files, splitNUL(out)...), nil
+}
+
+// splitNUL splits git -z output into its non-empty entries.
+func splitNUL(out string) []string {
+	var entries []string
 	for _, f := range strings.Split(out, "\x00") {
 		if f != "" {
-			files = append(files, f)
+			entries = append(entries, f)
 		}
 	}
-	return files, nil
+	return entries
 }
 
 // changedFiles lists the files under dir that git diff against spec reports
 // as added, copied, modified or renamed.
-func changedFiles(ctx context.Context, dir, spec string) ([]string, error) {
+func changedFiles(ctx context.Context, dir, spec string, pathspec ...string) ([]string, error) {
+	if len(pathspec) == 0 {
+		pathspec = []string{"--"}
+	}
 	// -z keeps a file name with a quote, a newline or a non-ASCII character
 	// intact. --no-textconv and --no-ext-diff keep the repository's own
 	// configuration from starting a program.
-	out, err := run(ctx, dir, "diff", "--name-only", "-z", "--relative", "--no-textconv", "--no-ext-diff", "--diff-filter=ACMR", spec, "--")
+	args := append([]string{"diff", "--name-only", "-z", "--relative", "--no-textconv", "--no-ext-diff", "--diff-filter=ACMR", spec}, pathspec...)
+	out, err := run(ctx, dir, args...)
 	if err != nil {
 		return nil, err
 	}
-	var files []string
-	for _, f := range strings.Split(out, "\x00") {
-		if f != "" {
-			files = append(files, f)
-		}
-	}
-	return files, nil
+	return splitNUL(out), nil
 }
 
 // Archive exports the tree at rev into dest (which must exist), without any

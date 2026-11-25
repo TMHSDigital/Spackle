@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `spackle scan --changed` now works in a repository with no commit yet, where every staged or untracked file counts as changed, and no longer counts the files of the state directory as changed files in its note.
 - Pressing Ctrl-C while `spackle debug` bisects or looks for the root cause now ends the run `interrupted` and keeps the reproduced failure as its finding, as an interrupted scan keeps its findings. It used to end the run `failed` and drop the reproduction.
 - `spackle scan --resume` of a `--since` or `--changed` scan now keeps that run's file set. The run records its diff base, the resume command printed when the budget runs out includes the flag, a resume without it applies the stored one, and a different one is refused. A resumed diff scan used to report every lead in the tree.
 - `spackle runs prune --help` no longer shows an internal default of -1 for `--keep` or the scan wording for `--yes`, and a negative `--keep` is a usage error. The docs and help text now say that `patch-available` findings count toward `fail_on`, that `verify` exits 1 when a proof could not be verified, that `--resume` also continues an interrupted scan, which flags `doctor` and `runs` take, that finding ids made from a rule hit include the rule, and that `[sandbox] network = "scope"` attaches an unfiltered bridge network to code-scan proofs.

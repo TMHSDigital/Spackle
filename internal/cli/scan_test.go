@@ -488,6 +488,25 @@ func TestScanSinceNeedsARepository(t *testing.T) {
 	}
 }
 
+// TestScanChangedReachesTheEngine checks that --changed is passed through,
+// and that it cannot be combined with --since.
+func TestScanChangedReachesTheEngine(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	t.Setenv("PATH", t.TempDir())
+	code, _, stderr := run("scan", target, "--config", cfg, "--format", "json", "--changed")
+	if code != ExitUsage || !strings.Contains(stderr, "--changed needs a git repository") {
+		t.Fatalf("exit = %d, want %d\nstderr: %s", code, ExitUsage, stderr)
+	}
+	code, _, stderr = run("scan", target, "--config", cfg, "--format", "json", "--changed", "--since", "HEAD")
+	if code != ExitUsage || !strings.Contains(stderr, "choose different file sets") {
+		t.Fatalf("--changed with --since: exit = %d, want %d\nstderr: %s", code, ExitUsage, stderr)
+	}
+	if dirs := runDirs(t, stateDir); len(dirs) != 0 {
+		t.Errorf("a refused run left a run directory behind: %v", dirs)
+	}
+}
+
 // TestScanResumeIsRefusedWithoutAModel checks that --resume reaches the
 // engine: with no model there is nothing that could continue a run.
 func TestScanResumeIsRefusedWithoutAModel(t *testing.T) {

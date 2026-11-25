@@ -283,3 +283,40 @@ func TestSeederLeadCountsMatchTheLeadsTheScanReports(t *testing.T) {
 		}
 	})
 }
+
+// --changed works before the first commit: every staged or untracked file
+// is uncommitted work.
+func TestChangedBeforeTheFirstCommit(t *testing.T) {
+	if !gitx.Available() {
+		t.Skip("git is not installed; a diff scan needs it")
+	}
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	o.Changed = true
+	gitIn(t, o.Target, "init", "-q", "-b", "main")
+	gitIn(t, o.Target, "add", "app.py")
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Run.Findings) != 1 || !containsNote(res.Run.Notes, ": 1 changed files.") {
+		t.Fatalf("findings = %d, notes = %q", len(res.Run.Findings), res.Run.Notes)
+	}
+}
+
+func TestStateDirUnder(t *testing.T) {
+	root := t.TempDir()
+	for _, c := range []struct {
+		stateDir string
+		want     string
+	}{
+		{filepath.Join(root, ".spackle"), ".spackle"},
+		{filepath.Join(root, "sub", "state"), filepath.Join("sub", "state")},
+		{root, ""},
+		{filepath.Join(filepath.Dir(root), "elsewhere"), ""},
+	} {
+		got := strings.Join(stateDirUnder(root, c.stateDir), "")
+		if got != c.want {
+			t.Errorf("stateDirUnder(%q) = %q, want %q", c.stateDir, got, c.want)
+		}
+	}
+}

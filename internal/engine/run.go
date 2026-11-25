@@ -166,7 +166,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	// revision git does not know refuses the run at once.
 	var changed map[string]bool
 	if diffBase(opts) != "" {
-		if changed, err = changedSince(ctx, root, diffBase(opts)); err != nil {
+		if changed, err = changedSince(ctx, root, diffBase(opts), stateDir); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
 	}

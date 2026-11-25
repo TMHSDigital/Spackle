@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -284,5 +285,68 @@ func TestChangedSince(t *testing.T) {
 		if _, err := ChangedSince(ctx, dir, rev); err == nil {
 			t.Errorf("revision %q was accepted", rev)
 		}
+	}
+}
+
+func TestChangedUncommitted(t *testing.T) {
+	ctx := context.Background()
+	dir := newRepo(t)
+	writeFile(t, dir, "staged.txt", "one\n")
+	writeFile(t, dir, "gone.txt", "one\n")
+	writeFile(t, dir, "old name.txt", "one\n")
+	writeFile(t, dir, ".gitignore", "*.log\n")
+	commit(t, dir, "base")
+	if got, err := ChangedUncommitted(ctx, dir); err != nil || len(got) != 0 {
+		t.Fatalf("clean tree: %q, err = %v", got, err)
+	}
+
+	writeFile(t, dir, "a.txt", "two\n") // unstaged edit
+	writeFile(t, dir, "staged.txt", "two\n")
+	git(t, dir, "add", "staged.txt") // staged edit
+	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "sub/naïve.txt", "new\n") // untracked
+	git(t, dir, "mv", "old name.txt", "sub/new name.txt")
+	writeFile(t, dir, "debug.log", "ignored\n")
+	writeFile(t, dir, ".spackle/runs/r1/ledger.jsonl", "{}\n")
+	writeFile(t, dir, ".spackle/cache/map.json", "{}\n")
+
+	sorted := func(files []string) string {
+		s := append([]string(nil), files...)
+		sort.Strings(s)
+		return strings.Join(s, "|")
+	}
+	got, err := ChangedUncommitted(ctx, dir, ".spackle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "a.txt|staged.txt|sub/naïve.txt|sub/new name.txt"; sorted(got) != want {
+		t.Fatalf("changed = %q, want %q", sorted(got), want)
+	}
+	// Without the exclusion the state directory would count.
+	if got, _ = ChangedUncommitted(ctx, dir); !strings.Contains(sorted(got), ".spackle/") {
+		t.Fatalf("changed without exclusion = %q", got)
+	}
+	// From a subdirectory the paths are relative to it and limited to it.
+	if got, err = ChangedUncommitted(ctx, filepath.Join(dir, "sub")); err != nil || sorted(got) != "naïve.txt|new name.txt" {
+		t.Fatalf("changed under sub = %q, err = %v", got, err)
+	}
+
+	// Before the first commit, staged and untracked files are all changed.
+	fresh := t.TempDir()
+	git(t, fresh, "init", "-q", "-b", "main")
+	writeFile(t, fresh, "main.go", "package main\n")
+	writeFile(t, fresh, "notes.txt", "x\n")
+	writeFile(t, fresh, ".spackle/summary.json", "{}\n")
+	git(t, fresh, "add", "main.go")
+	if got, err = ChangedUncommitted(ctx, fresh, ".spackle"); err != nil || sorted(got) != "main.go|notes.txt" {
+		t.Fatalf("no commit yet: %q, err = %v", got, err)
+	}
+
+	outside := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(outside))
+	if _, err := ChangedUncommitted(ctx, outside); !errors.Is(err, ErrNotRepo) {
+		t.Fatalf("outside a repository: err = %v, want ErrNotRepo", err)
 	}
 }

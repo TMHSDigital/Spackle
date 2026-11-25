@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/mapper"
@@ -25,18 +27,24 @@ func diffBase(opts Options) string {
 // changedSince returns the set of files a diff scan covers: the files under
 // root that were added or changed since rev. The error says what to do,
 // because the usual cause is a CI checkout that did not fetch the base.
-func changedSince(ctx context.Context, root, rev string) (map[string]bool, error) {
+// The state directory, when it is inside root, is never a changed file.
+func changedSince(ctx context.Context, root, rev, stateDir string) (map[string]bool, error) {
 	flag := "--since"
 	if rev == uncommitted {
 		flag = "--changed"
 	}
-	if !gitx.HasTracked(ctx, root) {
+	switch {
+	case !gitx.Available():
+		return nil, fmt.Errorf("%s needs a git repository, and git is not installed", flag)
+	case rev != uncommitted && !gitx.HasTracked(ctx, root):
+		// Uncommitted work needs no tracked file: before the first commit,
+		// every file is uncommitted.
 		return nil, fmt.Errorf("%s needs a git repository, and %s has no tracked files", flag, root)
 	}
 	var files []string
 	var err error
 	if rev == uncommitted {
-		files, err = gitx.ChangedUncommitted(ctx, root)
+		files, err = gitx.ChangedUncommitted(ctx, root, stateDirUnder(root, stateDir)...)
 	} else {
 		files, err = gitx.ChangedSince(ctx, root, rev)
 	}
@@ -54,6 +62,21 @@ func changedSince(ctx context.Context, root, rev string) (map[string]bool, error
 		changed[f] = true
 	}
 	return changed, nil
+}
+
+// stateDirUnder returns the state directory relative to root when it is
+// inside root, as the one path a listing of root's files leaves out, and
+// nothing otherwise.
+func stateDirUnder(root, stateDir string) []string {
+	abs, err := filepath.Abs(stateDir)
+	if err != nil {
+		return nil
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return nil
+	}
+	return []string{rel}
 }
 
 // keepChanged drops the leads that are not in a changed file. A lead with
