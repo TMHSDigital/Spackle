@@ -84,6 +84,7 @@ pr = false              # true is the same as --pr
 exclude = []            # globs of paths not to read, for example ["bench/corpus/**"]
 include = []            # default-skipped directories to read anyway, for example ["build"]
 disable_rules = []      # rule ids whose leads are dropped
+# scanners = ["gitleaks", "hadolint"]  # external scanners that may run; absent: every installed one
 
 [output]
 formats = ["terminal"]  # terminal, markdown, html, json, sarif
@@ -449,6 +450,7 @@ Things to know:
 | `exclude` | `--exclude` (repeatable) | none | Paths that are not read and whose scanner leads are dropped |
 | `include` | none | none | Directories to read although their name is skipped by default |
 | `disable_rules` | none | none | Rule ids whose leads are dropped |
+| `scanners` | none | every installed scanner | External scanners that may run: `semgrep`, `gitleaks`, `osv-scanner`, `trivy`, `hadolint` |
 
 Patterns are forward-slash globs relative to the target root. `*` and `?` match within one path segment and `**` matches any number of segments, so `bench/corpus/**` excludes that tree and `**/testdata/**` excludes every `testdata` directory. A pattern with no slash, such as `*.min.js`, is also matched against the file or directory name alone.
 
@@ -460,6 +462,8 @@ Some directories are not read by default, and each one that is pruned is listed 
 Name a pruned directory in `include` (for example `build` or `services/api/vendor/**`) when it holds source you answer for. Version control data (`.git`, `.hg`, `.svn`) and Spackle's own state directory are never read.
 
 A rule id is the part after the colon in a finding's origin (`builtin-code:py-sql-fstring` is rule `py-sql-fstring`). Write `source:rule` to disable a rule for one scanner only. `spackle rules` (or `spackle rules --format json`) lists every built-in rule with its source, id, class, severity, CWE and the files it reads. A scan warns when `disable_rules` names something that looks like a built-in id (such as `py-sql-fstrng`) but matches none; ids of external scanners are not checked.
+
+`scanners` chooses which external scanners run, before any of them starts, so a scanner you leave out costs no time and downloads nothing. Without the key every installed scanner runs; `scanners = []` runs none, and the built-in rules always run. A scanner left out is listed in the report and in `spackle doctor` as not run, with the reason. A name that is not one of the five is refused when the configuration is loaded.
 
 Every excluded path is listed in the report as "Not read", and the report notes the configured exclusions, inclusions and disabled rules with the number of leads each removed, so a reader can see what the scan did not cover. The map cache is not used while `exclude` or `include` is set.
 

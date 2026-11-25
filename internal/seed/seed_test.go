@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/walk"
 )
 
@@ -430,5 +431,23 @@ func TestRunAllCapsConcurrentScanners(t *testing.T) {
 	}
 	if len(leads) != 4 {
 		t.Fatalf("leads = %d, want 4", len(leads))
+	}
+}
+
+// config.ExternalScanners, which [scan] scanners is checked against, names
+// exactly the external scanners.
+func TestExternalScannerNamesMatchTheConfig(t *testing.T) {
+	var names []string
+	for _, s := range External() {
+		names = append(names, s.Name())
+		if !IsExternal(s.Name()) {
+			t.Errorf("IsExternal(%q) = false", s.Name())
+		}
+	}
+	if strings.Join(names, ",") != strings.Join(config.ExternalScanners, ",") {
+		t.Fatalf("external scanners %v, config.ExternalScanners %v", names, config.ExternalScanners)
+	}
+	if IsExternal("py-sql-fstring") {
+		t.Error("a built-in rule was taken for an external scanner")
 	}
 }

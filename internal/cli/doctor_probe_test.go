@@ -86,3 +86,27 @@ func TestDoctorProbeWarnsAboutAnUnpricedRemoteModel(t *testing.T) {
 		t.Fatalf("priced model: checks = %+v, want one ok row", checks)
 	}
 }
+
+// doctor shows the external scanners that [scan] scanners leaves out as
+// off, with the reason, and does not look for them.
+func TestDoctorShowsScannersTheConfigLeavesOut(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "spackle.toml")
+	body := "state_dir = " + strconv.Quote(filepath.ToSlash(filepath.Join(dir, "state"))) + "\n\n" +
+		"[sandbox]\nruntime = \"none\"\n\n[scan]\nscanners = [\"gitleaks\"]\n"
+	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, _ := run("doctor", "--config", cfg)
+	if code != ExitOK {
+		t.Fatalf("exit = %d\n%s", code, stdout)
+	}
+	for _, name := range []string{"semgrep", "osv-scanner", "trivy", "hadolint"} {
+		if !strings.Contains(stdout, "[off]      "+name) {
+			t.Errorf("%s is not shown as off:\n%s", name, stdout)
+		}
+	}
+	if strings.Contains(stdout, "[off]      gitleaks") || !strings.Contains(stdout, "[scan] scanners in the configuration leaves it out") {
+		t.Errorf("output:\n%s", stdout)
+	}
+}

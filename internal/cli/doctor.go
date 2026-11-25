@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/config"
+	"github.com/TMHSDigital/spackle/internal/engine"
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/lang"
 	"github.com/TMHSDigital/spackle/internal/mcp"
@@ -120,6 +122,10 @@ func doctorChecks(ctx context.Context, cfg config.Config) []check {
 		out = append(out, check{"Seeders", s.Name(), "ok", "built in"})
 	}
 	for _, s := range seed.External() {
+		if cfg.Scan.Scanners != nil && !slices.Contains(cfg.Scan.Scanners, s.Name()) {
+			out = append(out, check{"Seeders", s.Name(), "off", engine.DisabledScannerNote})
+			continue
+		}
 		ok, note := s.Available()
 		st := "ok"
 		if !ok {

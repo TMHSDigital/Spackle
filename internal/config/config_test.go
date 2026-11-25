@@ -180,3 +180,23 @@ func TestNoAPIKeyFieldExists(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// [scan] scanners: absent lets every scanner run, an empty list none, and
+// a name that is not an external scanner is refused.
+func TestScanScanners(t *testing.T) {
+	cfg, _, err := Load(writeConfig(t, "[scan]\nexclude = [\"x/**\"]\n"))
+	if err != nil || cfg.Scan.Scanners != nil {
+		t.Fatalf("absent: scanners = %#v, err = %v", cfg.Scan.Scanners, err)
+	}
+	cfg, _, err = Load(writeConfig(t, "[scan]\nscanners = []\n"))
+	if err != nil || cfg.Scan.Scanners == nil || len(cfg.Scan.Scanners) != 0 {
+		t.Fatalf("empty: scanners = %#v, err = %v", cfg.Scan.Scanners, err)
+	}
+	cfg, _, err = Load(writeConfig(t, "[scan]\nscanners = [\"gitleaks\", \"hadolint\"]\n"))
+	if err != nil || strings.Join(cfg.Scan.Scanners, ",") != "gitleaks,hadolint" {
+		t.Fatalf("two: scanners = %#v, err = %v", cfg.Scan.Scanners, err)
+	}
+	if _, _, err = Load(writeConfig(t, "[scan]\nscanners = [\"gitleak\"]\n")); err == nil || !strings.Contains(err.Error(), `[scan] scanners names "gitleak"`) {
+		t.Fatalf("unknown name: err = %v", err)
+	}
+}

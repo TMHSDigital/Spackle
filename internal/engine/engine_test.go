@@ -571,3 +571,45 @@ func TestCloneIsRemovedWhenNoRunIsStored(t *testing.T) {
 		t.Fatalf("a stored run lost its clone: %v", err)
 	}
 }
+
+// [scan] scanners leaves the external scanners it does not name out of
+// the run: they are not run, and the report says why. Built-in seeders,
+// and every scanner when the key is absent, still run.
+func TestConfiguredScanners(t *testing.T) {
+	gl := sqlLead()
+	gl.RuleID = "gitleaks-rule"
+	sg := sqlLead()
+	sg.RuleID, sg.Line = "semgrep-rule", 3
+	seeders := []seed.Seeder{fakeSeeder{name: "gitleaks", leads: []seed.Lead{gl}}, fakeSeeder{name: "semgrep", leads: []seed.Lead{sg}}, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}}}
+
+	o := opts(t, seeders...)
+	o.Config.Scan.Scanners = []string{"gitleaks"}
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string]bool{}
+	for _, f := range res.Run.Findings {
+		for _, origin := range f.Origin {
+			sources[strings.SplitN(origin, ":", 2)[0]] = true
+		}
+	}
+	if !sources["gitleaks"] || !sources["fake"] || sources["semgrep"] {
+		t.Fatalf("finding sources = %v, want gitleaks and fake only", sources)
+	}
+	for _, st := range res.Run.Seeders {
+		if st.Name == "semgrep" && (st.Available || st.Note != DisabledScannerNote) {
+			t.Fatalf("semgrep status = %+v", st)
+		}
+	}
+
+	o = opts(t, seeders...)
+	o.Config.Scan.Scanners = []string{}
+	if res, err = Run(context.Background(), o); err != nil || len(res.Run.Findings) != 1 {
+		t.Fatalf("no scanners: findings = %d, err = %v", len(res.Run.Findings), err)
+	}
+	o = opts(t, seeders...)
+	if res, err = Run(context.Background(), o); err != nil || len(res.Run.Findings) != 3 {
+		t.Fatalf("key absent: findings = %d, err = %v", len(res.Run.Findings), err)
+	}
+}

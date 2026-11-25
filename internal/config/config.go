@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -117,6 +118,10 @@ type Sandbox struct {
 	Images   map[string]string `toml:"images"`
 }
 
+// ExternalScanners are the names [scan] scanners accepts. A test in the
+// seed package keeps it equal to the names of seed.External.
+var ExternalScanners = []string{"semgrep", "gitleaks", "osv-scanner", "trivy", "hadolint"}
+
 // Scan controls what a code scan covers.
 type Scan struct {
 	// Exclude lists forward-slash globs, relative to the target root, of
@@ -127,6 +132,10 @@ type Scan struct {
 	Include []string `toml:"include"`
 	// DisableRules lists rule ids whose leads are dropped.
 	DisableRules []string `toml:"disable_rules"`
+	// Scanners names the external scanners a scan may run. nil (the key
+	// is absent) lets every installed one run; an empty list runs none.
+	// The built-in rules always run.
+	Scanners []string `toml:"scanners"`
 }
 
 // Fix configures the fixer.
@@ -223,6 +232,11 @@ func Load(path string) (Config, string, error) {
 		sort.Strings(keys)
 		return Config{}, "", fmt.Errorf("config %s has unknown keys: %s. Remove them or check the spelling against docs/config.md", path, strings.Join(keys, ", "))
 	}
+	// scanners = [] runs no external scanner, which differs from leaving
+	// the key out.
+	if md.IsDefined("scan", "scanners") && file.Scan.Scanners == nil {
+		file.Scan.Scanners = []string{}
+	}
 	cfg.merge(file)
 	if err := cfg.Validate(); err != nil {
 		return Config{}, "", fmt.Errorf("config %s: %w", path, err)
@@ -313,6 +327,9 @@ func (c *Config) merge(file Config) {
 	}
 	if len(file.Scan.DisableRules) > 0 {
 		c.Scan.DisableRules = file.Scan.DisableRules
+	}
+	if file.Scan.Scanners != nil {
+		c.Scan.Scanners = file.Scan.Scanners
 	}
 	if len(file.Output.Formats) > 0 {
 		c.Output.Formats = file.Output.Formats
@@ -461,6 +478,11 @@ func (c Config) Validate() error {
 	for _, r := range c.Scan.DisableRules {
 		if strings.TrimSpace(r) == "" {
 			add("[scan] disable_rules has an empty rule id")
+		}
+	}
+	for _, s := range c.Scan.Scanners {
+		if !slices.Contains(ExternalScanners, s) {
+			add("[scan] scanners names %q, which is not one of the external scanners (%s)", s, strings.Join(ExternalScanners, ", "))
 		}
 	}
 	for _, p := range c.Scope.PathPrefixes {

@@ -94,6 +94,16 @@ type NetworkUser interface {
 // UsesNetwork implements NetworkUser.
 func (e *external) UsesNetwork() bool { return e.network != netLocal }
 
+// IsExternal reports whether name is one of the external scanners.
+func IsExternal(name string) bool {
+	for _, s := range External() {
+		if s.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
 // External returns the adapters for scanners the operator may have installed.
 func External() []Seeder {
 	return []Seeder{
@@ -169,7 +179,7 @@ func (e *external) Run(ctx context.Context, root string, files []walk.File) ([]L
 	}
 	binPath, err := exec.LookPath(e.bin)
 	if err != nil {
-		return nil, fmt.Errorf("%s was not run: it is not on PATH: %w; install it from %s or remove it from the seeder list", e.name, err, e.site)
+		return nil, fmt.Errorf("%s was not run: it is not on PATH: %w; install it from %s, or leave it out of [scan] scanners in spackle.toml", e.name, err, e.site)
 	}
 	ctx, cancel := context.WithTimeout(ctx, scannerTimeout)
 	defer cancel()

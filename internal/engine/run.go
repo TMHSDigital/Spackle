@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -210,6 +211,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if seeders == nil {
 		seeders = seed.All()
 	}
+	seeders = configuredSeeders(seeders, opts.Config.Scan.Scanners)
 	if opts.Config.Offline {
 		seeders = offlineSeeders(seeders)
 	}
@@ -473,6 +475,40 @@ func (o offlineSeeder) Available() (bool, string) {
 }
 func (o offlineSeeder) Run(context.Context, string, []walk.File) ([]seed.Lead, error) {
 	return nil, nil
+}
+
+// disabledSeeder stands in for an external scanner that [scan] scanners
+// leaves out, so the report still shows it and says why it was not run.
+type disabledSeeder struct{ name string }
+
+func (d disabledSeeder) Name() string { return d.name }
+func (d disabledSeeder) Available() (bool, string) {
+	return false, DisabledScannerNote
+}
+func (d disabledSeeder) Run(context.Context, string, []walk.File) ([]seed.Lead, error) {
+	return nil, nil
+}
+
+// DisabledScannerNote is what the report and doctor say about an external
+// scanner that [scan] scanners leaves out.
+const DisabledScannerNote = "not run: [scan] scanners in the configuration leaves it out"
+
+// configuredSeeders replaces every external scanner that allow does not
+// name. A nil allow (the key is absent) keeps them all; the built-in
+// seeders are always kept.
+func configuredSeeders(in []seed.Seeder, allow []string) []seed.Seeder {
+	if allow == nil {
+		return in
+	}
+	out := make([]seed.Seeder, 0, len(in))
+	for _, s := range in {
+		if seed.IsExternal(s.Name()) && !slices.Contains(allow, s.Name()) {
+			out = append(out, disabledSeeder{name: s.Name()})
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // offlineSeeders replaces every seeder that uses the network when it runs
