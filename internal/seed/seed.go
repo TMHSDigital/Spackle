@@ -81,6 +81,26 @@ type Status struct {
 // Status and the run continues. texts may hold file texts that an earlier
 // stage already read; nil means every file is read here.
 func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.File, texts *walk.Texts) ([]Lead, []Status) {
+	leads, statuses, _ := RunAllIn(ctx, seeders, root, files, texts, nil)
+	return leads, statuses
+}
+
+// RunAllIn is RunAll for a diff scan: only, when not nil, holds the files
+// (relative paths) whose leads are wanted. The built-in seeders read only
+// those files, and the leads of the other seeders in any other file are
+// dropped before a seeder's lead cap applies, so leads elsewhere cannot
+// crowd out a lead in a wanted file. A lead with no file is dropped too.
+// leftOut is how many leads were dropped that way.
+func RunAllIn(ctx context.Context, seeders []Seeder, root string, files []walk.File, texts *walk.Texts, only map[string]bool) (leads []Lead, statuses []Status, leftOut int) {
+	sharedFiles := files
+	if only != nil {
+		sharedFiles = nil
+		for _, f := range files {
+			if only[f.Rel] {
+				sharedFiles = append(sharedFiles, f)
+			}
+		}
+	}
 	// The built-in seeders that work file by file share one pass, so a
 	// file is read once for all of them.
 	var shared []fileSeeder
@@ -120,14 +140,12 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 		}()
 	}
 	if len(shared) > 0 {
-		for j, r := range runFiles(ctx, shared, files, texts) {
+		for j, r := range runFiles(ctx, shared, sharedFiles, texts) {
 			runs[sharedAt[j]] = r
 		}
 	}
 	wg.Wait()
 
-	var leads []Lead
-	var statuses []Status
 	for i, s := range seeders {
 		st := Status{Name: s.Name(), Available: avail[i], Note: notes[i]}
 		if st.Available {
@@ -140,6 +158,16 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 			// Without this the drop would be silent.
 			if n, ok := s.(Noter); ok && n.Note() != "" {
 				st.Note = strings.TrimSpace(st.Note + " " + n.Note())
+			}
+			if only != nil {
+				kept := got[:0:0]
+				for _, l := range got {
+					if only[l.File] {
+						kept = append(kept, l)
+					}
+				}
+				leftOut += len(got) - len(kept)
+				got = kept
 			}
 			got, capNote := capLeads(got)
 			if capNote != "" {
@@ -154,7 +182,7 @@ func RunAll(ctx context.Context, seeders []Seeder, root string, files []walk.Fil
 		}
 		statuses = append(statuses, st)
 	}
-	return Sort(Unique(leads)), statuses
+	return Sort(Unique(leads)), statuses, leftOut
 }
 
 // maxConcurrentScanners is how many external scanners run at once. Each is

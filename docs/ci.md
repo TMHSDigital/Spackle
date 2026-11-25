@@ -133,7 +133,7 @@ The `diff-base` input and the `--since` flag behind it are not in v0.1.0. They a
 What a diff scan does and does not do:
 
 - The changed files are the ones `git diff --diff-filter=ACMR <base>...HEAD` lists: added, copied, modified or renamed since the branch left the base. Deleted files and uncommitted work are not part of it.
-- The whole tree is still mapped and read by the scanners, so the scan is not faster without a model. With a model it is cheaper, because investigations are planned for the changed files only.
+- The built-in rules read only the changed files. The whole tree is still mapped, and the installed external scanners still run over the whole tree; their leads in other files are dropped before a scanner's lead cap applies. With a model the scan is also cheaper, because investigations are planned for the changed files only.
 - A lead in an unchanged file is left out, and the report says how many were. A dependency lead is tied to its lockfile, so it is reported when the lockfile changed.
 - With a model, an investigation that starts in a changed file may end in a finding located in an unchanged file that the changed code reaches. That finding is reported, at the place where the flaw is.
 - Findings that predate the change are not accepted or recorded anywhere. Run a full scan on the default branch to see them.

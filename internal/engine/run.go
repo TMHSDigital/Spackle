@@ -195,12 +195,12 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		seeders = offlineSeeders(seeders)
 	}
 	say("Running %d seeders", len(seeders))
-	leads, statuses := seed.RunAll(ctx, seeders, root, m.Files, texts)
+	// A diff scan seeds only the changed files, so leads elsewhere neither
+	// cost a read nor count against a seeder's lead cap.
+	leads, statuses, leftOut := seed.RunAllIn(ctx, seeders, root, m.Files, texts, changed)
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 	if changed != nil {
-		var note string
-		leads, note = keepChanged(leads, changed, diffBase(opts).label)
-		scanNotes = append(scanNotes, note)
+		scanNotes = append(scanNotes, diffNote(diffBase(opts).label, len(changed), leftOut))
 	}
 	statuses = countLeads(statuses, leads)
 	if resume != nil {

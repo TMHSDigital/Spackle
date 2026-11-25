@@ -9,7 +9,6 @@ import (
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
 	"github.com/TMHSDigital/spackle/internal/mapper"
-	"github.com/TMHSDigital/spackle/internal/seed"
 )
 
 // diffScan is what a diff scan compares against, built from the options.
@@ -97,19 +96,12 @@ func stateDirUnder(root, stateDir string) []string {
 	return []string{rel}
 }
 
-// keepChanged drops the leads that are not in a changed file. A lead with
-// no file cannot be tied to the change and is dropped as well. The note
-// says what the diff scan covered and how much it left out, so the report
-// does not read as a scan of the whole target.
-func keepChanged(leads []seed.Lead, changed map[string]bool, rev string) ([]seed.Lead, string) {
-	kept := leads[:0:0]
-	for _, l := range leads {
-		if changed[l.File] {
-			kept = append(kept, l)
-		}
-	}
-	note := fmt.Sprintf("Diff scan against %s: %d changed files. Only leads in those files are reported; %d leads in other files were left out.", rev, len(changed), len(leads)-len(kept))
-	return kept, note
+// diffNote says what a diff scan covered and how much it left out, so the
+// report does not read as a scan of the whole target. leftOut counts the
+// leads the external scanners found in other files; the built-in rules
+// read only the changed files, so theirs are never found.
+func diffNote(label string, changed, leftOut int) string {
+	return fmt.Sprintf("Diff scan against %s: %d changed files. Only leads in those files are reported; %d leads in other files were left out. The built-in rules read only the changed files.", label, changed, leftOut)
 }
 
 // changedMap returns the map as the planner of a diff scan sees it: the

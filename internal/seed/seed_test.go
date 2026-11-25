@@ -304,3 +304,49 @@ func TestRunAllKeepsTheSeedersNote(t *testing.T) {
 		t.Fatalf("a seeder with nothing to say got the note %q", statuses[1].Note)
 	}
 }
+
+// In a diff scan the built-in rules read only the changed files, and the
+// leads a scanner finds elsewhere are dropped before its cap, so they
+// cannot crowd out a lead in a changed file.
+func TestRunAllInKeepsOnlyTheChangedFiles(t *testing.T) {
+	var many []Lead
+	for f := 0; f < 300; f++ {
+		for line := 1; line <= 20; line++ {
+			many = append(many, Lead{RuleID: "r", Class: "debug-enabled", File: fmt.Sprintf("old%03d.py", f), Line: line, Title: "t", Detail: "d", Fix: "f"})
+		}
+	}
+	if len(many) <= MaxLeadsPerSeeder {
+		t.Fatalf("the test needs more than %d leads in unchanged files", MaxLeadsPerSeeder)
+	}
+	// Sorted last, so the cap would drop it if it applied first.
+	changedLead := Lead{RuleID: "r", Class: "sql-injection", File: "zz_changed.py", Line: 3, Title: "t", Detail: "d", Fix: "f"}
+	noFile := Lead{RuleID: "r", Class: "debug-enabled", Title: "t", Detail: "d", Fix: "f"}
+
+	dir := t.TempDir()
+	changed := walk.File{Rel: "zz_changed.py", Abs: filepath.Join(dir, "zz_changed.py")}
+	if err := os.WriteFile(changed.Abs, []byte("a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Not on disk: reading it would fail the built-in pass.
+	unchanged := walk.File{Rel: "old000.py", Abs: filepath.Join(dir, "old000.py")}
+	builtin := testSeeder{name: "builtin", wants: func(walk.File) bool { return true }}
+
+	only := map[string]bool{"zz_changed.py": true}
+	leads, statuses, leftOut := RunAllIn(context.Background(), []Seeder{manyLeads{append(append(many, changedLead), noFile)}, builtin}, dir, []walk.File{changed, unchanged}, nil, only)
+	for _, st := range statuses {
+		if st.Error != "" {
+			t.Fatalf("%s: %s (a built-in rule read an unchanged file)", st.Name, st.Error)
+		}
+	}
+	if leftOut != len(many)+1 || len(leads) != 2 {
+		t.Fatalf("leftOut = %d, leads = %+v", leftOut, leads)
+	}
+	for _, l := range leads {
+		if l.File != "zz_changed.py" {
+			t.Fatalf("lead outside the changed files: %+v", l)
+		}
+	}
+	if strings.Contains(statuses[0].Note, "not listed") {
+		t.Fatalf("the cap applied to leads that were dropped anyway: %q", statuses[0].Note)
+	}
+}
