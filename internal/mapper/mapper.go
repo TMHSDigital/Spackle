@@ -12,8 +12,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/gitx"
@@ -182,7 +184,19 @@ func build(ctx context.Context, listing walk.Result, opts Options, prev *cacheFi
 		}
 	}
 
-	for _, f := range listing.Files {
+	// part is what one file adds to the map. Files are read and scanned
+	// on workers, and the parts are put together in listing order, so the
+	// map does not depend on which worker finished first.
+	type part struct {
+		scanned    bool // read and scanned now, or taken from the cache
+		skip       *walk.Skip
+		entry      []EntryPoint
+		boundaries []Boundary
+		fws        []string
+	}
+	parts := make([]part, len(listing.Files))
+	var toRead []int
+	for i, f := range listing.Files {
 		if err := ctx.Err(); err != nil {
 			return Map{}, nil, err
 		}
@@ -198,40 +212,76 @@ func build(ctx context.Context, listing walk.Result, opts Options, prev *cacheFi
 		if !lang.Supported(f.Lang) && f.Lang != "java" && f.Lang != "ruby" && f.Lang != "php" && f.Lang != "csharp" {
 			continue
 		}
+		// Test code is not attack surface: its path says all the map
+		// needs, so it is not read.
+		if walk.IsTestPath(f.Rel) {
+			m.Tests.HasTests = true
+			continue
+		}
+		// A language with no entry, boundary or import patterns adds
+		// nothing, so it is not read either.
+		if !hasPatterns(f.Lang) {
+			continue
+		}
 		if prev != nil && !opts.Changed[f.Rel] {
 			if fws, ok := prev.FileFrameworks[f.Rel]; ok {
-				fileFrameworks[f.Rel] = fws
-				if walk.IsTestPath(f.Rel) {
-					m.Tests.HasTests = true
-					continue
-				}
-				for _, fw := range fws {
-					frameworks[fw] = true
-				}
-				m.Entry = append(m.Entry, prevEntry[f.Rel]...)
-				m.Boundaries = append(m.Boundaries, prevBounds[f.Rel]...)
+				parts[i] = part{scanned: true, entry: prevEntry[f.Rel], boundaries: prevBounds[f.Rel], fws: fws}
 				continue
 			}
 			if sk, ok := prevUnreadable[f.Rel]; ok {
-				m.Skipped = append(m.Skipped, sk)
+				parts[i].skip = &sk
 				continue
 			}
 			// The cache does not know the file: read it.
 		}
-		text, rerr := readText(opts.Texts, f)
-		if rerr != nil {
-			m.Skipped = append(m.Skipped, walk.Skip{Rel: f.Rel, Reason: unreadablePrefix + rerr.Error()})
-			continue
+		toRead = append(toRead, i)
+	}
+
+	workers := min(runtime.GOMAXPROCS(0), maxMapWorkers, len(toRead))
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				f := listing.Files[i]
+				text, rerr := readText(opts.Texts, f)
+				if rerr != nil {
+					parts[i].skip = &walk.Skip{Rel: f.Rel, Reason: unreadablePrefix + rerr.Error()}
+					continue
+				}
+				var pm Map
+				parts[i] = part{scanned: true, fws: scanFile(&pm, f, text), entry: pm.Entry, boundaries: pm.Boundaries}
+			}
+		}()
+	}
+	for _, i := range toRead {
+		if ctx.Err() != nil {
+			break
 		}
-		if walk.IsTestPath(f.Rel) {
-			fileFrameworks[f.Rel] = []string{}
-			m.Tests.HasTests = true
-			continue
-		}
-		fws := scanFile(&m, f, text)
-		fileFrameworks[f.Rel] = fws
-		for _, fw := range fws {
-			frameworks[fw] = true
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return Map{}, nil, err
+	}
+	for i, p := range parts {
+		switch {
+		case p.skip != nil:
+			m.Skipped = append(m.Skipped, *p.skip)
+		case p.scanned:
+			fws := p.fws
+			if fws == nil {
+				fws = []string{}
+			}
+			fileFrameworks[listing.Files[i].Rel] = fws
+			for _, fw := range fws {
+				frameworks[fw] = true
+			}
+			m.Entry = append(m.Entry, p.entry...)
+			m.Boundaries = append(m.Boundaries, p.boundaries...)
 		}
 	}
 
@@ -267,6 +317,14 @@ func build(ctx context.Context, listing walk.Result, opts Options, prev *cacheFi
 	})
 	chooseHarness(&m, listing.Files, opts.Texts)
 	return m, fileFrameworks, nil
+}
+
+// maxMapWorkers bounds how many files the mapper reads and scans at once.
+const maxMapWorkers = 8
+
+// hasPatterns reports whether the mapper has any pattern for a language.
+func hasPatterns(lang string) bool {
+	return entryPatterns[lang] != nil || boundaryPatterns[lang] != nil || importFrameworks[lang] != nil
 }
 
 // unreadablePrefix starts the skip reason of a file the mapper could not
@@ -394,23 +452,37 @@ var jsBoundary = []linePattern{
 	{re: regexp.MustCompile(`\bunserialize\(|\byaml\.load\(`), kind: "deserialization"},
 }
 
-var importFrameworks = []struct {
+type importPattern struct {
 	re   *regexp.Regexp
 	name string
-}{
-	{regexp.MustCompile(`"github\.com/gin-gonic/gin"`), "gin"},
-	{regexp.MustCompile(`"github\.com/labstack/echo`), "echo"},
-	{regexp.MustCompile(`"github\.com/go-chi/chi`), "chi"},
-	{regexp.MustCompile(`"github\.com/gofiber/fiber`), "fiber"},
-	{regexp.MustCompile(`"net/http"`), "net/http"},
-	{regexp.MustCompile(`^\s*(?:from|import) flask\b`), "flask"},
-	{regexp.MustCompile(`^\s*(?:from|import) django\b`), "django"},
-	{regexp.MustCompile(`^\s*(?:from|import) fastapi\b`), "fastapi"},
-	{regexp.MustCompile(`^\s*(?:from|import) http\.server\b`), "http.server"},
+}
+
+// jsImports are the framework imports of JavaScript and TypeScript.
+var jsImports = []importPattern{
 	{regexp.MustCompile(`(?:require\(|from )["']express["']`), "express"},
 	{regexp.MustCompile(`(?:require\(|from )["']fastify["']`), "fastify"},
 	{regexp.MustCompile(`(?:require\(|from )["']koa["']`), "koa"},
 	{regexp.MustCompile(`from ["']next/`), "next"},
+}
+
+// importFrameworks holds, per language, the imports that name a framework.
+// Only the patterns of a file's own language are tried on its lines.
+var importFrameworks = map[string][]importPattern{
+	"go": {
+		{regexp.MustCompile(`"github\.com/gin-gonic/gin"`), "gin"},
+		{regexp.MustCompile(`"github\.com/labstack/echo`), "echo"},
+		{regexp.MustCompile(`"github\.com/go-chi/chi`), "chi"},
+		{regexp.MustCompile(`"github\.com/gofiber/fiber`), "fiber"},
+		{regexp.MustCompile(`"net/http"`), "net/http"},
+	},
+	"python": {
+		{regexp.MustCompile(`^\s*(?:from|import) flask\b`), "flask"},
+		{regexp.MustCompile(`^\s*(?:from|import) django\b`), "django"},
+		{regexp.MustCompile(`^\s*(?:from|import) fastapi\b`), "fastapi"},
+		{regexp.MustCompile(`^\s*(?:from|import) http\.server\b`), "http.server"},
+	},
+	"javascript": jsImports,
+	"typescript": jsImports,
 }
 
 // maxPerFile bounds how many entries one file can add, so a generated file
@@ -420,13 +492,14 @@ const maxPerFile = 60
 func scanFile(m *Map, f walk.File, text string) []string {
 	entries := entryPatterns[f.Lang]
 	bounds := boundaryPatterns[f.Lang]
+	imports := importFrameworks[f.Lang]
 	added := 0
 	found := map[string]bool{}
 	for i, line := range strings.Split(text, "\n") {
 		if len(line) > 2000 {
 			continue // minified or generated
 		}
-		for _, fw := range importFrameworks {
+		for _, fw := range imports {
 			if fw.re.MatchString(line) {
 				found[fw.name] = true
 			}
@@ -545,7 +618,7 @@ const stateDirName = ".spackle"
 
 // cacheVersion changes whenever the Map shape or the detection rules
 // change, so an old cache entry is never trusted.
-const cacheVersion = 2
+const cacheVersion = 3
 
 type cacheFile struct {
 	Version int `json:"version"`

@@ -164,7 +164,7 @@ func TestBuildHandsOverTheTextsItRead(t *testing.T) {
 		t.Fatalf("%s is not in the listing", rel)
 		return ""
 	}
-	for _, rel := range []string{"app.py", "tests/test_app.py", "requirements.txt", "static/site.js"} {
+	for _, rel := range []string{"app.py", "requirements.txt", "static/site.js"} {
 		text, ok := texts.Get(abs(rel))
 		if !ok {
 			t.Errorf("%s was read by the mapper but not handed over", rel)
@@ -173,8 +173,15 @@ func TestBuildHandsOverTheTextsItRead(t *testing.T) {
 			t.Errorf("%s was handed over without line ending normalization", rel)
 		}
 	}
-	if _, ok := texts.Get(abs("Dockerfile")); ok {
-		t.Error("Dockerfile is not read by the mapper, so there is nothing to hand over")
+	// Neither infrastructure nor test code is read by the mapper: a test
+	// file's path is all it needs.
+	for _, rel := range []string{"Dockerfile", "tests/test_app.py"} {
+		if _, ok := texts.Get(abs(rel)); ok {
+			t.Errorf("%s is not read by the mapper, so there is nothing to hand over", rel)
+		}
+	}
+	if !with.Tests.HasTests {
+		t.Error("the test file was not noticed")
 	}
 }
 
@@ -415,5 +422,26 @@ func TestChangedBuildUsesTheCacheOfHead(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(cache); len(entries) != 1 {
 		t.Fatalf("cache dir = %v, want no entry written for a dirty tree", entries)
+	}
+}
+
+// A language the mapper has no patterns for is counted but not read, and
+// its test files still show that the project has tests.
+func TestBuildDoesNotReadLanguagesWithoutPatterns(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "java app")
+	write(t, root, "src/main/java/App.java", "class App { public static void main(String[] a) {} }\n")
+	write(t, root, "src/test/java/AppTest.java", "class AppTest {}\n")
+	texts := walk.NewTexts()
+	m, err := Build(context.Background(), root, Options{Texts: texts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range m.Files {
+		if _, ok := texts.Get(f.Abs); ok {
+			t.Errorf("%s was read", f.Rel)
+		}
+	}
+	if len(m.Languages) != 1 || m.Languages[0].Lang != "java" || m.Languages[0].Files != 2 || !m.Tests.HasTests {
+		t.Fatalf("map = %+v", m)
 	}
 }

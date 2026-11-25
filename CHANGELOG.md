@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The mapper reads and scans files on several cores, no longer reads test files (their path is enough) or files of languages it has no patterns for, and tries only a file's own language's framework imports on its lines. Mapping a large repository is faster.
 - A diff scan (`--since`, `--changed`) now runs the built-in rules on the changed files only, and drops an external scanner's leads in other files before its lead cap applies. A lead in a changed file can no longer be dropped by the cap because of leads elsewhere in a large repository.
 - `spackle scan --changed` now maps only the changed files when the map of HEAD is in the cache, and takes the rest of the map from it, instead of mapping the whole tree on every run. The map cache entries now also record which frameworks each file imports, so entries written by earlier versions are rebuilt once.
 - `spackle runs` and `spackle runs prune` read each run's stored summary instead of decoding its whole ledger, as the MCP `list_runs` tool already did, so listing many runs is fast.
