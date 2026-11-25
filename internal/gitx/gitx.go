@@ -236,6 +236,19 @@ func Apply(ctx context.Context, dir, patchFile string) error {
 	return err
 }
 
+// RemoveWorktree removes a disposable fix worktree and its registration, even
+// when a failed fix left untracked files behind.
+func RemoveWorktree(ctx context.Context, repo, path string) error {
+	_, err := run(ctx, repo, "worktree", "remove", "--force", "--", path)
+	return err
+}
+
+// DeleteBranch removes a disposable fix branch after its worktree is gone.
+func DeleteBranch(ctx context.Context, repo, branch string) error {
+	_, err := run(ctx, repo, "branch", "-D", "--", branch)
+	return err
+}
+
 // CommitAll stages everything in dir and commits with the given message.
 // It is only ever called inside a Spackle worktree, never the operator's
 // working tree.

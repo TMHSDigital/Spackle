@@ -57,6 +57,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Remove the disposable fix worktree and branch when no fix could be committed, and report cleanup failures.
+
 - The 256 MiB limit on an external scanner's report now holds. The report was copied into memory in a way that bypassed the limit, so a scanner that wrote more was read in full.
 - `spackle bench` no longer accepts `--authorize`, `--pr`, `--fail-on`, `--fail-on-confidence` and `--format`, which it ignored, and never asks a fixture scan to open a pull request, even with `[fix] pr = true` in the config.
 - A running target whose host has non-ASCII letters is now refused before the interactive confirmation, with the hint to write the host in punycode in a scope file. The operator used to be asked to type the host and then be refused anyway.
