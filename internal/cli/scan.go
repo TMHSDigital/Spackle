@@ -55,7 +55,7 @@ func runScan(env Env, args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	res, err := engine.Run(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
+	res, err := runEngine(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
 		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, Changed: *changedOnly, Resume: *resume, Force: *force, DryRun: *dryRun,
 	})
 	if err != nil {
@@ -88,6 +88,10 @@ func runScan(env Env, args []string) int {
 	}
 	return exitFor(cfg, res.Run)
 }
+
+// runEngine is engine.Run. Tests replace it to reach the exit codes of
+// runs that are hard to produce for real: an interrupt or an engine error.
+var runEngine = engine.Run
 
 // confirmer returns the function that asks the operator to accept the cost
 // estimate before a model is called. With --yes, or for a local model that

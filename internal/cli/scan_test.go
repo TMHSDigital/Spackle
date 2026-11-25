@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/TMHSDigital/spackle/internal/engine"
+	"github.com/TMHSDigital/spackle/internal/ledger"
+	"github.com/TMHSDigital/spackle/internal/report"
 )
 
 // Planted flaws the built-in rules report without a model: an f-string SQL
@@ -610,5 +614,59 @@ func TestIsTerminal(t *testing.T) {
 	defer func() { _ = null.Close() }()
 	if isTerminal(null) {
 		t.Error("the null device was taken for a terminal")
+	}
+}
+
+// A dry run exits 0, prints the plan and stores nothing; with --format json
+// the plan decodes.
+func TestScanDryRun(t *testing.T) {
+	cfg, stateDir := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	code, out, stderr := run("scan", target, "--config", cfg, "--dry-run", "--offline")
+	if code != ExitOK || !strings.Contains(out, "Dry run of") {
+		t.Fatalf("exit = %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+	code, out, stderr = run("scan", target, "--config", cfg, "--dry-run", "--offline", "--format", "json")
+	var plan engine.Plan
+	if code != ExitOK || json.Unmarshal([]byte(out), &plan) != nil || plan.Leads == 0 || plan.Mode != "deterministic" {
+		t.Fatalf("exit = %d, plan = %+v\nstdout: %s\nstderr: %s", code, plan, out, stderr)
+	}
+	if dirs := runDirs(t, stateDir); len(dirs) != 0 {
+		t.Errorf("a dry run stored a run: %v", dirs)
+	}
+}
+
+// fakeEngine makes the scan command get res and err from the engine.
+func fakeEngine(t *testing.T, res engine.Result, err error) {
+	t.Helper()
+	old := runEngine
+	runEngine = func(context.Context, engine.Options) (engine.Result, error) { return res, err }
+	t.Cleanup(func() { runEngine = old })
+}
+
+// The exit codes of runs that did not finish: an interrupted run is never
+// a pass, whatever it found; a run that stopped on its budget with work
+// left prints the command that continues it; an engine failure is an error.
+func TestScanExitCodesOfUnfinishedRuns(t *testing.T) {
+	cfg, _ := stateConfig(t, "none")
+	target := plantedTarget(t, criticalFlaw)
+	runDir := t.TempDir()
+
+	fakeEngine(t, engine.Result{RunID: "20261125-000000-aaaaaa", RunDir: runDir, Run: report.Run{ID: "20261125-000000-aaaaaa", Command: "scan", Outcome: ledger.OutcomeInterrupted}}, nil)
+	if code, _, stderr := run("scan", target, "--config", cfg, "--format", "json"); code != ExitError || !strings.Contains(stderr, "The run was interrupted") {
+		t.Fatalf("interrupted: exit = %d\nstderr: %s", code, stderr)
+	}
+
+	exhausted := report.Run{ID: "20261125-000000-bbbbbb", Command: "scan", Mode: "agentic", Outcome: ledger.OutcomeBudgetExhausted, Since: "main",
+		Skipped: []ledger.BudgetSkip{{Cap: "token cap", Skipped: []string{"Not investigated: find query"}}}}
+	fakeEngine(t, engine.Result{RunID: exhausted.ID, RunDir: runDir, Run: exhausted}, nil)
+	code, _, stderr := run("scan", target, "--config", cfg, "--format", "json")
+	if code != ExitOK || !strings.Contains(stderr, "--since main --resume 20261125-000000-bbbbbb") {
+		t.Fatalf("budget-exhausted: exit = %d\nstderr: %s", code, stderr)
+	}
+
+	fakeEngine(t, engine.Result{}, errors.New("disk full"))
+	if code, _, stderr := run("scan", target, "--config", cfg, "--format", "json"); code != ExitError || !strings.Contains(stderr, "disk full") {
+		t.Fatalf("engine error: exit = %d\nstderr: %s", code, stderr)
 	}
 }
