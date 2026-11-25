@@ -88,6 +88,12 @@ type Options struct {
 	// Texts, when set, receives the text of every file the mapper reads,
 	// so the seeders that run next do not read those files again.
 	Texts *walk.Texts
+	// Changed, when set, lists the files (relative to root, with forward
+	// slashes) that differ from HEAD: the uncommitted work of a --changed
+	// scan. With a cached map of HEAD, only those files are read again and
+	// the rest of the map is taken from the cache. Without it, a tree with
+	// local changes is mapped in full.
+	Changed map[string]bool
 }
 
 // Build maps the target at root.
@@ -104,29 +110,81 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 	// The state directory, which holds the cache itself, is untracked
 	// inside the target by default and is never read by the walk, so it
 	// does not count as a change.
-	commit := ""
+	commit, head := "", ""
 	if sha, err := gitx.HeadSHA(ctx, root); err == nil {
 		if top, terr := gitx.TopLevel(ctx, root); terr == nil && sameDir(top, root) {
+			head = sha
 			if clean, cerr := gitx.IsCleanExcept(ctx, root, stateDirName); cerr == nil && clean {
 				commit = sha
 			}
 		}
 	}
-	if commit != "" && opts.CacheDir != "" {
-		if m, ok := loadCache(opts.CacheDir, commit); ok {
-			m.Files = listing.Files
-			return m, nil
+	var prev *cacheFile
+	if opts.CacheDir != "" {
+		switch {
+		case commit != "":
+			if c, ok := loadCache(opts.CacheDir, commit); ok {
+				c.Map.Files = listing.Files
+				return c.Map, nil
+			}
+		case head != "" && opts.Changed != nil:
+			// The work tree differs from HEAD only in the changed files,
+			// so the map of HEAD holds the rest.
+			if c, ok := loadCache(opts.CacheDir, head); ok {
+				prev = &c
+			}
 		}
 	}
 
-	m := Map{Commit: commit, FileCount: len(listing.Files), Files: listing.Files, Skipped: listing.Skipped}
+	m, fileFrameworks, err := build(ctx, listing, opts, prev)
+	if err != nil {
+		return Map{}, err
+	}
+	m.Commit = commit
+	if commit != "" && opts.CacheDir != "" {
+		// A cache write failure costs time on the next run, nothing else.
+		_ = saveCache(opts.CacheDir, commit, m, fileFrameworks)
+	}
+	return m, nil
+}
+
+// build maps a listing. With prev, a cached map of HEAD, a file that is not
+// in opts.Changed is not read: what the cache recorded for it is used. The
+// result is the same as a full build, because every part of the map is
+// either taken from the listing or put together from per-file results in
+// the same order. It also returns the frameworks each file it read
+// imports, for the cache.
+func build(ctx context.Context, listing walk.Result, opts Options, prev *cacheFile) (Map, map[string][]string, error) {
+	m := Map{FileCount: len(listing.Files), Files: listing.Files, Skipped: listing.Skipped}
 	counts := map[string]int{}
 	frameworks := map[string]bool{}
+	fileFrameworks := map[string][]string{}
 	var manifests []walk.File
+
+	// What the cache knows per file: its entry points and boundaries, the
+	// frameworks it imports (present for every file that was read), and
+	// why it could not be read.
+	var prevEntry map[string][]EntryPoint
+	var prevBounds map[string][]Boundary
+	prevUnreadable := map[string]walk.Skip{}
+	if prev != nil {
+		prevEntry, prevBounds = map[string][]EntryPoint{}, map[string][]Boundary{}
+		for _, e := range prev.Map.Entry {
+			prevEntry[e.File] = append(prevEntry[e.File], e)
+		}
+		for _, b := range prev.Map.Boundaries {
+			prevBounds[b.File] = append(prevBounds[b.File], b)
+		}
+		for _, sk := range prev.Map.Skipped {
+			if strings.HasPrefix(sk.Reason, unreadablePrefix) {
+				prevUnreadable[sk.Rel] = sk
+			}
+		}
+	}
 
 	for _, f := range listing.Files {
 		if err := ctx.Err(); err != nil {
-			return Map{}, err
+			return Map{}, nil, err
 		}
 		if isCodeLang(f.Lang) {
 			counts[f.Lang]++
@@ -140,16 +198,41 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 		if !lang.Supported(f.Lang) && f.Lang != "java" && f.Lang != "ruby" && f.Lang != "php" && f.Lang != "csharp" {
 			continue
 		}
+		if prev != nil && !opts.Changed[f.Rel] {
+			if fws, ok := prev.FileFrameworks[f.Rel]; ok {
+				fileFrameworks[f.Rel] = fws
+				if walk.IsTestPath(f.Rel) {
+					m.Tests.HasTests = true
+					continue
+				}
+				for _, fw := range fws {
+					frameworks[fw] = true
+				}
+				m.Entry = append(m.Entry, prevEntry[f.Rel]...)
+				m.Boundaries = append(m.Boundaries, prevBounds[f.Rel]...)
+				continue
+			}
+			if sk, ok := prevUnreadable[f.Rel]; ok {
+				m.Skipped = append(m.Skipped, sk)
+				continue
+			}
+			// The cache does not know the file: read it.
+		}
 		text, rerr := readText(opts.Texts, f)
 		if rerr != nil {
-			m.Skipped = append(m.Skipped, walk.Skip{Rel: f.Rel, Reason: "unreadable: " + rerr.Error()})
+			m.Skipped = append(m.Skipped, walk.Skip{Rel: f.Rel, Reason: unreadablePrefix + rerr.Error()})
 			continue
 		}
 		if walk.IsTestPath(f.Rel) {
+			fileFrameworks[f.Rel] = []string{}
 			m.Tests.HasTests = true
 			continue
 		}
-		scanFile(&m, frameworks, f, text)
+		fws := scanFile(&m, f, text)
+		fileFrameworks[f.Rel] = fws
+		for _, fw := range fws {
+			frameworks[fw] = true
+		}
 	}
 
 	for lang, n := range counts {
@@ -168,26 +251,27 @@ func Build(ctx context.Context, root string, opts Options) (Map, error) {
 	}
 	sort.Strings(m.Frameworks)
 	sort.Strings(m.InfraFiles)
-	sort.Slice(m.Entry, func(i, j int) bool {
+	// Stable, so rows on the same line keep the order the file gave them
+	// and a map put together from the cache equals a full build.
+	sort.SliceStable(m.Entry, func(i, j int) bool {
 		if m.Entry[i].File != m.Entry[j].File {
 			return m.Entry[i].File < m.Entry[j].File
 		}
 		return m.Entry[i].Line < m.Entry[j].Line
 	})
-	sort.Slice(m.Boundaries, func(i, j int) bool {
+	sort.SliceStable(m.Boundaries, func(i, j int) bool {
 		if m.Boundaries[i].File != m.Boundaries[j].File {
 			return m.Boundaries[i].File < m.Boundaries[j].File
 		}
 		return m.Boundaries[i].Line < m.Boundaries[j].Line
 	})
 	chooseHarness(&m, listing.Files, opts.Texts)
-
-	if commit != "" && opts.CacheDir != "" {
-		// A cache write failure costs time on the next run, nothing else.
-		_ = saveCache(opts.CacheDir, commit, m)
-	}
-	return m, nil
+	return m, fileFrameworks, nil
 }
+
+// unreadablePrefix starts the skip reason of a file the mapper could not
+// read.
+const unreadablePrefix = "unreadable: "
 
 // readText returns the text of f. With a texts it is read from disk once:
 // the text is kept there for the mapper's own later steps and for the
@@ -333,17 +417,18 @@ var importFrameworks = []struct {
 // cannot swamp the map.
 const maxPerFile = 60
 
-func scanFile(m *Map, frameworks map[string]bool, f walk.File, text string) {
+func scanFile(m *Map, f walk.File, text string) []string {
 	entries := entryPatterns[f.Lang]
 	bounds := boundaryPatterns[f.Lang]
 	added := 0
+	found := map[string]bool{}
 	for i, line := range strings.Split(text, "\n") {
 		if len(line) > 2000 {
 			continue // minified or generated
 		}
 		for _, fw := range importFrameworks {
 			if fw.re.MatchString(line) {
-				frameworks[fw.name] = true
+				found[fw.name] = true
 			}
 		}
 		if added >= maxPerFile {
@@ -369,6 +454,12 @@ func scanFile(m *Map, frameworks map[string]bool, f walk.File, text string) {
 			}
 		}
 	}
+	fws := make([]string, 0, len(found))
+	for fw := range found {
+		fws = append(fws, fw)
+	}
+	sort.Strings(fws)
+	return fws
 }
 
 func detectManifests(frameworks map[string]bool, manifests []walk.File, texts *walk.Texts) {
@@ -454,7 +545,7 @@ const stateDirName = ".spackle"
 
 // cacheVersion changes whenever the Map shape or the detection rules
 // change, so an old cache entry is never trusted.
-const cacheVersion = 1
+const cacheVersion = 2
 
 type cacheFile struct {
 	Version int `json:"version"`
@@ -463,6 +554,10 @@ type cacheFile struct {
 	// entry is not trusted even when cacheVersion was not bumped.
 	Spackle string `json:"spackle"`
 	Map     Map    `json:"map"`
+	// FileFrameworks holds, for every file the mapper read, the frameworks
+	// it imports (often none). A --changed scan uses it to put the map of
+	// a tree with local changes together without reading every file.
+	FileFrameworks map[string][]string `json:"file_frameworks"`
 }
 
 // builtBy names this build of Spackle for the cache.
@@ -472,26 +567,26 @@ func cachePath(dir, commit string) string {
 	return filepath.Join(dir, fmt.Sprintf("map-%s.json", commit))
 }
 
-func loadCache(dir, commit string) (Map, bool) {
+func loadCache(dir, commit string) (cacheFile, bool) {
 	b, err := os.ReadFile(cachePath(dir, commit)) //nolint:gosec // path is built from the state directory and a commit hash
 	if err != nil {
-		return Map{}, false
+		return cacheFile{}, false
 	}
 	var c cacheFile
-	if json.Unmarshal(b, &c) != nil || c.Version != cacheVersion || c.Spackle != builtBy() || c.Map.Commit != commit {
-		return Map{}, false
+	if json.Unmarshal(b, &c) != nil || c.Version != cacheVersion || c.Spackle != builtBy() || c.Map.Commit != commit || c.FileFrameworks == nil {
+		return cacheFile{}, false
 	}
-	return c.Map, true
+	return c, true
 }
 
-func saveCache(dir, commit string, m Map) error {
+func saveCache(dir, commit string, m Map, fileFrameworks map[string][]string) error {
 	if !isHex(commit) {
 		return errors.New("commit is not a hash")
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cacheFile{Version: cacheVersion, Spackle: builtBy(), Map: m}, "", "  ")
+	b, err := json.MarshalIndent(cacheFile{Version: cacheVersion, Spackle: builtBy(), Map: m, FileFrameworks: fileFrameworks}, "", "  ")
 	if err != nil {
 		return err
 	}

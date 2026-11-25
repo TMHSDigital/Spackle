@@ -183,11 +183,11 @@ func TestBuildHandsOverTheTextsItRead(t *testing.T) {
 func TestCacheEntryOfAnotherBuildIsNotUsed(t *testing.T) {
 	dir := t.TempDir()
 	const commit = "0123456789abcdef0123456789abcdef01234567"
-	if err := saveCache(dir, commit, Map{Commit: commit, FileCount: 7}); err != nil {
+	if err := saveCache(dir, commit, Map{Commit: commit, FileCount: 7}, map[string][]string{}); err != nil {
 		t.Fatal(err)
 	}
-	if m, ok := loadCache(dir, commit); !ok || m.FileCount != 7 {
-		t.Fatalf("the entry this build wrote was not found: %+v, %v", m, ok)
+	if c, ok := loadCache(dir, commit); !ok || c.Map.FileCount != 7 {
+		t.Fatalf("the entry this build wrote was not found: %+v, %v", c.Map, ok)
 	}
 	old := version.Version
 	version.Version = "v9.9.9"
@@ -196,11 +196,11 @@ func TestCacheEntryOfAnotherBuildIsNotUsed(t *testing.T) {
 		t.Fatal("an entry written by another build was used")
 	}
 	// The new build writes its own entry over the old one.
-	if err := saveCache(dir, commit, Map{Commit: commit, FileCount: 8}); err != nil {
+	if err := saveCache(dir, commit, Map{Commit: commit, FileCount: 8}, map[string][]string{}); err != nil {
 		t.Fatal(err)
 	}
-	if m, ok := loadCache(dir, commit); !ok || m.FileCount != 8 {
-		t.Fatalf("entry after the rewrite: %+v, %v", m, ok)
+	if c, ok := loadCache(dir, commit); !ok || c.Map.FileCount != 8 {
+		t.Fatalf("entry after the rewrite: %+v, %v", c.Map, ok)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
 		t.Fatalf("%d cache files, want one per commit", len(entries))
@@ -326,7 +326,7 @@ func TestMapCacheIsPruned(t *testing.T) {
 		t.Fatal(err)
 	}
 	commit := fmt.Sprintf("%040x", 0xabc)
-	if err := saveCache(dir, commit, Map{Commit: commit}); err != nil {
+	if err := saveCache(dir, commit, Map{Commit: commit}, map[string][]string{}); err != nil {
 		t.Fatal(err)
 	}
 	maps, _ := filepath.Glob(filepath.Join(dir, "map-*.json"))
@@ -345,5 +345,75 @@ func TestMapCacheIsPruned(t *testing.T) {
 	}
 	if _, err := os.Stat(other); err != nil {
 		t.Errorf("a file that is not a map cache entry was removed: %v", err)
+	}
+}
+
+// A --changed scan of a dirty tree reads only the changed files when the
+// map of HEAD is cached, and gets the same map as a full build.
+func TestChangedBuildUsesTheCacheOfHead(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed; the map cache needs a commit hash")
+	}
+	root := pyApp(t)
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(root))
+	git := func(args ...string) {
+		t.Helper()
+		full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"}, args...)
+		cmd := exec.Command("git", full...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write(t, root, "lib.py", "from fastapi import FastAPI\nimport os\n\ndef env():\n    return os.environ['X']\n")
+	write(t, root, "helpers.py", "import subprocess\n\ndef run(c):\n    return subprocess.run(c)\n")
+	git("init", "-q", "-b", "main")
+	git("config", "core.autocrlf", "false")
+	git("add", "-A")
+	git("commit", "-q", "-m", "init")
+	cache := t.TempDir()
+	if _, err := Build(context.Background(), root, Options{CacheDir: cache}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify, add and delete. lib.py was the only file importing fastapi,
+	// so the framework has to go with it.
+	write(t, root, "app.py", "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/other')\ndef other():\n    return open('x').read()\n")
+	write(t, root, "new.py", "import django\n\n@app.route('/new')\ndef n(): pass\n")
+	if err := os.Remove(filepath.Join(root, "lib.py")); err != nil {
+		t.Fatal(err)
+	}
+	changed := map[string]bool{"app.py": true, "new.py": true}
+
+	texts := walk.NewTexts()
+	got, err := Build(context.Background(), root, Options{CacheDir: cache, Changed: changed, Texts: texts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Build(context.Background(), root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.Files, want.Files = nil, nil
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("map from the cache differs from a full build:\n got %+v\nwant %+v", got, want)
+	}
+	for _, f := range want.Frameworks {
+		if f == "fastapi" {
+			t.Fatal("the full build still reports the framework of the deleted file")
+		}
+	}
+	readFiles := map[string]bool{}
+	m, _ := Build(context.Background(), root, Options{})
+	for _, f := range m.Files {
+		if _, ok := texts.Get(f.Abs); ok {
+			readFiles[f.Rel] = true
+		}
+	}
+	if !readFiles["app.py"] || !readFiles["new.py"] || readFiles["helpers.py"] || readFiles["tests/test_app.py"] {
+		t.Fatalf("files read = %v, want the changed files and not the others", readFiles)
+	}
+	if entries, _ := os.ReadDir(cache); len(entries) != 1 {
+		t.Fatalf("cache dir = %v, want no entry written for a dirty tree", entries)
 	}
 }

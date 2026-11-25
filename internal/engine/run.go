@@ -177,7 +177,13 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	// The mapper hands the text of each file it reads to the seeders, so a
 	// file is read once per scan.
 	texts := walk.NewTexts()
-	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(stateDir, "cache"), Walk: walkOptions(opts.Config), Texts: texts})
+	mapOpts := mapper.Options{CacheDir: filepath.Join(stateDir, "cache"), Walk: walkOptions(opts.Config), Texts: texts}
+	if d := diffBase(opts); d != nil && d.changed {
+		// The files of a --changed scan are exactly where the work tree
+		// differs from HEAD, so the cached map of HEAD covers the rest.
+		mapOpts.Changed = changed
+	}
+	m, err := mapper.Build(ctx, root, mapOpts)
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}

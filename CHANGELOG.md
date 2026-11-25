@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `spackle scan --changed` now maps only the changed files when the map of HEAD is in the cache, and takes the rest of the map from it, instead of mapping the whole tree on every run. The map cache entries now also record which frameworks each file imports, so entries written by earlier versions are rebuilt once.
 - `spackle runs` and `spackle runs prune` read each run's stored summary instead of decoding its whole ledger, as the MCP `list_runs` tool already did, so listing many runs is fast.
 - The map cache in the state directory (`cache/map-<commit>.json`, one file per scanned commit) now keeps only the 20 newest files. They used to pile up with every commit scanned.
 - The default sandbox image for JavaScript and TypeScript is now `node:24-slim` (Node 24, the active LTS) instead of `node:22-slim`, which reaches end of life on 2027-04-30. Set `[sandbox.images]` to keep the old one.
