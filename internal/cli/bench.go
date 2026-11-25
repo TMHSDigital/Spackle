@@ -27,13 +27,11 @@ const (
 func runBench(env Env, args []string) int {
 	fs := newFlagSet(env, "bench", "", "Run Spackle over the labelled benchmark corpus and score the findings against ground truth.\nWith no model configured only the deterministic stages run, which costs nothing.\nResults files are produced only by this command and are never edited by hand.")
 	var g globalFlags
-	g.register(fs)
-	// The shared --out flag means "report directory" for the other commands.
-	// Here it is the results directory, with its own default and help text.
-	if f := fs.Lookup("out"); f != nil {
-		f.Usage = "`directory` to write the results file into"
-		f.DefValue = defaultBenchResults
-	}
+	// Bench writes no report, gates nothing on findings, never opens a pull
+	// request and scans no running target, so those flags are not taken.
+	g.registerGroups(fs, flagsAll&^(flagsScope|flagsPR|flagsFailOn|flagsOutput))
+	// --out is the results directory here, not a report directory.
+	fs.StringVar(&g.out, "out", defaultBenchResults, "`directory` to write the results file into")
 	corpus := fs.String("corpus", defaultBenchCorpus, "`directory` that holds the benchmark fixtures")
 	force := fs.Bool("force", false, "overwrite an existing results file for the same date and model, and write a file even when some fixture scans failed")
 	table := fs.Bool("table", false, "print the README table for all results in --out and exit without running")

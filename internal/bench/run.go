@@ -100,6 +100,9 @@ func Run(ctx context.Context, opts Options) (Results, error) {
 		cfg := opts.Config
 		cfg.StateDir = filepath.Join(state, t.Fixture)
 		cfg.Output.Dir = ""
+		// A fixture is not a repository anyone wants a pull request for,
+		// whatever the configuration says.
+		cfg.Fix.PR = false
 		if limit > 0 {
 			cfg.Budget.USD = limit - spent
 			if cfg.Budget.USD < minFixtureUSD {

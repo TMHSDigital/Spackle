@@ -153,3 +153,22 @@ func TestBenchPaidRunNeedsConsent(t *testing.T) {
 		t.Error("a refused run created the results directory")
 	}
 }
+
+// Bench takes only the flags it reads: one that would do nothing is a
+// usage error.
+func TestBenchRefusesFlagsItIgnores(t *testing.T) {
+	code, _, stderr := run("bench", "--help")
+	for _, gone := range []string{"-authorize", "-fail-on", "-fail-on-confidence", "-format", "-pr "} {
+		if strings.Contains(stderr, gone) {
+			t.Errorf("bench --help lists %s", gone)
+		}
+	}
+	if !strings.Contains(stderr, "-out") || !strings.Contains(stderr, "results file") {
+		t.Errorf("bench --help lacks --out:\n%s (exit %d)", stderr, code)
+	}
+	for _, flag := range []string{"--fail-on=low", "--format=json", "--pr", "--authorize=scope.toml", "--fail-on-confidence=high"} {
+		if code, _, _ := run("bench", flag, "--table"); code != ExitUsage {
+			t.Errorf("bench %s exited %d, want %d", flag, code, ExitUsage)
+		}
+	}
+}

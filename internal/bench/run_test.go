@@ -441,3 +441,23 @@ func TestFailedFixturesAreLeftOutOfTheTotals(t *testing.T) {
 		t.Errorf("the summary does not report the failures:\n%s", Summary(res))
 	}
 }
+
+// Bench never asks a fixture scan to open a pull request, whatever the
+// configuration says.
+func TestRunNeverOpensAPullRequest(t *testing.T) {
+	corpus := tempCorpus(t)
+	cfg := config.Default()
+	cfg.Fix.PR = true
+	var seen []engine.Options
+	if _, err := Run(context.Background(), Options{CorpusDir: corpus, Config: cfg, Now: fixedNow, Scan: canned(map[string]engine.Result{}, nil, &seen)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) == 0 {
+		t.Fatal("no fixture was scanned")
+	}
+	for _, o := range seen {
+		if o.Config.Fix.PR {
+			t.Fatalf("%s was scanned with --pr", o.Target)
+		}
+	}
+}
