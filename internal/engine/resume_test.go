@@ -234,3 +234,53 @@ func TestResumeNeedsTheSameCommitUnlessForced(t *testing.T) {
 		t.Fatalf("forced resume: outcome = %s findings = %v", res.Run.Outcome, briefFindings(res.Run.Findings))
 	}
 }
+
+// A resumed diff scan keeps the earlier run's file set: without a diff flag
+// it applies the stored one, and a different one is refused.
+func TestResumeKeepsTheDiffBase(t *testing.T) {
+	inOld := sqlLead()
+	inOld.File, inOld.RuleID, inOld.Class, inOld.Title = "old.py", "py-os-system", "command-injection", "os.system with a variable"
+	plan := `{"intents":[{"title":"find query","class":"sql-injection","hypothesis":"Does q reach SQL?","files":["app.py"],"lead_ids":["` + leadID(sqlLead(), "fake") + `"],"priority":1}]}`
+	exhausted := script{plan: plan, investigate: goodDraft(), usage: llm.Usage{InputTokens: 900, OutputTokens: 200, CostKnown: true}}.provider()
+	first := agenticOpts(t, exhausted, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), inOld}})
+	first.Since = diffTarget(t, first.Target)
+	first.Config.Budget.Tokens = 1000 // the planner call alone uses it up
+	res, err := Run(context.Background(), first)
+	if err != nil || !Resumable(res.Run) {
+		t.Fatalf("first run: resumable = %v, err = %v", err == nil && Resumable(res.Run), err)
+	}
+	if res.Run.Since != first.Since {
+		t.Fatalf("the run does not record its diff base: since = %q", res.Run.Since)
+	}
+	if got, want := ResumeFlags(res.Run), "--since "+first.Since+" --resume "+first.RunID; got != want {
+		t.Fatalf("resume flags = %q, want %q", got, want)
+	}
+
+	// Another diff base is refused before anything runs.
+	fake := script{investigate: goodDraft(), review: `{"verdict":"confirmed","reason":"ok"}`}.provider()
+	o := resumeOpts(first, fake)
+	o.Resume, o.Since, o.Changed = first.RunID, "", true
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--since "+first.Since) {
+		t.Fatalf("other diff base: err = %v", err)
+	}
+	if len(fake.Requests) != 0 {
+		t.Fatal("a refused resume called the model")
+	}
+
+	// Without a diff flag the stored base applies: the lead in the
+	// unchanged file stays out of the report.
+	o = resumeOpts(first, fake)
+	o.Resume, o.Since = first.RunID, ""
+	res, err = Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range res.Run.Findings {
+		if f.Location.File != "app.py" {
+			t.Fatalf("the resumed diff scan reports a finding outside the diff: %v", briefFindings(res.Run.Findings))
+		}
+	}
+	if res.Run.Since != first.Since || !containsNote(res.Run.Notes, "Diff scan against "+first.Since) {
+		t.Fatalf("the resumed run did not keep the diff base: since = %q, notes = %q", res.Run.Since, res.Run.Notes)
+	}
+}

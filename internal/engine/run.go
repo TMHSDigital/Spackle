@@ -150,6 +150,16 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		if resume, err = loadResume(ctx, stateDir, opts.Resume, root, opts.Force); err != nil {
 			return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 		}
+		// A resumed run covers the files the earlier run covered. Without
+		// a diff flag it takes the earlier run's; a different one would
+		// mix two file sets in one report.
+		switch {
+		case diffBase(opts) == "":
+			opts.Since, opts.Changed = resume.since, resume.changed
+		case opts.Since != resume.since || opts.Changed != resume.changed:
+			return Result{}, fmt.Errorf("%w: --resume: run %s was %s, and this scan asks for %s. Resume it without --since or --changed to keep its file set",
+				ErrRefused, resume.runID, describeDiffBase(resume.since, resume.changed), describeDiffBase(opts.Since, opts.Changed))
+		}
 	}
 
 	// A diff scan needs its file list before anything else is done, so a
@@ -270,6 +280,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if resume != nil {
 		start.ResumedFrom = resume.runID
 	}
+	start.Since, start.Changed = opts.Since, opts.Changed
 	if agentic {
 		start.Mode, start.Provider, start.Model = "agentic", defaultProv.Name(), defaultProv.Model()
 		start.Isolation = r.lab.isolation()

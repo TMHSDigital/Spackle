@@ -78,7 +78,7 @@ func runScan(env Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stderr, "Run %s stored in %s\n", res.RunID, res.RunDir)
 	if engine.Resumable(res.Run) {
-		fmt.Fprintf(env.Stderr, "The budget ran out before every planned investigation was done. To continue with the rest under a new budget:\n  spackle scan %s --resume %s\n", tgt, res.RunID)
+		fmt.Fprintf(env.Stderr, "The budget ran out before every planned investigation was done. To continue with the rest under a new budget:\n  spackle scan %s %s\n", tgt, engine.ResumeFlags(res.Run))
 	}
 	if res.Run.Outcome == ledger.OutcomeInterrupted {
 		// The report holds what was found before the interrupt. The run

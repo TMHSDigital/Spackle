@@ -31,8 +31,12 @@ type Run struct {
 	RepoPrefix string
 	// Ref is the branch or tag a git URL target was scanned at, when one
 	// was asked for.
-	Ref         string
-	Commit      string
+	Ref    string
+	Commit string
+	// Since and Changed are the diff base of a diff scan: the --since
+	// revision, or true for --changed. Both are empty for a full scan.
+	Since       string
+	Changed     bool
 	Mode        string // deterministic|agentic
 	Provider    string
 	Model       string
@@ -161,6 +165,7 @@ func Load(runDir string) (Run, error) {
 				run.ID, run.Version, run.Command = d.RunID, d.Version, d.Command
 				run.Target, run.TargetKind, run.Commit, run.TargetPath = d.Target, d.TargetKind, d.Commit, d.TargetPath
 				run.RepoPrefix, run.Ref = d.RepoPrefix, d.Ref
+				run.Since, run.Changed = d.Since, d.Changed
 				run.Mode, run.Provider, run.Model, run.Offline = d.Mode, d.Provider, d.Model, d.Offline
 				run.Scope, run.ScopeSource, run.Isolation = d.Scope, d.ScopeSource, d.Isolation
 				run.StartedAt = ev.TS

@@ -23,10 +23,15 @@ type RunStart struct {
 	Ref string `json:"ref,omitempty"`
 	// ResumedFrom is the id of the run this run continues (scan --resume).
 	ResumedFrom string `json:"resumed_from,omitempty"`
-	Mode        string `json:"mode"` // deterministic|agentic
-	Provider    string `json:"provider,omitempty"`
-	Model       string `json:"model,omitempty"`
-	Offline     bool   `json:"offline,omitempty"`
+	// Since is the base revision of a diff scan (scan --since), and Changed
+	// marks a scan of uncommitted changes (scan --changed). A resumed run
+	// takes its file set from them.
+	Since    string `json:"since,omitempty"`
+	Changed  bool   `json:"changed,omitempty"`
+	Mode     string `json:"mode"` // deterministic|agentic
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Offline  bool   `json:"offline,omitempty"`
 	// Scope is the authorized scope for a live target, as confirmed.
 	Scope string `json:"scope,omitempty"`
 	// ScopeSource says how authorization was given: scope-file, config or interactive.

@@ -32,6 +32,34 @@ type resumeState struct {
 	// findings are the earlier run's findings. They are carried into the
 	// new report unless this run reaches its own conclusion about one.
 	findings []finding.Finding
+	// since and changed are the earlier run's diff base, so the resumed
+	// run covers the same files.
+	since   string
+	changed bool
+}
+
+// describeDiffBase names a diff base the way the scan flags give it.
+func describeDiffBase(since string, changed bool) string {
+	switch {
+	case changed:
+		return "a scan of uncommitted changes (--changed)"
+	case since != "":
+		return "a diff scan against " + since + " (--since " + since + ")"
+	}
+	return "a scan of the whole target"
+}
+
+// ResumeFlags returns the scan flags that resume a stored run with the same
+// file set: --resume with its id, and its --since or --changed.
+func ResumeFlags(run report.Run) string {
+	flags := "--resume " + run.ID
+	switch {
+	case run.Changed:
+		flags = "--changed " + flags
+	case run.Since != "":
+		flags = "--since " + run.Since + " " + flags
+	}
+	return flags
 }
 
 // loadResume reads the run a scan of root continues. It refuses a run that
@@ -93,7 +121,7 @@ func loadResume(ctx context.Context, stateDir, id, root string, force bool) (*re
 	if left == 0 {
 		return nil, fmt.Errorf("--resume: run %s (%s) has no planned investigation left to continue. Start a new scan instead", run.ID, run.Outcome)
 	}
-	st := &resumeState{runID: run.ID, intents: intents[len(intents)-left:], handled: map[string]bool{}, findings: run.Findings}
+	st := &resumeState{runID: run.ID, intents: intents[len(intents)-left:], handled: map[string]bool{}, findings: run.Findings, since: run.Since, changed: run.Changed}
 	for _, it := range intents[:len(intents)-left] {
 		for _, id := range it.LeadIDs {
 			st.handled[id] = true
