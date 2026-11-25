@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TMHSDigital/spackle/internal/budget"
+	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
@@ -90,6 +91,144 @@ func TestProverErrorKeepsTheTracedFinding(t *testing.T) {
 	f := soleFinding(t, res)
 	if res.Run.Outcome != ledger.OutcomeCompleted || f.Proof.Status == finding.ProofDemonstrated || !strings.Contains(f.Proof.Reason, "The proof step failed") {
 		t.Fatalf("outcome %s, proof %s: %q", res.Run.Outcome, f.Proof.Status, f.Proof.Reason)
+	}
+}
+
+// A prover error is confined to its own finding: the next intent is still
+// investigated, demonstrated and fixed.
+func TestProverErrorDoesNotStopTheNextIntent(t *testing.T) {
+	other := sqlLead()
+	other.File = "other.py"
+	plan := `{"intents":[` +
+		`{"title":"find query","class":"sql-injection","hypothesis":"Does q reach SQL?","files":["app.py"],"lead_ids":["` + leadID(sqlLead(), "fake") + `"],"priority":1},` +
+		`{"title":"other query","class":"sql-injection","hypothesis":"Does q reach SQL?","files":["other.py"],"lead_ids":["` + leadID(other, "fake") + `"],"priority":2}]}`
+	otherDraft := strings.ReplaceAll(goodDraft(), `"app.py"`, `"other.py"`)
+
+	fake := labProvider()
+	play := fake.Handler
+	fake.Handler = func(req llm.Request, n int) (llm.Response, error) {
+		user := req.Messages[0].Text
+		switch {
+		case strings.Contains(req.System, "this step is planning"):
+			return llm.Response{StopReason: llm.StopEnd, Text: plan, Usage: llm.Usage{InputTokens: 100, OutputTokens: 50, CostKnown: true}}, nil
+		case strings.Contains(req.System, "demonstrate one finding") && !strings.Contains(user, "other.py"):
+			return llm.Response{}, errors.New("provider returned 500")
+		case stageOf(req) == "investigator" && !strings.Contains(req.System, "demonstrate one finding") && !strings.Contains(req.System, "fix one finding") && strings.Contains(user, "other.py"):
+			return llm.Response{StopReason: llm.StopEnd, Text: otherDraft, Usage: llm.Usage{InputTokens: 100, OutputTokens: 50, CostKnown: true}}, nil
+		}
+		return play(req, n)
+	}
+	o := failingOpts(t, &fakeRuntime{fixClosesProof: true}, fake)
+	o.Seeders = []seed.Seeder{fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), other}}}
+	src, err := os.ReadFile(filepath.Join(o.Target, "app.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(o.Target, "other.py"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Run.Outcome != ledger.OutcomeCompleted || len(res.Run.Findings) != 2 {
+		t.Fatalf("outcome %s, %d findings (notes %q)", res.Run.Outcome, len(res.Run.Findings), res.Run.Notes)
+	}
+	for _, f := range res.Run.Findings {
+		switch f.Location.File {
+		case "app.py":
+			if f.Proof.Status == finding.ProofDemonstrated || !strings.Contains(f.Proof.Reason, "The proof step failed") {
+				t.Errorf("app.py: proof %s: %q", f.Proof.Status, f.Proof.Reason)
+			}
+		case "other.py":
+			if f.Proof.Status != finding.ProofDemonstrated || f.Status != finding.StatusPatchAvailable {
+				t.Errorf("other.py: proof %s, status %s: %q", f.Proof.Status, f.Status, f.Proof.Reason)
+			}
+		default:
+			t.Errorf("unexpected finding in %s", f.Location.File)
+		}
+	}
+}
+
+// An error that proveAndFix returns itself (here: the proof's files cannot
+// be stored in the run directory) does not end the run. The finding is
+// kept as it was traced, and the failure is a prover reject in the ledger.
+func TestProveAndFixErrorIsAProverReject(t *testing.T) {
+	// The finding id is stable, so a first run tells where the second one
+	// stores the proof.
+	first, err := Run(context.Background(), labOpts(t, &fakeRuntime{fixClosesProof: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := soleFinding(t, first).ID
+
+	o := labOpts(t, &fakeRuntime{fixClosesProof: true})
+	// A file where the proof's directory has to go makes writing it fail.
+	findingDir := filepath.Join(RunsDir(o.Config.StateDir), o.RunID, "findings", id)
+	if err := os.MkdirAll(findingDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(findingDir, "poc"), []byte("in the way\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := soleFinding(t, res)
+	if f.ID != id || res.Run.Outcome != ledger.OutcomeCompleted || f.Proof.Status == finding.ProofDemonstrated || f.Remediation.Patch != "" {
+		t.Fatalf("id %s (want %s), outcome %s, proof %s, patch %q", f.ID, id, res.Run.Outcome, f.Proof.Status, f.Remediation.Patch)
+	}
+	rejected := false
+	for _, e := range ledgerEvents(t, res.RunDir) {
+		var r ledger.Reject
+		if e.Type == ledger.TypeReject && e.Decode(&r) == nil && r.Stage == "prover" && strings.Contains(r.Reason, "the proof or fix step failed") {
+			rejected = true
+		}
+	}
+	if !rejected {
+		t.Fatal("no prover reject in the ledger")
+	}
+}
+
+// A finding that does not validate when the findings are recorded is left
+// out and recorded as an engine reject with the reason, and the valid ones
+// are still recorded. Every stage validates what it produces first, so
+// this is the net for a Spackle bug and is tested on recordFindings itself.
+func TestInvalidFindingIsAnEngineReject(t *testing.T) {
+	dir := t.TempDir()
+	led, err := ledger.Create(dir, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = led.Close() })
+	r := &runner{cfg: config.Default(), led: led, runDir: dir}
+
+	good := FromLead(sqlLead(), "not investigated")
+	bad := good
+	bad.ID, bad.Title = "SPK-BAD00001", ""
+	if err := r.recordFindings(0, []finding.Finding{good, bad}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var rejects []ledger.Reject
+	var recorded []string
+	for _, e := range ledgerEvents(t, dir) {
+		var rj ledger.Reject
+		var f finding.Finding
+		switch {
+		case e.Type == ledger.TypeReject && e.Decode(&rj) == nil:
+			rejects = append(rejects, rj)
+		case e.Type == ledger.TypeFinding && e.Decode(&f) == nil:
+			recorded = append(recorded, f.ID)
+		}
+	}
+	if len(rejects) != 1 || rejects[0].Stage != "engine" || rejects[0].Intent != bad.ID || !strings.Contains(rejects[0].Reason, "title is empty") {
+		t.Fatalf("rejects = %+v, want one engine reject of %s", rejects, bad.ID)
+	}
+	if len(recorded) != 1 || recorded[0] != good.ID {
+		t.Fatalf("recorded findings = %v, want only %s", recorded, good.ID)
 	}
 }
 
