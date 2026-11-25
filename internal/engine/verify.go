@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/TMHSDigital/spackle/internal/agent"
+	"github.com/TMHSDigital/spackle/internal/budget"
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
@@ -121,6 +122,26 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 	}
 	defer func() { _ = led.Close() }()
 
+	// Proofs run through agent.Box.Exec, as a scan runs them: each run is
+	// counted against the [budget] sandbox run and wall time caps, and is
+	// recorded as the next evidence file of its finding, after the scan's.
+	bud, err := budget.New(budget.Caps{
+		Tokens: opts.Config.Budget.Tokens, USD: opts.Config.Budget.USD,
+		Wall: opts.Config.Budget.WallTime.Duration, SandboxRuns: opts.Config.Budget.SandboxRuns,
+	}, opts.Clock)
+	if err != nil {
+		return nil, err
+	}
+	var current string // the finding whose proof is running
+	var lastSeq int64  // the sandbox_run event of the last recorded run
+	var recordErr error
+	box := &agent.Box{Runtime: rt, Profile: profile, Budget: bud, Root: targetDir,
+		Record: func(purpose string, spec sandbox.Spec, res sandbox.Result) error {
+			lastSeq, _, recordErr = recordSandboxRun(opts.RunDir, led, current, 0, purpose, spec, res)
+			return recordErr
+		},
+	}
+
 	var outcomes []VerifyOutcome
 	for _, j := range jobs {
 		if err := ctx.Err(); err != nil {
@@ -143,8 +164,11 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 			}
 			return outcomes, ierr
 		}
-		spec := sandbox.Spec{Image: j.man.Image, Cmd: j.man.Command, SourceDir: targetDir, Files: files, Profile: profile}
-		res, rerr := rt.Run(ctx, spec)
+		current, recordErr = j.f.ID, nil
+		res, rerr := box.Exec(ctx, "verify", j.man.Image, j.man.Command, files, "")
+		if recordErr != nil {
+			return outcomes, recordErr
+		}
 		if rerr != nil {
 			var note string
 			if errors.Is(rerr, context.Canceled) || errors.Is(rerr, context.DeadlineExceeded) {
@@ -159,12 +183,7 @@ func Verify(ctx context.Context, opts VerifyOptions) ([]VerifyOutcome, error) {
 			outcomes = append(outcomes, VerifyOutcome{FindingID: j.f.ID, Title: j.f.Title, Reproduces: j.f.Status != finding.StatusFixed, Inconclusive: true, Note: note})
 			continue
 		}
-		// The output is kept as evidence, as a scan keeps it, so a verdict
-		// can be read back later.
-		seq, aerr := recordSandboxRun(opts.RunDir, led, j.f.ID, 0, nextEvidence(opts.RunDir, j.f.ID), "verify", spec, res)
-		if aerr != nil {
-			return outcomes, aerr
-		}
+		seq := lastSeq
 		verdict := agent.JudgeProof(res, j.man.Marker)
 		if verdict == agent.ProofInconclusive {
 			// A proof that hangs or is killed shows nothing either way:

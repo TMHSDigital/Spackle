@@ -238,18 +238,9 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	}
 
 	d := &debugRun{r: r, l: r.lab, root: root, lang: lang, m: m, test: test, issue: issue, good: opts.Good, seq: mapSeq}
-	// One box for the whole run, so evidence files are numbered in the
-	// order the sandbox runs happened.
-	d.box = r.lab.box("", mapSeq)
-	record, n := d.box.Record, 0
-	d.box.Record = func(purpose string, spec sandbox.Spec, res sandbox.Result) error {
-		n++
-		if rerr := record(purpose, spec, res); rerr != nil {
-			return rerr
-		}
-		d.evidence = append(d.evidence, fmt.Sprintf("evidence/%02d-%s.txt", n, purpose))
-		return nil
-	}
+	// One box for the whole run. Its evidence files are listed in the order
+	// the sandbox runs happened.
+	d.box = r.lab.box("", mapSeq, func(rel string) { d.evidence = append(d.evidence, rel) })
 	if d.image, err = r.lab.image(ctx, lang); err != nil {
 		return Result{}, r.fail(fmt.Errorf("debug cannot start: %w. Set [sandbox.images] %s in spackle.toml to an image you can pull, or pull it by hand, and run again", err, lang))
 	}

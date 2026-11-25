@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/TMHSDigital/spackle/internal/config"
 	"github.com/TMHSDigital/spackle/internal/finding"
@@ -382,6 +384,67 @@ func TestVerifyRerunsStoredProofs(t *testing.T) {
 	}
 	if verdicts != 2 {
 		t.Fatalf("verify verdicts in the ledger = %d, want 2", verdicts)
+	}
+	// The two verify runs are evidence files numbered after the scan's,
+	// and their sandbox_run events point at them.
+	scanFiles := 0
+	for _, e := range events {
+		var sr ledger.SandboxRun
+		if e.Type == ledger.TypeSandboxRun && e.Decode(&sr) == nil && sr.FindingID == id && sr.Purpose != "verify" {
+			scanFiles++
+		}
+	}
+	var refs []string
+	for _, e := range events {
+		var sr ledger.SandboxRun
+		if e.Type == ledger.TypeSandboxRun && e.Decode(&sr) == nil && sr.Purpose == "verify" {
+			refs = append(refs, sr.OutputRef)
+		}
+	}
+	want := []string{
+		fmt.Sprintf("findings/%s/evidence/%02d-verify.txt", id, scanFiles+1),
+		fmt.Sprintf("findings/%s/evidence/%02d-verify.txt", id, scanFiles+2),
+	}
+	if scanFiles == 0 || strings.Join(refs, ",") != strings.Join(want, ",") {
+		t.Fatalf("verify evidence = %v, want %v after the scan's %d files", refs, want, scanFiles)
+	}
+	for _, rel := range refs {
+		if _, err := os.Stat(filepath.Join(res.RunDir, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("missing %s: %v", rel, err)
+		}
+	}
+}
+
+// Verify runs proofs under the [budget] caps, as a scan does: once the wall
+// time cap is spent, a proof is not started, and the finding keeps its
+// status with a note that says why.
+func TestVerifyIsBoundByTheBudget(t *testing.T) {
+	rt := &fakeRuntime{}
+	o := labOpts(t, rt)
+	off := false
+	o.Config.Fix.Enabled = &off
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(rt.runs)
+	// Every reading of this clock is an hour after the last, so the wall
+	// time cap is spent by the time the first proof would start.
+	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now = now.Add(time.Hour)
+		return now
+	}
+	detect := func(context.Context, string) (sandbox.Runtime, error) { return rt, nil }
+	out, err := Verify(context.Background(), VerifyOptions{Config: o.Config, RunDir: res.RunDir, DetectRuntime: detect, Clock: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.runs) != before {
+		t.Fatalf("a proof ran past the wall time cap: %d sandbox runs, the scan made %d", len(rt.runs), before)
+	}
+	if len(out) != 1 || !out[0].Inconclusive || !strings.Contains(out[0].Note, "wall time") {
+		t.Fatalf("outcomes = %+v", out)
 	}
 }
 

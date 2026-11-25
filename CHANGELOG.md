@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `spackle verify` now runs proofs under the `[budget]` sandbox run and wall time caps, as a scan does. A proof that the caps stop is not run, and its finding keeps its status with a note. Its evidence files are numbered after the scan's, in the same way scan and debug number theirs.
 - The Kubernetes and workflow rules parse YAML with `go.yaml.in/yaml/v4` instead of v3, which is frozen upstream.
 - The mapper reads and scans files on several cores, no longer reads test files (their path is enough) or files of languages it has no patterns for, and tries only a file's own language's framework imports on its lines. Mapping a large repository is faster.
 - A diff scan (`--since`, `--changed`) now runs the built-in rules on the changed files only, and drops an external scanner's leads in other files before its lead cap applies. A lead in a changed file can no longer be dropped by the cap because of leads elsewhere in a large repository.
