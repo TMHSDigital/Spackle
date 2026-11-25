@@ -512,6 +512,13 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 		note += " Not on the branch (apply the patch file by hand): " + strings.Join(skipped, "; ") + "."
 	}
 	if committed == 0 {
+		if err := gitx.RemoveWorktree(ctx, top, wt); err != nil {
+			note += " The empty fix worktree could not be removed: " + textx.Clip(err.Error(), 200) + "."
+		} else if err := gitx.DeleteBranch(ctx, top, branch); err != nil {
+			note += " The empty fix branch could not be deleted: " + textx.Clip(err.Error(), 200) + "."
+		} else {
+			note += " The empty fix worktree and branch were removed."
+		}
 		return "", note
 	}
 	return branch, note

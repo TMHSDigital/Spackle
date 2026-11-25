@@ -141,12 +141,29 @@ func TestBranchFixesUndoesAFixThatCannotBeCommitted(t *testing.T) {
 // When the worktree was made but no fix could be committed to it, no
 // branch is returned and the lab holds no worktree to open a PR from.
 func TestBranchFixesWithNoFixCommitted(t *testing.T) {
-	l, _ := fixRepo(t, acceptedFix{id: "SPK-00000001", title: "first", files: map[string]string{"pkg": "not a directory\n"}})
-	branch, note := l.branchFixes(context.Background())
-	if branch != "" || l.worktree != "" || len(l.branched) != 0 {
-		t.Fatalf("branch = %q, worktree = %q, branched = %v", branch, l.worktree, l.branched)
-	}
-	if !strings.Contains(note, "0 fix(es) committed") || !strings.Contains(note, "SPK-00000001 could not be written to the fix branch") {
-		t.Fatalf("note = %q", note)
+	for _, autocrlf := range []string{"false", "true"} {
+		t.Run(autocrlf, func(t *testing.T) {
+			l, root := fixRepo(t, acceptedFix{id: "SPK-00000001", title: "first", files: map[string]string{"pkg": "not a directory\n"}})
+			gitIn(t, root, "config", "core.autocrlf", autocrlf)
+			before := gitIn(t, root, "worktree", "list", "--porcelain")
+			branch, note := l.branchFixes(context.Background())
+			if branch != "" || l.worktree != "" || len(l.branched) != 0 {
+				t.Fatalf("branch = %q, worktree = %q, branched = %v", branch, l.worktree, l.branched)
+			}
+			if !strings.Contains(note, "0 fix(es) committed") || !strings.Contains(note, "SPK-00000001 could not be written to the fix branch") {
+				t.Fatalf("note = %q", note)
+			}
+
+			if got := gitIn(t, root, "branch", "--list", "spackle/*"); got != "" {
+				t.Errorf("empty fix branch remains: %s", got)
+			}
+			if got := gitIn(t, root, "worktree", "list", "--porcelain"); got != before {
+				t.Errorf("extra worktree remains: %s", got)
+			}
+			if _, err := os.Stat(filepath.Join(l.r.cfg.StateDir, "worktrees", l.r.runID)); !os.IsNotExist(err) {
+				t.Errorf("empty worktree directory remains: %v", err)
+			}
+
+		})
 	}
 }
