@@ -197,6 +197,41 @@ func TestRunsCompare(t *testing.T) {
 	if code := Main([]string{"runs", "compare", names[0], "--config", cfg}, strings.NewReader(""), &out, &errb); code != ExitUsage {
 		t.Fatalf("one run id exited %d", code)
 	}
+
+	// Text from the target never reaches the terminal as control bytes. A
+	// stored title and target are given an escape sequence that would
+	// retitle the terminal.
+	newer := filepath.Join(state, "runs", names[1])
+	inject := func(file, key string) {
+		t.Helper()
+		p := filepath.Join(newer, file)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(b)
+		for _, sep := range []string{`":"`, `": "`} {
+			s = strings.ReplaceAll(s, `"`+key+sep, `"`+key+sep+`\u001b]0;pwned\u0007`)
+		}
+		if s == string(b) {
+			t.Fatalf("%s has no %q to change", file, key)
+		}
+		if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inject("ledger.jsonl", "title")
+	inject("ledger.jsonl", "target")
+	inject("summary.json", "target")
+	for _, args := range [][]string{{"runs", "compare", names[0], names[1]}, {"runs"}} {
+		out.Reset()
+		if code := Main(append(args, "--config", cfg), strings.NewReader(""), &out, &errb); code != ExitOK {
+			t.Fatalf("%v exited %d: %s", args, code, errb.String())
+		}
+		if strings.ContainsAny(out.String(), "\x1b\x07") || !strings.Contains(out.String(), "pwned") {
+			t.Fatalf("%v printed control bytes or lost the text: %q", args, out.String())
+		}
+	}
 }
 
 // The prune help shows no internal default for --keep and describes --yes

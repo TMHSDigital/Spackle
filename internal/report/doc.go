@@ -573,14 +573,18 @@ func normalizeNewlines(s string) string {
 	return strings.ReplaceAll(s, "\r", "\n")
 }
 
-// cleanControl makes text from the target safe to print on a terminal or to
+// cleanControl is CleanText, under the name the renderers use.
+var cleanControl = CleanText
+
+// CleanText makes text from the target safe to print on a terminal or to
 // store in a plain-text file. Line endings become LF; every other C0 or C1
 // control character (ESC included), DEL, invisible Unicode format characters
 // such as bidirectional overrides, and invalid UTF-8 are replaced with a
 // visible backslash escape. Newline and tab are kept. A hostile repository
 // therefore cannot move the cursor, recolor or retitle the operator's
-// terminal, or reorder what the operator reads.
-func cleanControl(s string) string {
+// terminal, or reorder what the operator reads. Commands outside the
+// reports that print run content, such as the run list, use it too.
+func CleanText(s string) string {
 	s = normalizeNewlines(s)
 	clean := true
 	for i := 0; i < len(s); i++ {

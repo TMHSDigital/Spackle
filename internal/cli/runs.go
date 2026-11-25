@@ -87,12 +87,14 @@ func runRuns(env Env, args []string) int {
 
 func printRunRow(env Env, r runRow) {
 	if r.Error != "" {
-		fmt.Fprintf(env.Stdout, "%s  unreadable: %s\n", r.RunID, r.Error)
+		fmt.Fprintf(env.Stdout, "%s  unreadable: %s\n", r.RunID, report.CleanText(r.Error))
 		return
 	}
-	line := fmt.Sprintf("%s  %-16s %3d finding(s)  %s", r.RunID, r.Outcome, r.Findings, r.Target)
+	// The target and the notes come from the stored run, which a scanned
+	// repository can influence, so they are cleaned before printing.
+	line := fmt.Sprintf("%s  %-16s %3d finding(s)  %s", r.RunID, r.Outcome, r.Findings, report.CleanText(r.Target))
 	if len(r.Extra) > 0 {
-		line += "  [" + strings.Join(r.Extra, ", ") + "]"
+		line += "  [" + report.CleanText(strings.Join(r.Extra, ", ")) + "]"
 	}
 	fmt.Fprintln(env.Stdout, line)
 }
@@ -307,7 +309,7 @@ func runRunsCompare(env Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stdout, "Comparing %s (older) with %s (newer).\n", c.Older, c.Newer)
 	if loaded[0].Target != loaded[1].Target {
-		fmt.Fprintf(env.Stdout, "The runs scanned different targets (%s and %s), so most findings will not match.\n", loaded[0].Target, loaded[1].Target)
+		fmt.Fprintf(env.Stdout, "The runs scanned different targets (%s and %s), so most findings will not match.\n", report.CleanText(loaded[0].Target), report.CleanText(loaded[1].Target))
 	}
 	for _, group := range []struct {
 		label string
@@ -319,7 +321,8 @@ func runRunsCompare(env Env, args []string) int {
 			if r.Change != "" {
 				line += "  [" + r.Change + "]"
 			}
-			fmt.Fprintln(env.Stdout, line)
+			// Titles and locations come from the target.
+			fmt.Fprintln(env.Stdout, report.CleanText(line))
 		}
 	}
 	return ExitOK
