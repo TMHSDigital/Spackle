@@ -300,6 +300,11 @@ func (r *Registry) resolve(p string) (abs, rel string, err error) {
 	if r.rootErr != nil {
 		return "", "", r.rootErr
 	}
+	// No file name holds a NUL byte, and the OS error it causes would name
+	// the absolute path it was joined to.
+	if strings.ContainsRune(p, 0) {
+		return "", "", errors.New("path contains a NUL byte; pass a path relative to the target root, such as src/app.py")
+	}
 	abs, err = walk.Resolve(r.env.Root, p)
 	if err != nil {
 		return "", "", pathError(p, err)
@@ -372,10 +377,14 @@ func decode(args json.RawMessage, v any) error {
 // with control characters escaped so it stays on one line.
 func quote(s string) string { return fmt.Sprintf("%q", textx.Clip(s, maxEcho)) }
 
-// pathError rewrites a walk.Resolve error so it cannot echo a long path.
+// pathError rewrites a walk.Resolve error so it cannot echo a long path or
+// name a host path: an OS error is reduced to its cause.
 func pathError(p string, err error) error {
 	msg := err.Error()
-	if len(p) > maxEcho {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		msg = fmt.Sprintf("path %s: %s", quote(p), reason(err))
+	} else if len(p) > maxEcho {
 		msg = textx.Clip(strings.ReplaceAll(msg, fmt.Sprintf("%q", p), quote(p)), 200)
 	}
 	return fmt.Errorf("%s; pass a path relative to the target root, such as src/app.py", textx.Clip(msg, 400))

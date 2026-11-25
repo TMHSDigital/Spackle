@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"math/rand/v2"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/TMHSDigital/spackle/internal/envelope"
@@ -772,7 +774,13 @@ func TestOutsideFileIsNeverReadable(t *testing.T) {
 	r := newReg(t, root, 0)
 	outside := filepath.Join(parent, "x")
 	values := append(append([]string{}, escapes...), outside, filepath.ToSlash(outside), "file://"+filepath.ToSlash(outside),
-		"x", ".", "", "*", "**/x", "../*", "CANARY", "OUTSIDE", canary, "abcdef1", "app/../../x", "..%2fx", "%2e%2e/x", "....//x", "app/..\\..\\x", "\x00../x")
+		"x", ".", "", "*", "**/x", "../*", "CANARY", "OUTSIDE", canary, "abcdef1", "app/../../x", "..%2fx", "%2e%2e/x", "....//x", "app/..\\..\\x", "\x00../x", "README.md\x00", "app\x00/db.py")
+	// No result names where the target sits on the host, unless the model
+	// sent that path itself.
+	hostPaths := []string{parent, filepath.ToSlash(parent)}
+	if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+		hostPaths = append(hostPaths, resolved, filepath.ToSlash(resolved))
+	}
 	fields := map[string][]string{
 		"read_file":       {"path"},
 		"list_dir":        {"path"},
@@ -802,6 +810,13 @@ func TestOutsideFileIsNeverReadable(t *testing.T) {
 				}
 				if !res.IsError && strings.Contains(sealedBody(res.Content), canary) {
 					t.Errorf("%s %v succeeded with outside content:\n%s", tool, args, res.Content)
+				}
+				if !strings.Contains(v, filepath.ToSlash(outside)) && !strings.Contains(v, outside) {
+					for _, h := range hostPaths {
+						if strings.Contains(res.Content, h) {
+							t.Errorf("%s %v named the host path %s:\n%s", tool, args, h, res.Content)
+						}
+					}
 				}
 			}
 		}
@@ -1471,5 +1486,46 @@ func TestSeededCacheUsesTheGivenListing(t *testing.T) {
 	res := reg.Call(context.Background(), llm.ToolCall{ID: "1", Name: "grep", Args: json.RawMessage(`{"pattern":"Store"}`)})
 	if res.IsError || !strings.Contains(res.Content, "app/db.py") || strings.Contains(res.Content, "app/views.py") {
 		t.Fatalf("grep did not search the seeded listing only: %s", res.Content)
+	}
+}
+
+// An OS error is reduced to its cause, without the host path it names.
+func TestReasonAndPathErrorDropTheHostPath(t *testing.T) {
+	host := filepath.Join(t.TempDir(), "secret-user", "app.py")
+	pe := &fs.PathError{Op: "lstat", Path: host, Err: syscall.EINVAL}
+	if got := reason(fmt.Errorf("wrapped: %w", pe)); got != syscall.EINVAL.Error() {
+		t.Fatalf("reason = %q, want only the cause", got)
+	}
+	err := pathError("app.py", fmt.Errorf("path %q: %w", "app.py", pe))
+	if strings.Contains(err.Error(), "secret-user") || !strings.Contains(err.Error(), `"app.py"`) || !strings.Contains(err.Error(), syscall.EINVAL.Error()) {
+		t.Fatalf("pathError = %q", err)
+	}
+}
+
+// A file removed after the registry listed it is reported by its path in
+// the target, never by where the target sits on the host.
+func TestRemovedFileErrorsNameOnlyTheRelativePath(t *testing.T) {
+	root, parent := newTarget(t)
+	r := newReg(t, root, 0)
+	if res := call(r, "grep", map[string]any{"pattern": "sqlite3"}); res.IsError {
+		t.Fatal(res.Content)
+	}
+	if err := os.Remove(filepath.Join(root, "app", "db.py")); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+	}{
+		{"read_file", map[string]any{"path": "app/db.py"}},
+		{"grep", map[string]any{"pattern": "sqlite3"}},
+		{"grep", map[string]any{"pattern": "sqlite3", "path": "app/db.py"}},
+	} {
+		res := call(r, c.tool, c.args)
+		for _, h := range []string{parent, filepath.ToSlash(parent)} {
+			if strings.Contains(res.Content, h) {
+				t.Errorf("%s %v named the host path:\n%s", c.tool, c.args, res.Content)
+			}
+		}
 	}
 }
