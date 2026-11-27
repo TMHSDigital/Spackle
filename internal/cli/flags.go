@@ -33,6 +33,7 @@ type globalFlags struct {
 	failOn        string
 	failOnConf    string
 	exclude       listFlag
+	baseline      string
 }
 
 // listFlag collects the values of a flag that may be given more than once.
@@ -47,24 +48,25 @@ func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }
 type flagGroup uint
 
 const (
-	flagsConfig  flagGroup = 1 << iota // --config
-	flagsModel                         // --provider, --model, --base-url
-	flagsBudget                        // --budget-tokens, --budget-usd, --max-findings
-	flagsOffline                       // --offline
-	flagsFix                           // --fix, --no-fix
-	flagsPR                            // --pr
-	flagsScope                         // --authorize
-	flagsOutput                        // --format, --out
-	flagsYes                           // --yes
-	flagsFailOn                        // --fail-on
-	flagsExclude                       // --exclude
+	flagsConfig   flagGroup = 1 << iota // --config
+	flagsModel                          // --provider, --model, --base-url
+	flagsBudget                         // --budget-tokens, --budget-usd, --max-findings
+	flagsOffline                        // --offline
+	flagsFix                            // --fix, --no-fix
+	flagsPR                             // --pr
+	flagsScope                          // --authorize
+	flagsOutput                         // --format, --out
+	flagsYes                            // --yes
+	flagsFailOn                         // --fail-on
+	flagsExclude                        // --exclude
+	flagsBaseline                       // --baseline, for scan only
 
 	flagsAll = flagsConfig | flagsModel | flagsBudget | flagsOffline | flagsFix | flagsPR |
 		flagsScope | flagsOutput | flagsYes | flagsFailOn | flagsExclude
 )
 
 // register adds every shared flag. It is for commands that run a scan.
-func (g *globalFlags) register(fs *flag.FlagSet) { g.registerGroups(fs, flagsAll) }
+func (g *globalFlags) register(fs *flag.FlagSet) { g.registerGroups(fs, flagsAll|flagsBaseline) }
 
 // registerGroups adds the flags of the given groups.
 func (g *globalFlags) registerGroups(fs *flag.FlagSet, groups flagGroup) {
@@ -105,6 +107,9 @@ func (g *globalFlags) registerGroups(fs *flag.FlagSet, groups flagGroup) {
 	}
 	if has(flagsExclude) {
 		fs.Var(&g.exclude, "exclude", "`glob` of paths not to scan, relative to the target; may be repeated")
+	}
+	if has(flagsBaseline) {
+		fs.StringVar(&g.baseline, "baseline", "", "baseline `file` of accepted findings (written by spackle baseline); they are reported but do not fail the run")
 	}
 	if has(flagsFailOn) {
 		fs.StringVar(&g.failOn, "fail-on", "", "lowest `severity` that makes the command exit 1: critical, high, medium, low or never")
@@ -163,6 +168,9 @@ func (g *globalFlags) load() (config.Config, error) {
 		cfg.Fix.PR = true
 	}
 	cfg.Scan.Exclude = append(cfg.Scan.Exclude, g.exclude...)
+	if g.baseline != "" {
+		cfg.Scan.Baseline = g.baseline
+	}
 	if g.format != "" {
 		cfg.Output.Formats = splitList(g.format)
 	}

@@ -267,9 +267,13 @@ func usageSummary(u Usage) []kv {
 }
 
 func countsText(c Counts) string {
-	return fmt.Sprintf("%d open, %d with a patch available, %d fixed, %d dismissed. By severity, all but dismissed: %d critical, %d high, %d medium, %d low, %d none. "+
+	accepted := ""
+	if c.Accepted > 0 {
+		accepted = fmt.Sprintf(", %d accepted by the baseline", c.Accepted)
+	}
+	return fmt.Sprintf("%d open, %d with a patch available, %d fixed%s, %d dismissed. By severity, all but dismissed: %d critical, %d high, %d medium, %d low, %d none. "+
 		"Demonstrated by a proof of concept: %d.",
-		c.Open, c.PatchAvailable, c.Fixed, c.Dismissed, c.Critical, c.High, c.Medium, c.Low, c.None, c.Demonstrated)
+		c.Open, c.PatchAvailable, c.Fixed, accepted, c.Dismissed, c.Critical, c.High, c.Medium, c.Low, c.None, c.Demonstrated)
 }
 
 // summaryLine is the one-line total that ends the terminal report. The
@@ -277,13 +281,17 @@ func countsText(c Counts) string {
 // dismissed.
 func summaryLine(run Run) string {
 	c := run.Count()
-	n := c.Open + c.PatchAvailable + c.Fixed
+	n := c.Open + c.PatchAvailable + c.Fixed + c.Accepted
 	noun := "findings"
 	if n == 1 {
 		noun = "finding"
 	}
-	return fmt.Sprintf("Summary: %d %s (%d critical, %d high, %d medium, %d low), %d demonstrated, %d fixed, %d dismissed",
-		n, noun, c.Critical, c.High, c.Medium, c.Low, c.Demonstrated, c.Fixed, c.Dismissed)
+	accepted := ""
+	if c.Accepted > 0 {
+		accepted = fmt.Sprintf(", %d accepted", c.Accepted)
+	}
+	return fmt.Sprintf("Summary: %d %s (%d critical, %d high, %d medium, %d low), %d demonstrated, %d fixed%s, %d dismissed",
+		n, noun, c.Critical, c.High, c.Medium, c.Low, c.Demonstrated, c.Fixed, accepted, c.Dismissed)
 }
 
 // patchLine is shown above the summary line when patches were written and
@@ -350,6 +358,9 @@ func (b builder) identity(f finding.Finding) []block {
 	out = append(out, b.kv("Status", f.Status, false))
 	if f.DismissReason != "" {
 		out = append(out, b.kv("Dismiss reason", f.DismissReason, false))
+	}
+	if f.AcceptReason != "" {
+		out = append(out, b.kv("Accepted because", f.AcceptReason, false))
 	}
 	return out
 }

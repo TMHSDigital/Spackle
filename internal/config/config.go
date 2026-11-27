@@ -137,6 +137,10 @@ type Scan struct {
 	// is absent) lets every installed one run; an empty list runs none.
 	// The built-in rules always run.
 	Scanners []string `toml:"scanners"`
+	// Baseline is the path of a baseline file (written by spackle
+	// baseline). A finding that matches one of its entries is accepted:
+	// still reported, but it does not fail the run.
+	Baseline string `toml:"baseline"`
 }
 
 // NamePlaceholder is replaced by the test name in [test] single.
@@ -358,6 +362,9 @@ func (c *Config) merge(file Config) {
 	}
 	if file.Scan.Scanners != nil {
 		c.Scan.Scanners = file.Scan.Scanners
+	}
+	if file.Scan.Baseline != "" {
+		c.Scan.Baseline = file.Scan.Baseline
 	}
 	if len(file.Test.Command) > 0 {
 		c.Test.Command = file.Test.Command

@@ -44,8 +44,9 @@ Field names are the JSON names. Fields marked optional are left out when empty.
 | `remediation` | object | The fix |
 | `confidence` | object | The label and its reason |
 | `origin` | string list, optional | What contributed: `builtin-code:py-sql-fstring-var`, `investigator:<intent id>` and so on |
-| `status` | string | `open`, `patch-available`, `fixed` or `dismissed` |
+| `status` | string | `open`, `patch-available`, `fixed`, `accepted` or `dismissed` |
 | `dismiss_reason` | string, optional | Required when `status` is `dismissed` |
+| `accept_reason` | string, optional | The baseline entry's reason when `status` is `accepted` |
 
 ### `location`
 
@@ -172,6 +173,7 @@ SQL injection is reported as `reasoned` with confidence `high`, not `demonstrate
 | `dismissed` | The reviewer refuted the finding with a concrete reason, an investigator concluded a lead does not hold up, or a model assessed a running-target observation and did not confirm it. The reason is kept in `dismiss_reason`, in the ledger and in `review.md` |
 | `patch-available` | A patch was accepted and the proof of concept that demonstrated the finding no longer succeeds against the patched code. The patch is on the fix branch or in `fix.patch`; the code that was scanned is unchanged, so the flaw is still there until the patch is merged. It counts toward `--fail-on` like an open finding |
 | `fixed` | `spackle verify` re-ran the stored proof against the current code and it no longer succeeds. Verify sets the status back to `open` when the proof succeeds again |
+| `accepted` | An open finding, or one with a patch available, matched an entry of the scan's baseline file (`--baseline`, `[scan] baseline`). It is reported with the entry's reason in `accept_reason` and does not count toward `--fail-on`. See [ci.md](ci.md#accept-known-findings-with-a-baseline) |
 
 A dismissal needs a reason. A reviewer that says "refuted" without one does not dismiss anything: the finding is kept and the verdict is recorded as uncertain.
 

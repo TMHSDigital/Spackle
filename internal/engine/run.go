@@ -112,6 +112,13 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
+	if opts.Config.Scan.Baseline != "" {
+		b, berr := finding.LoadBaseline(opts.Config.Scan.Baseline)
+		if berr != nil {
+			return Result{}, fmt.Errorf("%w: %w. Write one with: spackle baseline <run-id> --out %s", ErrRefused, berr, opts.Config.Scan.Baseline)
+		}
+		opts.baseline = finding.NewBaselineMatcher(b, clock())
+	}
 	if tgt.Live() {
 		if opts.DryRun {
 			return Result{}, fmt.Errorf("%w: --dry-run is for a directory or a git URL. For a running target, the scope file states what a scan may send", ErrRefused)
@@ -452,7 +459,7 @@ func (r *runner) persist(seq int64, f finding.Finding) error {
 	if f.Validate() != nil {
 		return nil
 	}
-	r.fingerprint(&f)
+	r.prepare(&f)
 	if _, err := r.led.Append(seq, ledger.TypeFinding, f); err != nil {
 		return err
 	}
@@ -519,8 +526,42 @@ func (r *runner) recordFindings(mapSeq int64, findings []finding.Finding, parent
 			}
 			continue
 		}
-		r.fingerprint(&f)
+		r.prepare(&f)
 		if _, err := r.led.Append(parent[f.ID], ledger.TypeFinding, f); err != nil {
+			return err
+		}
+	}
+	return r.noteBaseline(mapSeq)
+}
+
+// prepare completes a finding before it is written to the ledger: it sets
+// the fingerprint, then applies the baseline, which matches on it.
+func (r *runner) prepare(f *finding.Finding) {
+	r.fingerprint(f)
+	r.opts.baseline.Apply(f)
+}
+
+// noteBaseline records which baseline entries matched no finding of the
+// run (the finding is gone, or its code changed) and which have expired,
+// so the baseline can be kept current.
+func (r *runner) noteBaseline(seq int64) error {
+	stale, expired := r.opts.baseline.Unused()
+	for _, group := range []struct {
+		entries []finding.BaselineEntry
+		text    string
+	}{
+		{stale, "%d baseline entries matched no finding in this run, so they can be removed from %s: %s."},
+		{expired, "%d baseline entries in %s have expired and no longer accept a finding: %s."},
+	} {
+		if len(group.entries) == 0 {
+			continue
+		}
+		names := make([]string, len(group.entries))
+		for i, e := range group.entries {
+			names[i] = e.String()
+		}
+		note := fmt.Sprintf(group.text, len(group.entries), filepath.ToSlash(r.cfg.Scan.Baseline), strings.Join(names, "; "))
+		if _, err := r.led.Append(seq, ledger.TypeNote, note); err != nil {
 			return err
 		}
 	}

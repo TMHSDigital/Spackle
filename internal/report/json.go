@@ -67,6 +67,7 @@ type jsonCounts struct {
 	Open           int `json:"open"`
 	PatchAvailable int `json:"patch_available"`
 	Fixed          int `json:"fixed"`
+	Accepted       int `json:"accepted,omitempty"`
 	Dismissed      int `json:"dismissed"`
 	Demonstrated   int `json:"demonstrated"`
 	Critical       int `json:"critical"`
@@ -104,7 +105,7 @@ func renderJSON(run Run, w io.Writer) error {
 			StartedAt: jsonTime(run.StartedAt), EndedAt: jsonTime(run.EndedAt), Outcome: run.Outcome,
 		},
 		Counts: jsonCounts{
-			Total: len(run.Findings), Open: c.Open, PatchAvailable: c.PatchAvailable, Fixed: c.Fixed, Dismissed: c.Dismissed,
+			Total: len(run.Findings), Open: c.Open, PatchAvailable: c.PatchAvailable, Fixed: c.Fixed, Accepted: c.Accepted, Dismissed: c.Dismissed,
 			Demonstrated: c.Demonstrated,
 			Critical:     c.Critical, High: c.High, Medium: c.Medium, Low: c.Low, None: c.None,
 		},

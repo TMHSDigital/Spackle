@@ -84,7 +84,9 @@ type Counts struct {
 	Open, Fixed, Dismissed            int
 	// PatchAvailable counts findings with a checked patch that is not applied.
 	PatchAvailable int
-	Demonstrated   int
+	// Accepted counts findings a baseline entry accepted.
+	Accepted     int
+	Demonstrated int
 }
 
 // Count tallies the run's findings.
@@ -99,6 +101,8 @@ func (r Run) Count() Counts {
 			c.Fixed++
 		case finding.StatusPatchAvailable:
 			c.PatchAvailable++
+		case finding.StatusAccepted:
+			c.Accepted++
 		default:
 			c.Open++
 		}

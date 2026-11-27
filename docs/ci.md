@@ -142,7 +142,7 @@ What a diff scan does and does not do:
 - The built-in rules read only the changed files. The whole tree is still mapped, and the installed external scanners still run over the whole tree; their leads in other files are dropped before a scanner's lead cap applies. With a model the scan is also cheaper, because investigations are planned for the changed files only.
 - A lead in an unchanged file is left out, and the report says how many were. A dependency lead is tied to its lockfile, so it is reported when the lockfile changed.
 - With a model, an investigation that starts in a changed file may end in a finding located in an unchanged file that the changed code reaches. That finding is reported, at the place where the flaw is.
-- Findings that predate the change are not accepted or recorded anywhere. Run a full scan on the default branch to see them.
+- Findings that predate the change are not recorded by a diff scan. Run a full scan on the default branch to see them, and accept the ones you will not fix now with a [baseline file](#accept-known-findings-with-a-baseline).
 
 By default a lead anywhere in a changed file is reported, so touching one line of an old file reports every lead already in it. `--diff-scope lines` (the Action's `diff-scope: lines`) reports only the leads on lines the change added or modified, and the report says how many leads elsewhere in the changed files were left out. A deletion counts as touching the lines on either side of it. A lead with no line, such as a vulnerable dependency in a lockfile, is still reported when its file changed. With a model, the scope narrows the leads the investigations start from; a finding an investigation reaches is still reported where the flaw is. `--diff-scope lines` works with `--changed` too, where a new file counts as changed on every line. Like `diff-base`, it is not in v0.1.0.
 
@@ -156,6 +156,16 @@ exec spackle scan . --changed --offline --fail-on high --format terminal
 Pull requests from forks do not receive repository secrets, so a model step has no key there. Keep the deterministic default for those runs.
 
 Proofs and fix checks need a container runtime on the runner. Without one, a model run still investigates and reports, and labels its findings as traced by reading the code.
+
+### Accept known findings with a baseline
+
+A baseline file lets a team adopt the gate on an existing codebase without `fail-on: never`. A finding that matches one of its entries is reported with the status `accepted` and the entry's reason, in every format, but it does not fail the run. In SARIF it carries a suppression of kind `external`, which code scanning shows as dismissed.
+
+1. Scan the default branch and write the file from that run: `spackle baseline latest --out .spackle-baseline.json --reason "existing before adoption"`. It holds one entry per open finding (and per finding with a patch available), with its id, fingerprint, class, title and location.
+2. Commit the file and point scans at it, with `baseline = ".spackle-baseline.json"` under `[scan]` in a committed `spackle.toml`, or `--baseline .spackle-baseline.json` (in the Action, `args: --baseline .spackle-baseline.json`). The path is relative to the working directory, like `state_dir`.
+3. Edit the reasons as you like. An entry may have `"expires": "YYYY-MM-DD"`: from that day on it accepts nothing, so the finding fails the gate again.
+
+Entries match by the finding's fingerprint, which is made from the flagged code and not its line number, so a finding that only moved stays accepted. Editing the flagged code changes the fingerprint, and the finding fails the gate again. Entries without a fingerprint match by finding id. A run lists the entries that matched no finding (the finding is gone or its code changed) and those that have expired, so the file can be kept current. Running `spackle baseline` again with the same `--out` rewrites the file from the newer run and keeps the reason and expiry of each entry that still matches. A baseline that cannot be read refuses the scan with exit code 2.
 
 ### SARIF and code scanning
 

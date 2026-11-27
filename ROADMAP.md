@@ -34,7 +34,6 @@ Proofs and fixes:
 Evidence and reports:
 
 - A tamper-evident, hash-chained ledger. Today the ledger is append-only by file mode and convention.
-- Baseline files to accept findings, so a known finding stops failing a build.
 
 Surfaces and interfaces:
 

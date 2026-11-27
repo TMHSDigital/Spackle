@@ -88,6 +88,9 @@ type Options struct {
 	OpenPR func(ctx context.Context, req gitx.PRRequest) (string, error)
 	// DetectRuntime overrides container runtime detection, for tests.
 	DetectRuntime func(ctx context.Context, preferred string) (sandbox.Runtime, error)
+
+	// baseline is the loaded [scan] baseline, set by Run; nil without one.
+	baseline *finding.BaselineMatcher
 }
 
 // Result identifies a finished run.

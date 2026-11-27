@@ -93,14 +93,22 @@ type sarifInvocation struct {
 }
 
 type sarifResult struct {
-	RuleID              string            `json:"ruleId"`
-	RuleIndex           int               `json:"ruleIndex"`
-	Level               string            `json:"level"`
-	Message             sarifText         `json:"message"`
-	Locations           []sarifLocation   `json:"locations"`
-	CodeFlows           []sarifCodeFlow   `json:"codeFlows,omitempty"`
-	PartialFingerprints map[string]string `json:"partialFingerprints"`
-	Properties          sarifResultProps  `json:"properties"`
+	RuleID              string             `json:"ruleId"`
+	RuleIndex           int                `json:"ruleIndex"`
+	Level               string             `json:"level"`
+	Message             sarifText          `json:"message"`
+	Locations           []sarifLocation    `json:"locations"`
+	CodeFlows           []sarifCodeFlow    `json:"codeFlows,omitempty"`
+	PartialFingerprints map[string]string  `json:"partialFingerprints"`
+	Suppressions        []sarifSuppression `json:"suppressions,omitempty"`
+	Properties          sarifResultProps   `json:"properties"`
+}
+
+// sarifSuppression marks a result the operator accepted outside the code:
+// in the baseline file.
+type sarifSuppression struct {
+	Kind          string `json:"kind"`
+	Justification string `json:"justification,omitempty"`
 }
 
 type sarifLocation struct {
@@ -164,6 +172,10 @@ func renderSARIF(run Run, w io.Writer) error {
 			// code does not count this finding. Keep it visible, but not
 			// as an error or warning, so the two signals agree.
 			res.Level = "note"
+		}
+		if f.Status == finding.StatusAccepted {
+			// Code scanning shows a suppressed result as dismissed.
+			res.Suppressions = []sarifSuppression{{Kind: "external", Justification: f.AcceptReason}}
 		}
 		if !f.Severity.Unscored {
 			res.Properties.SecuritySeverity = fmt.Sprintf("%.1f", f.Severity.Score)

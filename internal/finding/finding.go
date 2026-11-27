@@ -37,6 +37,9 @@ const (
 	// StatusFixed means the stored proof no longer succeeds against the
 	// code itself, which is what "spackle verify" establishes.
 	StatusFixed = "fixed"
+	// StatusAccepted means an entry of the baseline file accepted the
+	// finding: it is still reported, but it does not fail the run.
+	StatusAccepted = "accepted"
 )
 
 // Surfaces.
@@ -75,6 +78,8 @@ type Finding struct {
 	Status string   `json:"status"`
 	// DismissReason is set when Status is dismissed.
 	DismissReason string `json:"dismiss_reason,omitempty"`
+	// AcceptReason is the baseline entry's reason when Status is accepted.
+	AcceptReason string `json:"accept_reason,omitempty"`
 }
 
 // Location says exactly where the flaw is: a file and line range, or an
@@ -349,13 +354,13 @@ func (f *Finding) Validate() error {
 		add("remediation summary is empty")
 	}
 	switch f.Status {
-	case StatusOpen, StatusPatchAvailable, StatusFixed:
+	case StatusOpen, StatusPatchAvailable, StatusFixed, StatusAccepted:
 	case StatusDismissed:
 		if strings.TrimSpace(f.DismissReason) == "" {
 			add("status is dismissed but no reason is recorded")
 		}
 	default:
-		add("status %q is not one of open, dismissed, fixed", f.Status)
+		add("status %q is not one of open, patch-available, fixed, accepted, dismissed", f.Status)
 	}
 	return errors.Join(errs...)
 }
@@ -397,7 +402,7 @@ func LabelRank(label string) int {
 func Rank(fs []Finding) []Finding {
 	out := make([]Finding, len(fs))
 	copy(out, fs)
-	statusOrder := map[string]int{StatusOpen: 0, StatusPatchAvailable: 1, StatusFixed: 2, StatusDismissed: 3}
+	statusOrder := map[string]int{StatusOpen: 0, StatusPatchAvailable: 1, StatusFixed: 2, StatusAccepted: 3, StatusDismissed: 4}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if statusOrder[a.Status] != statusOrder[b.Status] {
