@@ -30,7 +30,7 @@ func checkDiffScope(opts Options) error {
 		return fmt.Errorf("--diff-scope is %q or %q, not %q", DiffScopeFile, DiffScopeLines, opts.DiffScope)
 	}
 	if linesScope(opts.DiffScope) && diffBase(opts) == nil {
-		return fmt.Errorf("--diff-scope %s narrows a diff scan to the changed lines; give --since or --changed with it", DiffScopeLines)
+		return fmt.Errorf("--diff-scope %s narrows a diff scan to the changed lines; give --since, --changed or --staged with it", DiffScopeLines)
 	}
 	return nil
 }
@@ -48,9 +48,12 @@ func describeDiffScope(scope string) string {
 func changedLines(ctx context.Context, root string, d *diffScan, stateDir string) (map[string][]gitx.LineRange, error) {
 	var lines map[string][]gitx.LineRange
 	var err error
-	if d.changed {
+	switch {
+	case d.changed:
 		lines, err = gitx.ChangedLinesUncommitted(ctx, root, stateDirUnder(root, stateDir)...)
-	} else {
+	case d.staged:
+		lines, err = gitx.ChangedLinesStaged(ctx, root, stateDirUnder(root, stateDir)...)
+	default:
 		lines, err = gitx.ChangedLinesSince(ctx, root, d.rev)
 	}
 	if err != nil {
@@ -90,7 +93,10 @@ type diffScan struct {
 	// changed is true for --changed, which lists uncommitted work. rev is
 	// the --since revision otherwise.
 	changed bool
-	rev     string
+	// staged is true for --staged, which lists what the next commit
+	// would contain.
+	staged bool
+	rev    string
 	// label is what the report says the scan compared against.
 	label string
 }
@@ -101,6 +107,8 @@ func diffBase(opts Options) *diffScan {
 	switch {
 	case opts.Changed:
 		return &diffScan{flag: "--changed", changed: true, label: "the last commit (uncommitted changes)"}
+	case opts.Staged:
+		return &diffScan{flag: "--staged", staged: true, label: "the last commit (staged changes)"}
 	case opts.Since != "":
 		return &diffScan{flag: "--since", rev: opts.Since, label: opts.Since}
 	}
@@ -110,8 +118,8 @@ func diffBase(opts Options) *diffScan {
 // notLocal is the refusal of a diff scan of something that is not a
 // directory, in the words of the flag that asked for it.
 func (d *diffScan) notLocal(display string) string {
-	if d.changed {
-		return fmt.Sprintf("--changed lists the uncommitted work of a local checkout, and %s is not a directory. Scan the directory of your checkout", display)
+	if d.changed || d.staged {
+		return fmt.Sprintf("%s lists the uncommitted work of a local checkout, and %s is not a directory. Scan the directory of your checkout", d.flag, display)
 	}
 	return fmt.Sprintf("--since compares a checkout with a base revision, and %s is not a directory. Clone the repository with the history you need and scan the directory", display)
 }
@@ -125,24 +133,27 @@ func changedSince(ctx context.Context, root string, d *diffScan, stateDir string
 	switch {
 	case !gitx.Available():
 		return nil, fmt.Errorf("%s needs a git repository, and git is not installed", d.flag)
-	case !d.changed && !gitx.HasTracked(ctx, root):
+	case !d.changed && !d.staged && !gitx.HasTracked(ctx, root):
 		// Uncommitted work needs no tracked file: before the first commit,
 		// every file is uncommitted.
 		return nil, fmt.Errorf("%s needs a git repository, and %s has no tracked files", d.flag, root)
 	}
 	var files []string
 	var err error
-	if d.changed {
+	switch {
+	case d.changed:
 		files, err = gitx.ChangedUncommitted(ctx, root, stateDirUnder(root, stateDir)...)
-	} else {
+	case d.staged:
+		files, err = gitx.ChangedStaged(ctx, root, stateDirUnder(root, stateDir)...)
+	default:
 		files, err = gitx.ChangedSince(ctx, root, d.rev)
 	}
 	if err != nil {
 		if errors.Is(err, gitx.ErrNotRepo) {
 			return nil, fmt.Errorf("%s needs a git repository, and %s is not inside one", d.flag, root)
 		}
-		if d.changed {
-			return nil, fmt.Errorf("--changed: git could not list the changes against HEAD (%w)", err)
+		if d.changed || d.staged {
+			return nil, fmt.Errorf("%s: git could not list the changes against HEAD (%w)", d.flag, err)
 		}
 		return nil, fmt.Errorf("--since %s: git could not compare that revision with HEAD (%w). Check the name, and in CI fetch the base commit first, for example with fetch-depth: 0", d.rev, err)
 	}
@@ -204,4 +215,25 @@ func changedMap(m mapper.Map, changed map[string]bool) mapper.Map {
 		}
 	}
 	return out
+}
+
+// stagedNote says that a --staged scan read the staged files from the
+// working tree, and how many of them have unstaged edits that were read
+// with them.
+func stagedNote(ctx context.Context, root, stateDir string, changed map[string]bool) string {
+	note := "The staged files were read from the working tree, not from the index."
+	unstaged, err := gitx.UnstagedFiles(ctx, root, stateDirUnder(root, stateDir)...)
+	if err != nil {
+		return note + " Whether they also have unstaged edits could not be checked."
+	}
+	n := 0
+	for _, f := range unstaged {
+		if changed[f] {
+			n++
+		}
+	}
+	if n == 0 {
+		return note + " None of them has unstaged edits, so what was read is what the commit will contain."
+	}
+	return fmt.Sprintf("%s %d of them also have unstaged edits, which were read too: stage or stash those edits for a scan of exactly what the commit will contain.", note, n)
 }

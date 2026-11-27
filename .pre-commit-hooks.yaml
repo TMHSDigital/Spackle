@@ -1,0 +1,19 @@
+# Hooks for the pre-commit framework (https://pre-commit.com). They scan
+# what is being committed with the offline rules and block the commit on a
+# high or critical finding. See docs/ci.md.
+- id: spackle
+  name: spackle (staged changes)
+  description: Scan the staged changes with Spackle, offline, and fail on a high or critical finding. Builds Spackle from source with Go.
+  entry: spackle scan --staged --offline --fail-on high --format terminal
+  language: golang
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
+- id: spackle-system
+  name: spackle (staged changes, installed binary)
+  description: Like the spackle hook, with the spackle binary already on PATH.
+  entry: spackle scan --staged --offline --fail-on high --format terminal
+  language: system
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]

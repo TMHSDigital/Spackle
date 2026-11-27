@@ -76,6 +76,12 @@ func ChangedLinesUncommitted(ctx context.Context, dir string, exclude ...string)
 	return out, nil
 }
 
+// ChangedLinesStaged is ChangedLinesSince for the files ChangedStaged
+// lists: the lines of their staged version that differ from HEAD.
+func ChangedLinesStaged(ctx context.Context, dir string, exclude ...string) (map[string][]LineRange, error) {
+	return changedLines(ctx, dir, "--cached", excludeSpec(exclude)...)
+}
+
 // changedLines runs git diff against spec with no context lines and reads
 // the changed line ranges of each file from its hunk headers.
 func changedLines(ctx context.Context, dir, spec string, pathspec ...string) (map[string][]LineRange, error) {

@@ -84,6 +84,9 @@ func loadResume(ctx context.Context, stateDir, id, root string, force bool) (*re
 	if run.Command != "scan" || run.Mode != "agentic" {
 		return nil, fmt.Errorf("--resume: run %s planned no investigations (it was a %s %s), so there is nothing to continue", run.ID, run.Mode, run.Command)
 	}
+	if run.Staged {
+		return nil, fmt.Errorf("--resume: run %s scanned the staged changes (--staged), which change with every git add, so it cannot be resumed. Scan again with --staged", run.ID)
+	}
 	if run.TargetPath == "" || !sameDir(run.TargetPath, root) {
 		return nil, fmt.Errorf("--resume: run %s scanned %s, not %s. Resume it with the directory it scanned", run.ID, run.Target, root)
 	}
@@ -135,7 +138,7 @@ func loadResume(ctx context.Context, stateDir, id, root string, force bool) (*re
 // Resumable reports whether a stored run stopped on its budget with planned
 // investigations it did not reach, which scan --resume can continue.
 func Resumable(run report.Run) bool {
-	if run.Command != "scan" || run.Mode != "agentic" || run.Outcome != ledger.OutcomeBudgetExhausted {
+	if run.Command != "scan" || run.Mode != "agentic" || run.Outcome != ledger.OutcomeBudgetExhausted || run.Staged {
 		return false
 	}
 	for _, skip := range run.Skipped {

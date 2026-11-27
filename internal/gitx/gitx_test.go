@@ -350,3 +350,56 @@ func TestChangedUncommitted(t *testing.T) {
 		t.Fatalf("outside a repository: err = %v, want ErrNotRepo", err)
 	}
 }
+
+// ChangedStaged lists what the next commit would add or change: staged
+// edits and staged new files, not unstaged edits, untracked files or
+// deletions. UnstagedFiles lists the edits that are not staged.
+func TestChangedStaged(t *testing.T) {
+	ctx := context.Background()
+	dir := newRepo(t)
+	writeFile(t, dir, "both.txt", "one\n")
+	writeFile(t, dir, "gone.txt", "one\n")
+	commit(t, dir, "base")
+	if got, err := ChangedStaged(ctx, dir); err != nil || len(got) != 0 {
+		t.Fatalf("clean tree: %q, err = %v", got, err)
+	}
+
+	writeFile(t, dir, "a.txt", "two\n") // unstaged edit only
+	writeFile(t, dir, "both.txt", "two\n")
+	git(t, dir, "add", "both.txt")
+	writeFile(t, dir, "both.txt", "three\n") // staged, then edited again
+	writeFile(t, dir, "new.txt", "new\n")
+	git(t, dir, "add", "new.txt")           // staged new file
+	writeFile(t, dir, "scratch.txt", "x\n") // untracked
+	git(t, dir, "rm", "-q", "gone.txt")     // staged deletion
+	writeFile(t, dir, ".spackle/runs/r1/ledger.jsonl", "{}\n")
+	git(t, dir, "add", "-f", ".spackle")
+
+	sorted := func(files []string) string {
+		s := append([]string(nil), files...)
+		sort.Strings(s)
+		return strings.Join(s, "|")
+	}
+	got, err := ChangedStaged(ctx, dir, ".spackle")
+	if err != nil || sorted(got) != "both.txt|new.txt" {
+		t.Fatalf("staged = %q, err = %v", sorted(got), err)
+	}
+	if got, err = UnstagedFiles(ctx, dir, ".spackle"); err != nil || sorted(got) != "a.txt|both.txt" {
+		t.Fatalf("unstaged = %q, err = %v", sorted(got), err)
+	}
+	lines, err := ChangedLinesStaged(ctx, dir, ".spackle")
+	if err != nil || len(lines) != 2 || len(lines["new.txt"]) != 1 || lines["new.txt"][0] != (LineRange{1, 1}) {
+		t.Fatalf("staged lines = %v, err = %v", lines, err)
+	}
+
+	// Before the first commit every staged file counts, and an untracked
+	// one does not.
+	fresh := t.TempDir()
+	git(t, fresh, "init", "-q", "-b", "main")
+	writeFile(t, fresh, "main.go", "package main\n")
+	writeFile(t, fresh, "notes.txt", "x\n")
+	git(t, fresh, "add", "main.go")
+	if got, err = ChangedStaged(ctx, fresh); err != nil || sorted(got) != "main.go" {
+		t.Fatalf("no commit yet: %q, err = %v", got, err)
+	}
+}

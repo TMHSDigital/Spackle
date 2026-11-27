@@ -65,7 +65,12 @@ type Options struct {
 	// HEAD, staged or not, and the untracked files git does not ignore: a
 	// pre-commit scan (see gitx.ChangedUncommitted). It excludes Since.
 	Changed bool
-	// DiffScope narrows a diff scan (Since or Changed): DiffScopeFile, the
+	// Staged limits a scan of a directory to the files whose staged
+	// version differs from HEAD: what the next commit would contain (see
+	// gitx.ChangedStaged). The files are read from the working tree. It
+	// excludes Since and Changed, and a staged scan cannot be resumed.
+	Staged bool
+	// DiffScope narrows a diff scan (Since, Changed or Staged): DiffScopeFile, the
 	// default, reports every lead in a changed file; DiffScopeLines reports
 	// only leads on the changed lines. Empty means DiffScopeFile, or, for
 	// a resumed run, the scope of the run it continues.

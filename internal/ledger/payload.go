@@ -28,6 +28,9 @@ type RunStart struct {
 	// takes its file set from them.
 	Since   string `json:"since,omitempty"`
 	Changed bool   `json:"changed,omitempty"`
+	// Staged marks a scan of staged changes (scan --staged), which is
+	// never resumed.
+	Staged bool `json:"staged,omitempty"`
 	// DiffScope is "lines" when the diff scan reported only leads on the
 	// changed lines (scan --diff-scope lines), and empty for whole files.
 	DiffScope string `json:"diff_scope,omitempty"`

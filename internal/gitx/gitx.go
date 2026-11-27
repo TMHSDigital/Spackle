@@ -322,6 +322,36 @@ func ChangedUncommitted(ctx context.Context, dir string, exclude ...string) ([]s
 	return append(files, splitNUL(out)...), nil
 }
 
+// ChangedStaged returns the files under dir, relative to it, whose staged
+// version differs from HEAD: what the next commit would add or change.
+// Before the first commit every staged file counts. Unstaged edits and
+// untracked files are left out, and so are deleted files. exclude names
+// directories under dir, relative to it, that are left out.
+func ChangedStaged(ctx context.Context, dir string, exclude ...string) ([]string, error) {
+	return changedFiles(ctx, dir, "--cached", excludeSpec(exclude)...)
+}
+
+// UnstagedFiles returns the files under dir, relative to it, whose working
+// tree differs from the index: edits that are not staged.
+func UnstagedFiles(ctx context.Context, dir string, exclude ...string) ([]string, error) {
+	args := append([]string{"diff", "--name-only", "-z", "--relative", "--no-textconv", "--no-ext-diff", "--diff-filter=ACMR"}, excludeSpec(exclude)...)
+	out, err := run(ctx, dir, args...)
+	if err != nil {
+		return nil, err
+	}
+	return splitNUL(out), nil
+}
+
+// excludeSpec is the pathspec of dir that leaves out the exclude
+// directories.
+func excludeSpec(exclude []string) []string {
+	spec := []string{"--", "."}
+	for _, e := range exclude {
+		spec = append(spec, ":(exclude)"+filepath.ToSlash(e))
+	}
+	return spec
+}
+
 // splitNUL splits git -z output into its non-empty entries.
 func splitNUL(out string) []string {
 	var entries []string

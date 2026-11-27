@@ -146,12 +146,26 @@ What a diff scan does and does not do:
 
 By default a lead anywhere in a changed file is reported, so touching one line of an old file reports every lead already in it. `--diff-scope lines` (the Action's `diff-scope: lines`) reports only the leads on lines the change added or modified, and the report says how many leads elsewhere in the changed files were left out. A deletion counts as touching the lines on either side of it. A lead with no line, such as a vulnerable dependency in a lockfile, is still reported when its file changed. With a model, the scope narrows the leads the investigations start from; a finding an investigation reaches is still reported where the flaw is. `--diff-scope lines` works with `--changed` too, where a new file counts as changed on every line. Like `diff-base`, it is not in v0.1.0.
 
-To scan work you have not committed yet, use `spackle scan . --changed` instead of `--since`. It reports only on files that differ from the last commit, staged or not, and on new files git does not ignore; the two flags cannot be combined. As a git pre-commit hook (`.git/hooks/pre-commit`, made executable):
+To scan work you have not committed yet, use `spackle scan . --changed` instead of `--since`. It reports only on files that differ from the last commit, staged or not, and on new files git does not ignore.
+
+A pre-commit hook should judge what is being committed, so use `--staged` there. It reports only on files whose staged version differs from the last commit: an untracked scratch file or an unstaged edit to a file you are not committing does not block the commit. The staged files are read from the working tree, not from the index, and the report says how many of them also have unstaged edits; with none, what was scanned is exactly what the commit will contain. `--diff-scope lines` takes the staged lines. A `--staged` run cannot be resumed. `--since`, `--changed` and `--staged` cannot be combined. As a git pre-commit hook (`.git/hooks/pre-commit`, made executable):
 
 ```sh
 #!/bin/sh
-exec spackle scan . --changed --offline --fail-on high --format terminal
+exec spackle scan . --staged --offline --fail-on high --format terminal
 ```
+
+With the [pre-commit](https://pre-commit.com) framework, add the hook from this repository to `.pre-commit-config.yaml`. The `spackle` hook builds Spackle from source with Go; `spackle-system` uses the `spackle` already on your PATH instead.
+
+```yaml
+repos:
+  - repo: https://github.com/TMHSDigital/Spackle
+    rev: <release>
+    hooks:
+      - id: spackle
+```
+
+Like `diff-base`, `--staged` and the hooks file are on `main` and come with the next release: `<release>` stands for that tag.
 
 Pull requests from forks do not receive repository secrets, so a model step has no key there. Keep the deterministic default for those runs.
 

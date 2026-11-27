@@ -145,6 +145,69 @@ func TestChangedLimitsTheScanToUncommittedFiles(t *testing.T) {
 	}
 }
 
+// --staged covers what the next commit would contain: a staged new file
+// and a staged edit, not an unstaged edit or an untracked file. The notes
+// say the files were read from the working tree and how many of them have
+// unstaged edits. It cannot be combined with another diff flag or resumed.
+func TestStagedLimitsTheScanToStagedFiles(t *testing.T) {
+	lead := func(file string) seed.Lead {
+		l := sqlLead()
+		l.File = file
+		return l
+	}
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead(), lead("old.py"), lead("staged.py"), lead("scratch.py")}})
+	diffTarget(t, o.Target)
+	for name, body := range map[string]string{"staged.py": "x = 1\n", "scratch.py": "y = 2\n"} {
+		if err := os.WriteFile(filepath.Join(o.Target, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitIn(t, o.Target, "add", "staged.py")
+	// old.py has an unstaged edit only: it is not part of the commit.
+	if err := os.WriteFile(filepath.Join(o.Target, "old.py"), append(mustReadFile(t, filepath.Join(o.Target, "old.py")), []byte("# edited\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.Staged = true
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	for _, f := range res.Run.Findings {
+		files = append(files, f.Location.File)
+	}
+	if strings.Join(files, ",") != "staged.py" {
+		t.Fatalf("findings in %v, want staged.py only", files)
+	}
+	if !containsNote(res.Run.Notes, "Diff scan against the last commit (staged changes): 1 changed files") || !containsNote(res.Run.Notes, "None of them has unstaged edits") {
+		t.Fatalf("notes = %q", res.Run.Notes)
+	}
+	if !res.Run.Staged {
+		t.Error("the run does not record that it scanned the staged changes")
+	}
+
+	// A staged file edited again after staging: the note says so.
+	if err := os.WriteFile(filepath.Join(o.Target, "staged.py"), []byte("x = 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.RunID = "20261122-120001-abcdef"
+	if res, err = Run(context.Background(), o); err != nil || !containsNote(res.Run.Notes, "1 of them also have unstaged edits") {
+		t.Fatalf("notes = %q, err = %v", res.Run.Notes, err)
+	}
+
+	for name, change := range map[string]func(*Options){
+		"with --changed": func(o *Options) { o.Changed = true },
+		"with --since":   func(o *Options) { o.Since = "HEAD" },
+		"with --resume":  func(o *Options) { o.Resume = "latest" },
+	} {
+		p := o
+		change(&p)
+		if _, err := Run(context.Background(), p); !errors.Is(err, ErrRefused) {
+			t.Errorf("%s: err = %v, want a refusal", name, err)
+		}
+	}
+}
+
 func mustReadFile(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -416,7 +479,7 @@ func TestDiffScopeLinesWithChanged(t *testing.T) {
 func TestDiffScopeRefusals(t *testing.T) {
 	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
 	o.DiffScope = DiffScopeLines
-	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "give --since or --changed") {
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "give --since, --changed or --staged") {
 		t.Fatalf("lines without a diff scan: err = %v", err)
 	}
 	o.Since, o.DiffScope = "main", "hunks"

@@ -171,8 +171,11 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 			return Result{}, fmt.Errorf("%w: --resume continues the investigations of an earlier run, which needs a model. Set [model] in spackle.toml, or pass --provider and --model", ErrRefused)
 		}
 	}
-	if opts.Since != "" && opts.Changed {
-		return Result{}, fmt.Errorf("%w: --since and --changed choose different file sets; give one", ErrRefused)
+	if countTrue(opts.Since != "", opts.Changed, opts.Staged) > 1 {
+		return Result{}, fmt.Errorf("%w: --since, --changed and --staged choose different file sets; give one", ErrRefused)
+	}
+	if opts.Staged && opts.Resume != "" {
+		return Result{}, fmt.Errorf("%w: --staged scans what the next commit would contain, which changes with every git add, so it cannot resume a run. Scan again with --staged", ErrRefused)
 	}
 	if d := diffBase(opts); d != nil && tgt.Kind != target.KindPath {
 		return Result{}, fmt.Errorf("%w: %s", ErrRefused, d.notLocal(tgt.Display))
@@ -280,6 +283,9 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	leads, scanNotes := applyScanConfig(leads, opts.Config.Scan)
 	if changed != nil {
 		scanNotes = append(scanNotes, diffNote(diffBase(opts).label, len(changed), leftOut))
+		if opts.Staged {
+			scanNotes = append(scanNotes, stagedNote(ctx, root, stateDir, changed))
+		}
 		if keep != nil {
 			scanNotes = append(scanNotes, diffLinesNote(outside))
 		}
@@ -377,7 +383,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if resume != nil {
 		start.ResumedFrom = resume.runID
 	}
-	start.Since, start.Changed = opts.Since, opts.Changed
+	start.Since, start.Changed, start.Staged = opts.Since, opts.Changed, opts.Staged
 	if linesScope(opts.DiffScope) {
 		start.DiffScope = DiffScopeLines
 	}
@@ -660,4 +666,15 @@ func (r *runner) deterministic(leads []seed.Lead, leadSeq map[string]int64) ([]f
 		findings = append(findings, f)
 	}
 	return findings, parent, nil
+}
+
+// countTrue counts the conditions that hold.
+func countTrue(conds ...bool) int {
+	n := 0
+	for _, c := range conds {
+		if c {
+			n++
+		}
+	}
+	return n
 }
