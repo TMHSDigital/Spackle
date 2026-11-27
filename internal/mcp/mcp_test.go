@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -1218,6 +1219,44 @@ func TestRunSummaryShortcutAgreesWithTheLedger(t *testing.T) {
 
 // scan passes since and changed through to the engine, and compare_runs
 // returns the comparison of two stored runs.
+func TestScanDryRunReturnsThePlanAndStoresNoRun(t *testing.T) {
+	fx := newFixture(t)
+	c := start(t, fx.opts)
+	tr := c.tool("scan", map[string]any{"path": ".", "dry_run": true})
+	if tr.IsError {
+		t.Fatalf("dry run failed: %s", tr.text())
+	}
+	var plan engine.Plan
+	if err := json.Unmarshal(tr.Structured, &plan); err != nil {
+		t.Fatal(err)
+	}
+	var fromText engine.Plan
+	if err := json.Unmarshal([]byte(tr.text()), &fromText); err != nil {
+		t.Fatalf("text is not the same JSON as structuredContent: %v", err)
+	}
+	if plan.Mode != "deterministic" || plan.Files == 0 || plan.Leads == 0 || plan.LeadsByClass["sql-injection"] == 0 || plan.Estimate == "" || len(plan.Seeders) == 0 {
+		t.Errorf("plan = %+v", plan)
+	}
+	if fromText.Leads != plan.Leads {
+		t.Error("text and structuredContent differ")
+	}
+	if seen := *fx.seen; len(seen) != 1 || !seen[0].DryRun {
+		t.Fatalf("engine options = %+v", seen)
+	}
+	entries, err := os.ReadDir(engine.RunsDir(fx.opts.Config.StateDir))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a dry run stored %d run(s)", len(entries))
+	}
+	// dry_run: false is an ordinary scan.
+	if tr := c.tool("scan", map[string]any{"path": ".", "dry_run": false}); tr.IsError || (*fx.seen)[1].DryRun {
+		t.Fatalf("dry_run false: %s", tr.text())
+	}
+	c.refused("scan", map[string]any{"path": ".", "dry_run": "yes"}, "dry_run")
+}
+
 func TestScanSinceAndCompareRuns(t *testing.T) {
 	fx := newFixture(t)
 	c := start(t, fx.opts)

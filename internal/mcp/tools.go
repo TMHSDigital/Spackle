@@ -202,6 +202,7 @@ func (s *server) buildTools() []tool {
 		scanDesc += "The scan runs the deterministic stages only (built-in rules and the scanners installed on this machine); no model is called. "
 	}
 	scanDesc += "It writes a run directory in the state directory. Use get_report or get_finding with the returned run_id for the details. " +
+		"With dry_run, it returns instead what the scan would read, the leads each seeder finds, the investigations it would plan and the cost estimate; a dry run calls no model and stores no run. " +
 		"URLs, git remotes and running applications are refused: those scans need the spackle command line, where the operator authorizes scope."
 
 	return []tool{
@@ -258,7 +259,8 @@ func (s *server) buildTools() []tool {
 				`"max_findings":{"type":"integer","minimum":1,"maximum":100,"description":"Report at most this many findings, highest severity first. It can lower the operator's limit, never raise it."},` +
 				`"since":{"type":"string","description":"Report only on files changed since this git revision (a branch, tag or commit of the directory's repository), for example the base of your branch."},` +
 				`"changed":{"type":"boolean","description":"Report only on files that differ from the last commit, staged or not, and new files git does not ignore: the edits you have not committed. Cannot be combined with since."},` +
-				`"diff_scope":{"type":"string","enum":["file","lines"],"description":"With since or changed: file (the default) reports every lead in a changed file, lines only the leads on the changed lines."}},` +
+				`"diff_scope":{"type":"string","enum":["file","lines"],"description":"With since or changed: file (the default) reports every lead in a changed file, lines only the leads on the changed lines."},` +
+				`"dry_run":{"type":"boolean","description":"Return the plan and the cost estimate of the scan instead of running it. Calls no model and stores no run."}},` +
 				`"required":["path"],"additionalProperties":false}`),
 			// A scan writes a run directory, and with a remote model allowed
 			// it sends redacted excerpts to the provider.
@@ -351,8 +353,9 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 		Since       *string `json:"since"`
 		Changed     *bool   `json:"changed"`
 		DiffScope   *string `json:"diff_scope"`
+		DryRun      *bool   `json:"dry_run"`
 	}
-	if err := decodeArgs("scan", raw, &a, "path (required), max_findings, since, changed and diff_scope"); err != nil {
+	if err := decodeArgs("scan", raw, &a, "path (required), max_findings, since, changed, diff_scope and dry_run"); err != nil {
 		return errorf("%v", err)
 	}
 	if a.Path == nil {
@@ -394,6 +397,9 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 			return errorf("scan refused: diff_scope %q narrows a diff scan to the changed lines; give since or changed with it", engine.DiffScopeLines)
 		}
 	}
+	if a.DryRun != nil {
+		opts.DryRun = *a.DryRun
+	}
 	res, err := s.scanFn(ctx, opts)
 	if err != nil {
 		switch {
@@ -403,6 +409,12 @@ func (s *server) scan(ctx context.Context, raw json.RawMessage) result {
 			return errorf("scan refused: %v", err)
 		}
 		return errorf("scan failed: %v. Call doctor to check the environment", err)
+	}
+	if opts.DryRun {
+		if res.Plan == nil {
+			return errorf("scan failed: the dry run returned no plan. Call doctor to check the environment")
+		}
+		return jsonResult(res.Plan)
 	}
 
 	sum := scanSummary{

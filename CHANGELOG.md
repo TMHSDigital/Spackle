@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - The MCP `scan` tool takes `since` (a git revision) and `changed` (uncommitted work), so a coding agent can ask what its change introduced, and a read-only `compare_runs` tool returns the new, gone and still-present findings of two stored runs.
+- The MCP `scan` tool takes `dry_run: true`, which returns the plan and the cost estimate of the scan, as `spackle scan --dry-run` shows them, without calling a model or storing a run.
 - `spackle scan <directory> --changed` reports only on files that differ from the last commit, staged or not, and on new files git does not ignore, for a scan before you commit. `docs/ci.md` shows it as a pre-commit hook.
 - `spackle rules [--format text|json]` lists every built-in rule with its source, id, class, severity, CWE and the files it reads. A scan warns, on the terminal and in the report, when `[scan] disable_rules` names something that looks like a built-in id but matches none, such as a typo.
 - `[output] fail_on_confidence` (also `--fail-on-confidence` and the Action input `fail-on-confidence`) sets the lowest confidence a finding needs to count toward `fail_on`: `plausible` (the default, every finding, as before), `high` or `demonstrated`. Unconfirmed leads can then be reported without failing CI.

@@ -18,6 +18,8 @@ Arguments a tool does not define are refused, not ignored. A call that passes `m
 
 `scan` also takes `since`, a git revision, to report only on files changed since it, and `changed: true` to report only on the files you have not committed yet (edited, staged or new and not ignored). They work like `spackle scan --since` and `--changed`, need the directory to be in a git repository, and cannot be combined. `diff_scope: "lines"` with either reports only the leads on the changed lines, like `spackle scan --diff-scope lines`.
 
+`dry_run: true` returns the plan of the scan instead of running it, like `spackle scan --dry-run`: the number of files and their languages, what is not read, each seeder with its lead count, the leads by class and by severity, the most investigations the planner would be asked for, and the cost estimate. A dry run calls no model and stores no run, so an agent can check the scope and the cost before a scan that spends from the operator's budget.
+
 **`list_runs`** lists the runs in the state directory, newest first, at most 50. Each row has the run id, the target, the start time, the outcome and the finding counts. A run that cannot be read is listed with an `error` string instead of being left out.
 
 **`get_report`** renders the report of one stored run. `run_id` is a run id, a unique prefix of one, or `latest`. `format` is `markdown` (the default), `json` or `sarif`. A report larger than 200 KiB is cut short, with a note that says so and how to get the rest.
