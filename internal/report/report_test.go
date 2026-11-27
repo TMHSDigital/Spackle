@@ -266,6 +266,10 @@ func fixtureRun() Run {
 		Usage: Usage{
 			ModelCalls: 40, InputTokens: 182400, OutputTokens: 21950,
 			Estimated: true, CostKnown: false, SandboxRuns: 3, Leads: 9,
+			ByStage: map[string]StageUsage{
+				"investigator": {Calls: 31, InputTokens: 160000, OutputTokens: 18000, CostKnown: false, Models: []string{"local-coder-14b"}},
+				"reviewer":     {Calls: 9, InputTokens: 22400, OutputTokens: 3950, CostUSD: 1.25, CostKnown: true, Models: []string{"claude-haiku-5-5"}},
+			},
 		},
 	}
 }
@@ -1038,6 +1042,10 @@ func TestLoadRoundTrip(t *testing.T) {
 		Usage: Usage{
 			ModelCalls: 2, InputTokens: 1500, OutputTokens: 250, CostUSD: 0.25,
 			Estimated: true, CostKnown: false, SandboxRuns: 1, Leads: 2,
+			ByStage: map[string]StageUsage{
+				"hunter":   {Calls: 1, InputTokens: 1000, OutputTokens: 200, CostKnown: false, Models: []string{"local-coder-14b"}},
+				"reviewer": {Calls: 1, InputTokens: 500, OutputTokens: 50, CostUSD: 0.25, CostKnown: true, Models: []string{"local-coder-14b"}},
+			},
 		},
 	}
 	if !reflect.DeepEqual(got, want) {

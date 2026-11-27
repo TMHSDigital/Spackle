@@ -20,7 +20,7 @@ Arguments a tool does not define are refused, not ignored. A call that passes `m
 
 `dry_run: true` returns the plan of the scan instead of running it, like `spackle scan --dry-run`: the number of files and their languages, what is not read, each seeder with its lead count, the leads by class and by severity, the most investigations the planner would be asked for, and the cost estimate. A dry run calls no model and stores no run, so an agent can check the scope and the cost before a scan that spends from the operator's budget.
 
-**`list_runs`** lists the runs in the state directory, newest first, at most 50. Each row has the run id, the target, the start time, the outcome and the finding counts. A run that cannot be read is listed with an `error` string instead of being left out.
+**`list_runs`** lists the runs in the state directory, newest first, at most 50. Each row has the run id, the target, the start time, the outcome, the finding counts and `cost_usd`, the model spend (absent when it is not known). A run that cannot be read is listed with an `error` string instead of being left out.
 
 **`get_report`** renders the report of one stored run. `run_id` is a run id, a unique prefix of one, or `latest`. `format` is `markdown` (the default), `json` or `sarif`. A report larger than 200 KiB is cut short, with a note that says so and how to get the rest.
 

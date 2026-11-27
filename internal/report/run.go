@@ -7,6 +7,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -74,6 +75,31 @@ type Usage struct {
 	CostKnown   bool
 	SandboxRuns int
 	Leads       int
+	// ByStage splits the model calls by pipeline stage (planner,
+	// investigator, prover, reviewer, fixer, mechanical, ...).
+	ByStage map[string]StageUsage
+}
+
+// StageUsage totals the model calls of one stage.
+type StageUsage struct {
+	Calls        int
+	InputTokens  int
+	OutputTokens int
+	CostUSD      float64
+	// CostKnown is false when any call of the stage had no known price.
+	CostKnown bool
+	// Models lists the models the stage called, sorted.
+	Models []string
+}
+
+// Stages returns the names in ByStage, sorted.
+func (u Usage) Stages() []string {
+	names := make([]string, 0, len(u.ByStage))
+	for name := range u.ByStage {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Counts summarizes a run's findings. The severity buckets and Demonstrated
@@ -201,6 +227,7 @@ func Load(runDir string) (Run, error) {
 			run.Usage.CostUSD += d.CostUSD
 			run.Usage.Estimated = run.Usage.Estimated || d.Estimated
 			run.Usage.CostKnown = run.Usage.CostKnown && d.CostKnown
+			run.Usage.addStage(d)
 		case ledger.TypeSandboxRun:
 			run.Usage.SandboxRuns++
 		case ledger.TypeFinding:
@@ -298,4 +325,29 @@ func Render(format string, run Run, w io.Writer) error {
 		return fmt.Errorf("unknown report format %q: choose one of %s", format, strings.Join(Formats(), ", "))
 	}
 	return r.fn(run, w)
+}
+
+// addStage adds one model call to its stage's totals.
+func (u *Usage) addStage(d ledger.ModelCall) {
+	name := d.Stage
+	if name == "" {
+		name = "unknown"
+	}
+	if u.ByStage == nil {
+		u.ByStage = map[string]StageUsage{}
+	}
+	s, seen := u.ByStage[name]
+	if !seen {
+		s.CostKnown = true
+	}
+	s.Calls++
+	s.InputTokens += d.InputTokens
+	s.OutputTokens += d.OutputTokens
+	s.CostUSD += d.CostUSD
+	s.CostKnown = s.CostKnown && d.CostKnown
+	if d.Model != "" && !slices.Contains(s.Models, d.Model) {
+		s.Models = append(s.Models, d.Model)
+		sort.Strings(s.Models)
+	}
+	u.ByStage[name] = s
 }

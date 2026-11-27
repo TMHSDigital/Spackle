@@ -258,12 +258,30 @@ func usageSummary(u Usage) []kv {
 	if u.CostKnown {
 		cost = fmt.Sprintf("$%.4f", u.CostUSD)
 	}
-	return []kv{
+	out := []kv{
 		{"Model calls", fmt.Sprint(u.ModelCalls), false},
 		{"Tokens", tokens, false},
 		{"Cost", cost, false},
-		{"Sandbox runs", fmt.Sprint(u.SandboxRuns), false},
 	}
+	// One line per stage, so the split of a budget across the stages and
+	// their models can be read off the report.
+	for _, name := range u.Stages() {
+		s := u.ByStage[name]
+		cost := "cost unknown"
+		if s.CostKnown {
+			cost = fmt.Sprintf("$%.4f", s.CostUSD)
+		}
+		calls := "calls"
+		if s.Calls == 1 {
+			calls = "call"
+		}
+		line := fmt.Sprintf("%d %s, %d input and %d output tokens, %s", s.Calls, calls, s.InputTokens, s.OutputTokens, cost)
+		if len(s.Models) > 0 {
+			line += " (" + strings.Join(s.Models, ", ") + ")"
+		}
+		out = append(out, kv{"Stage " + name, line, false})
+	}
+	return append(out, kv{"Sandbox runs", fmt.Sprint(u.SandboxRuns), false})
 }
 
 func countsText(c Counts) string {

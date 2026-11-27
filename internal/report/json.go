@@ -25,7 +25,8 @@ const JSONSchema = "spackle.report/v1"
 //	skipped    one entry per budget cap that was reached
 //	notes      free-text notes the run recorded about what it did not do
 //	coverage   the target map summary and one entry per seeder
-//	usage      model calls, tokens, cost and sandbox runs
+//	usage      model calls, tokens, cost and sandbox runs, and the model
+//	           calls, tokens and cost of each stage (by_stage)
 //
 // Arrays are never null. Times are RFC 3339 in UTC, or the empty string when
 // the ledger did not record one. usage.cost_usd is null when cost_known is
@@ -91,6 +92,19 @@ type jsonUsage struct {
 	CostUSD         *float64 `json:"cost_usd"`
 	CostKnown       bool     `json:"cost_known"`
 	SandboxRuns     int      `json:"sandbox_runs"`
+	// ByStage has one entry per pipeline stage that called a model, in
+	// stage name order.
+	ByStage []jsonStageUsage `json:"by_stage"`
+}
+
+type jsonStageUsage struct {
+	Stage        string   `json:"stage"`
+	ModelCalls   int      `json:"model_calls"`
+	InputTokens  int      `json:"input_tokens"`
+	OutputTokens int      `json:"output_tokens"`
+	CostUSD      *float64 `json:"cost_usd"`
+	CostKnown    bool     `json:"cost_known"`
+	Models       []string `json:"models"`
 }
 
 func renderJSON(run Run, w io.Writer) error {
@@ -126,6 +140,16 @@ func renderJSON(run Run, w io.Writer) error {
 	if run.Usage.CostKnown {
 		cost := run.Usage.CostUSD
 		rep.Usage.CostUSD = &cost
+	}
+	rep.Usage.ByStage = []jsonStageUsage{}
+	for _, name := range run.Usage.Stages() {
+		s := run.Usage.ByStage[name]
+		row := jsonStageUsage{Stage: name, ModelCalls: s.Calls, InputTokens: s.InputTokens, OutputTokens: s.OutputTokens, CostKnown: s.CostKnown, Models: nonNil(s.Models)}
+		if s.CostKnown {
+			cost := s.CostUSD
+			row.CostUSD = &cost
+		}
+		rep.Usage.ByStage = append(rep.Usage.ByStage, row)
 	}
 	return writeJSON(w, rep)
 }

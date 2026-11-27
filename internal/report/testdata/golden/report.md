@@ -435,4 +435,6 @@ Generate reset tokens from the operating system's random source.
 - **Model calls:** 40
 - **Tokens:** 182400 input, 21950 output (estimated)
 - **Cost:** unknown for this model
+- **Stage investigator:** 31 calls, 160000 input and 18000 output tokens, cost unknown (local-coder-14b)
+- **Stage reviewer:** 9 calls, 22400 input and 3950 output tokens, \$1.2500 (claude-haiku-5-5)
 - **Sandbox runs:** 3

@@ -246,7 +246,7 @@ func (s *server) buildTools() []tool {
 		},
 		{
 			Name: "list_runs", Title: "List stored runs",
-			Description: "List the runs in the state directory, newest first, at most 50: each with its run id, target, start time, outcome and finding counts. A run that cannot be read is listed with an error instead of being left out.",
+			Description: "List the runs in the state directory, newest first, at most 50: each with its run id, target, start time, outcome, finding counts and model spend in USD (absent when unknown). A run that cannot be read is listed with an error instead of being left out.",
 			InputSchema: schema(`{"type":"object","properties":{},"additionalProperties":false}`),
 			Annotations: annotations{ReadOnlyHint: true},
 			call:        s.listRuns,
@@ -683,7 +683,9 @@ type runRow struct {
 	Outcome  string          `json:"outcome,omitempty"`
 	Findings *int            `json:"findings,omitempty"`
 	Counts   *severityCounts `json:"counts,omitempty"`
-	Error    string          `json:"error,omitempty"`
+	// CostUSD is the run's model spend; absent when it is not known.
+	CostUSD *float64 `json:"cost_usd,omitempty"`
+	Error   string   `json:"error,omitempty"`
 }
 
 type runList struct {
@@ -717,7 +719,7 @@ func (s *server) listRuns(_ context.Context, raw json.RawMessage) result {
 		} else {
 			n := sum.Findings
 			c := severityCounts{Critical: sum.Counts.Critical, High: sum.Counts.High, Medium: sum.Counts.Medium, Low: sum.Counts.Low, None: sum.Counts.None}
-			row.Target, row.Outcome, row.Findings, row.Counts = sum.Target, sum.Outcome, &n, &c
+			row.Target, row.Outcome, row.Findings, row.Counts, row.CostUSD = sum.Target, sum.Outcome, &n, &c, sum.Cost()
 			if !sum.Started.IsZero() {
 				row.Started = sum.Started.UTC().Format(time.RFC3339)
 			}

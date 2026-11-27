@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,6 +27,12 @@ type Summary struct {
 	Started  time.Time `json:"started"`
 	Findings int       `json:"findings"`
 	Counts   Counts    `json:"counts"`
+	// ModelCalls and CostUSD total the run's model calls. CostKnown is
+	// false when a call had no known price, and in a summary written
+	// before these fields existed.
+	ModelCalls int     `json:"model_calls"`
+	CostUSD    float64 `json:"cost_usd"`
+	CostKnown  bool    `json:"cost_known"`
 	// LedgerBytes is the size of the ledger this summary was made from.
 	LedgerBytes int64 `json:"ledger_bytes"`
 }
@@ -36,10 +43,8 @@ func WriteSummary(runDir string, run Run) error {
 	if err != nil {
 		return err
 	}
-	s := Summary{
-		RunID: run.ID, Target: run.Target, Outcome: run.Outcome, Started: run.StartedAt,
-		Findings: len(run.Findings), Counts: run.Count(), LedgerBytes: st.Size(),
-	}
+	s := summaryOf(run)
+	s.LedgerBytes = st.Size()
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
@@ -79,10 +84,32 @@ func SummaryOf(runDir string) (Summary, error) {
 	if err != nil {
 		return Summary{}, err
 	}
+	return summaryOf(run), nil
+}
+
+func summaryOf(run Run) Summary {
 	return Summary{
 		RunID: run.ID, Target: run.Target, Outcome: run.Outcome, Started: run.StartedAt,
 		Findings: len(run.Findings), Counts: run.Count(),
-	}, nil
+		ModelCalls: run.Usage.ModelCalls, CostUSD: run.Usage.CostUSD, CostKnown: run.Usage.CostKnown,
+	}
+}
+
+// Cost is the run's model spend, or nil when it is not known.
+func (s Summary) Cost() *float64 {
+	if !s.CostKnown {
+		return nil
+	}
+	c := s.CostUSD
+	return &c
+}
+
+// CostText is the run's model spend as a listing shows it.
+func (s Summary) CostText() string {
+	if !s.CostKnown {
+		return "cost unknown"
+	}
+	return fmt.Sprintf("$%.4f", s.CostUSD)
 }
 
 // LoadSummary returns the summary of the run in runDir. ok is false when

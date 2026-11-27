@@ -333,6 +333,9 @@ Usage
   Model calls: 40
   Tokens: 182400 input, 21950 output (estimated)
   Cost: unknown for this model
+  Stage investigator: 31 calls, 160000 input and 18000 output tokens, cost unknown
+    (local-coder-14b)
+  Stage reviewer: 9 calls, 22400 input and 3950 output tokens, $1.2500 (claude-haiku-5-5)
   Sandbox runs: 3
 
 Summary: 4 findings (1 critical, 1 high, 1 medium, 1 low), 1 demonstrated, 1 fixed, 1 dismissed

@@ -64,7 +64,8 @@ func TestRunsListsStoredRuns(t *testing.T) {
 			t.Errorf("the list does not name run %s:\n%s", n, out.String())
 		}
 	}
-	if !strings.Contains(out.String(), "2 run(s)") || !strings.Contains(out.String(), "completed") {
+	// A deterministic run calls no model, so its cost is known and zero.
+	if !strings.Contains(out.String(), "2 run(s)") || !strings.Contains(out.String(), "completed") || !strings.Contains(out.String(), "$0.0000") {
 		t.Errorf("list = %s", out.String())
 	}
 	out.Reset()
@@ -73,12 +74,17 @@ func TestRunsListsStoredRuns(t *testing.T) {
 	}
 	var got struct {
 		Runs []struct {
-			RunID   string `json:"run_id"`
-			Outcome string `json:"outcome"`
+			RunID     string   `json:"run_id"`
+			Outcome   string   `json:"outcome"`
+			CostUSD   *float64 `json:"cost_usd"`
+			CostKnown bool     `json:"cost_known"`
 		} `json:"runs"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil || len(got.Runs) != 2 || got.Runs[0].RunID < got.Runs[1].RunID {
 		t.Fatalf("json = %s (%v); want two runs, newest first", out.String(), err)
+	}
+	if r := got.Runs[0]; !r.CostKnown || r.CostUSD == nil || *r.CostUSD != 0 {
+		t.Errorf("run cost = %v (known %v), want a known zero", r.CostUSD, r.CostKnown)
 	}
 }
 

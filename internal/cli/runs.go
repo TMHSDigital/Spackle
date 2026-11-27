@@ -22,6 +22,11 @@ type runRow struct {
 	Target   string `json:"target,omitempty"`
 	Outcome  string `json:"outcome,omitempty"`
 	Findings int    `json:"findings"`
+	// CostUSD is the run's model spend, null when it is not known (a model
+	// with no price, or a run stored before costs were summarized).
+	CostUSD   *float64 `json:"cost_usd"`
+	CostKnown bool     `json:"cost_known"`
+	cost      string
 	// Extra says what else the run left in the state directory: a clone of
 	// a git URL target, a fix worktree.
 	Extra []string `json:"extra"`
@@ -92,7 +97,7 @@ func printRunRow(env Env, r runRow) {
 	}
 	// The target and the notes come from the stored run, which a scanned
 	// repository can influence, so they are cleaned before printing.
-	line := fmt.Sprintf("%s  %-16s %3d finding(s)  %s", r.RunID, r.Outcome, r.Findings, report.CleanText(r.Target))
+	line := fmt.Sprintf("%s  %-16s %3d finding(s)  %-12s  %s", r.RunID, r.Outcome, r.Findings, r.cost, report.CleanText(r.Target))
 	if len(r.Extra) > 0 {
 		line += "  [" + report.CleanText(strings.Join(r.Extra, ", ")) + "]"
 	}
@@ -121,6 +126,7 @@ func storedRuns(stateDir string) ([]runRow, error) {
 			row.Error = lerr.Error()
 		} else {
 			row.Target, row.Outcome, row.Findings = sum.Target, sum.Outcome, sum.Findings
+			row.CostUSD, row.CostKnown, row.cost = sum.Cost(), sum.CostKnown, sum.CostText()
 			if !sum.Started.IsZero() {
 				row.started = sum.Started
 				row.Started = sum.Started.UTC().Format(time.RFC3339)
