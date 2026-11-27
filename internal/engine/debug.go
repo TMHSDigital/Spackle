@@ -199,6 +199,7 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	if err != nil {
 		return Result{}, err
 	}
+	r.root = root
 	defer r.done(&err)
 	led := r.led
 	r.lab = r.newLab(root, m.Tests, rt, "")
@@ -271,8 +272,11 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 			if _, aerr := led.Append(mapSeq, ledger.TypeReject, ledger.Reject{Stage: "engine", Intent: f.ID, Reason: verr.Error()}); aerr != nil {
 				return Result{}, aerr
 			}
-		} else if _, aerr := led.Append(mapSeq, ledger.TypeFinding, *f); aerr != nil {
-			return Result{}, aerr
+		} else {
+			r.fingerprint(f)
+			if _, aerr := led.Append(mapSeq, ledger.TypeFinding, *f); aerr != nil {
+				return Result{}, aerr
+			}
 		}
 	}
 	return r.end(startSeq, outcome)

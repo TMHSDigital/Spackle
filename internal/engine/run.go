@@ -19,6 +19,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
 	"github.com/TMHSDigital/spackle/internal/mapper"
+	"github.com/TMHSDigital/spackle/internal/redact"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
 	"github.com/TMHSDigital/spackle/internal/textx"
@@ -48,6 +49,53 @@ type runner struct {
 	// before recordFindings runs. An event cannot be taken back, so the
 	// max-findings cap keeps them. Only persist writes it.
 	recorded map[string]bool
+	// root is the scanned directory that finding fingerprints read the
+	// flagged lines from; empty for a running target. sources caches the
+	// redacted lines of each file read (nil when it could not be read).
+	root    string
+	sources map[string][]string
+}
+
+// maxFingerprintFile is the largest file whose lines a fingerprint reads.
+const maxFingerprintFile = 8 << 20
+
+// fingerprint sets f.Fingerprint from the flagged lines of the scanned
+// code, redacted as the rest of Spackle sees them. A file that cannot be
+// read, or a finding without one, gets a fingerprint without the text.
+func (r *runner) fingerprint(f *finding.Finding) {
+	if f.Fingerprint != "" {
+		return
+	}
+	var lines []string
+	if file := f.Location.File; file != "" && r.root != "" {
+		var ok bool
+		if lines, ok = r.sources[file]; !ok {
+			lines = readSourceLines(r.root, file)
+			if r.sources == nil {
+				r.sources = map[string][]string{}
+			}
+			r.sources[file] = lines
+		}
+	}
+	f.Fingerprint = finding.MakeFingerprint(f.Class, f.Location, lines)
+}
+
+// readSourceLines returns the redacted lines of file under root, or nil
+// when it leaves root, is too large or cannot be read.
+func readSourceLines(root, file string) []string {
+	p, err := walk.Resolve(root, filepath.FromSlash(file))
+	if err != nil {
+		return nil
+	}
+	if st, err := os.Stat(p); err != nil || !st.Mode().IsRegular() || st.Size() > maxFingerprintFile {
+		return nil
+	}
+	b, err := os.ReadFile(p) //nolint:gosec // walk.Resolve keeps p inside the scanned root
+	if err != nil {
+		return nil
+	}
+	text, _ := redact.Apply(strings.ReplaceAll(string(b), "\r\n", "\n"))
+	return strings.Split(text, "\n")
 }
 
 func (r *runner) say(format string, a ...any) {
@@ -291,6 +339,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if err != nil {
 		return Result{}, err
 	}
+	r.root = root
 	runCreated = true
 	defer r.done(&err)
 	r.changed, r.resume = changed, resume
@@ -403,6 +452,7 @@ func (r *runner) persist(seq int64, f finding.Finding) error {
 	if f.Validate() != nil {
 		return nil
 	}
+	r.fingerprint(&f)
 	if _, err := r.led.Append(seq, ledger.TypeFinding, f); err != nil {
 		return err
 	}
@@ -469,6 +519,7 @@ func (r *runner) recordFindings(mapSeq int64, findings []finding.Finding, parent
 			}
 			continue
 		}
+		r.fingerprint(&f)
 		if _, err := r.led.Append(parent[f.ID], ledger.TypeFinding, f); err != nil {
 			return err
 		}

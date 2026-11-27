@@ -165,7 +165,7 @@ The report is SARIF 2.1.0. What it carries:
 - One rule per finding class, with CWE tags.
 - `level`: `error` for critical and high, `warning` for medium, `note` for low and none.
 - `security-severity`: the CVSS 4.0 score, which code scanning uses for its own severity labels. Unscored findings carry none.
-- A fingerprint equal to the finding id. Ids are derived from the class and the location (and the rule, for a finding made straight from a rule hit), so the same flaw keeps its alert across runs.
+- Two fingerprints. `spackle/v1` is the finding id, derived from the class and the location (and the rule, for a finding made straight from a rule hit), so the same flaw keeps its alert across runs. `spackle/content/v1` is derived from the class, the file and the text of the flagged lines instead of the line number, so a finding moved by an edit elsewhere in the file keeps it too.
 - `confidence` and `proof_status` as result properties.
 
 Set `upload-sarif: false` to skip the upload and handle the file yourself through the `sarif` output.

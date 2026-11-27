@@ -208,7 +208,7 @@ func (s *server) buildTools() []tool {
 	return []tool{
 		{
 			Name: "compare_runs", Title: "Compare two stored runs",
-			Description: "Join two stored runs on finding id and list the findings that are new in the newer run, gone from it, and present in both (with any change of status or severity). Dismissed findings are left out. A finding id includes the line, so code that moved shows as one gone and one new.",
+			Description: "Join two stored runs on finding id and content fingerprint and list the findings that are new in the newer run, gone from it, and present in both (with any change of status or severity, or the location it moved from). Dismissed findings are left out.",
 			InputSchema: schema(`{"type":"object","properties":{` +
 				`"older":{"type":"string","description":"The earlier run: a run id, a unique prefix of one, or \"latest\"."},` +
 				`"newer":{"type":"string","description":"The later run: a run id, a unique prefix of one, or \"latest\"."}},` +

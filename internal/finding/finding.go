@@ -50,12 +50,16 @@ const (
 // Finding is one reported flaw. Field order here is the order JSON output
 // uses, and the order a report presents the sections in.
 type Finding struct {
-	ID      string   `json:"id"`
-	Title   string   `json:"title"`
-	Surface string   `json:"surface"`
-	Class   string   `json:"class"`
-	CWE     []string `json:"cwe,omitempty"`
-	OWASP   []string `json:"owasp,omitempty"`
+	ID string `json:"id"`
+	// Fingerprint identifies the flaw by the text of the flagged code, not
+	// its line number, so a finding that only moved keeps it. See
+	// MakeFingerprint. Empty in runs stored before it existed.
+	Fingerprint string   `json:"fingerprint,omitempty"`
+	Title       string   `json:"title"`
+	Surface     string   `json:"surface"`
+	Class       string   `json:"class"`
+	CWE         []string `json:"cwe,omitempty"`
+	OWASP       []string `json:"owasp,omitempty"`
 
 	Location Location `json:"location"`
 	Severity Severity `json:"severity"`
@@ -202,6 +206,53 @@ func MakeRuleID(class string, loc Location, rule string) string {
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "SPK-" + strings.ToUpper(hex.EncodeToString(sum[:4]))
+}
+
+// maxFingerprintLines bounds how many flagged lines a fingerprint reads.
+const maxFingerprintLines = 50
+
+// MakeFingerprint derives a line-independent fingerprint for a finding:
+// a hash of its class, file, endpoint and parameter, the text of the
+// flagged lines with runs of white space collapsed, and how many times the
+// same text occurs earlier in the file. Lines added or removed elsewhere
+// in the file leave it unchanged; editing the flagged lines changes it.
+// lines is the file's content split into lines (as the caller wants it
+// hashed, after redaction), or nil when the finding has no file or the
+// file could not be read; the fingerprint then rests on the rest alone.
+func MakeFingerprint(class string, loc Location, lines []string) string {
+	text, occurrence := "", 0
+	if loc.StartLine > 0 && loc.StartLine <= len(lines) {
+		end := loc.EndLine
+		if end < loc.StartLine {
+			end = loc.StartLine
+		}
+		end = min(end, len(lines), loc.StartLine+maxFingerprintLines-1)
+		norm := make([]string, end)
+		for i := range norm {
+			norm[i] = strings.Join(strings.Fields(lines[i]), " ")
+		}
+		first, flagged := loc.StartLine-1, norm[loc.StartLine-1:end]
+		text = strings.Join(flagged, "\n")
+		for start := 0; start < first; start++ {
+			same := true
+			for i, l := range flagged {
+				if norm[start+i] != l {
+					same = false
+					break
+				}
+			}
+			if same {
+				occurrence++
+			}
+		}
+	}
+	parts := []string{
+		"v1", strings.ToLower(class), loc.File,
+		strings.ToUpper(loc.Method), loc.Endpoint, loc.Parameter,
+		text, fmt.Sprint(occurrence),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:8])
 }
 
 // hasParentSegment reports whether a forward-slash path has a ".." segment.

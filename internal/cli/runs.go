@@ -264,7 +264,7 @@ func runRunsPrune(env Env, args []string) int {
 }
 
 func runRunsCompare(env Env, args []string) int {
-	fs := newFlagSet(env, "runs compare", "<older-run-id> <newer-run-id>", "Compare the findings of two stored runs: new in the newer run, gone from it, and in both.\nA run id may be a unique prefix, or \"latest\". Findings are matched by id, which includes the\nline, so code that moved shows as one finding gone and one new.\nWith --fail-on, it exits 1 when a new finding is at or above that severity.")
+	fs := newFlagSet(env, "runs compare", "<older-run-id> <newer-run-id>", "Compare the findings of two stored runs: new in the newer run, gone from it, and in both.\nA run id may be a unique prefix, or \"latest\". Findings are matched by id, then by a fingerprint of\nthe flagged code, so a finding that only moved to another line is still present.\nWith --fail-on, it exits 1 when a new finding is at or above that severity.")
 	var g globalFlags
 	g.registerGroups(fs, flagsConfig|flagsFailOn)
 	format := fs.String("format", "text", "output `format`: text or json")

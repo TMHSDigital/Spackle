@@ -122,6 +122,52 @@ func TestMakeIDIsStableAndDistinct(t *testing.T) {
 	}
 }
 
+// A fingerprint survives lines added above the finding and white space
+// changes, and changes when the flagged code, the file or the class does.
+// Identical flagged lines in one file get different fingerprints.
+func TestMakeFingerprintIgnoresTheLineNumber(t *testing.T) {
+	src := []string{"import os", "", "q = 'SELECT ' + name", "run(q)", "q = 'SELECT ' + name", "run(q)"}
+	at := func(lines []string, start, end int) string {
+		return MakeFingerprint("sql-injection", Location{File: "app/db.py", StartLine: start, EndLine: end}, lines)
+	}
+	base := at(src, 3, 4)
+	if len(base) != 16 {
+		t.Fatalf("fingerprint %q is not 16 hex digits", base)
+	}
+	moved := append([]string{"# a new comment", "import sys"}, src...)
+	if got := at(moved, 5, 6); got != base {
+		t.Errorf("two lines inserted above: %s, want %s", got, base)
+	}
+	respaced := append([]string{}, src...)
+	respaced[2] = "q  =  'SELECT ' +\tname   "
+	if got := at(respaced, 3, 4); got != base {
+		t.Errorf("white space changed: %s, want %s", got, base)
+	}
+	edited := append([]string{}, src...)
+	edited[2] = "q = 'SELECT ' + quote(name)"
+	if got := at(edited, 3, 4); got == base {
+		t.Error("editing the flagged line kept the fingerprint")
+	}
+	if got := at(src, 5, 6); got == base {
+		t.Error("the second identical block has the fingerprint of the first")
+	}
+	if got := MakeFingerprint("xss", Location{File: "app/db.py", StartLine: 3, EndLine: 4}, src); got == base {
+		t.Error("another class has the same fingerprint")
+	}
+	if got := MakeFingerprint("sql-injection", Location{File: "app/other.py", StartLine: 3, EndLine: 4}, src); got == base {
+		t.Error("another file has the same fingerprint")
+	}
+	// Without the source, or past its end, the fingerprint rests on the
+	// rest of the location and is still stable.
+	ep := Location{Method: "get", Endpoint: "/search", Parameter: "q"}
+	if a, b := MakeFingerprint("xss", ep, nil), MakeFingerprint("xss", Location{Method: "GET", Endpoint: "/search", Parameter: "q"}, nil); a != b || a == "" {
+		t.Errorf("endpoint fingerprints %q and %q", a, b)
+	}
+	if got := at(src, 40, 41); got == "" {
+		t.Error("a line past the end of the file gave no fingerprint")
+	}
+}
+
 func TestLocationString(t *testing.T) {
 	cases := map[string]Location{
 		"app/db.py:12-14":           {File: "app/db.py", StartLine: 12, EndLine: 14},

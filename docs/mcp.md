@@ -26,7 +26,7 @@ Arguments a tool does not define are refused, not ignored. A call that passes `m
 
 **`get_finding`** returns one finding of a stored run in full, as JSON: the flaw and its data flow, how it would be exploited, the proof status, the blast radius, the fix and the confidence. It takes a `run_id` and a `finding_id` such as `SPK-1A2B3C4D`.
 
-**`compare_runs`** joins two stored runs on finding id and returns the findings that are `new` in the newer run, `gone` from it, and `still_present` (with any change of status or severity), as `spackle runs compare --format json` prints them. It takes `older` and `newer`, each a run id, a unique prefix of one, or `latest`.
+**`compare_runs`** joins two stored runs on finding id and content fingerprint (so a finding whose code only moved is still present) and returns the findings that are `new` in the newer run, `gone` from it, and `still_present` (with any change of status or severity), as `spackle runs compare --format json` prints them. It takes `older` and `newer`, each a run id, a unique prefix of one, or `latest`.
 
 **`doctor`** returns the checks that `spackle doctor` prints, as rows with `area`, `name`, `status` (`ok`, `missing`, `warn` or `fail`) and `note`. Without `--allow-model` it does not contact a model provider.
 

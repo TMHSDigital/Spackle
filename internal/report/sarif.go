@@ -143,13 +143,12 @@ func renderSARIF(run Run, w io.Writer) error {
 	results := make([]sarifResult, 0, len(active))
 	for _, f := range active {
 		res := sarifResult{
-			RuleID:    f.Class,
-			RuleIndex: index[f.Class],
-			Level:     sarifLevel(f.Severity.Label),
-			Message:   sarifText{Text: sarifMessage(f)},
-			Locations: []sarifLocation{sarifLocate(f.Location, run.RepoPrefix)},
-			// One key only, so map order cannot affect the output.
-			PartialFingerprints: map[string]string{"spackle/v1": f.ID},
+			RuleID:              f.Class,
+			RuleIndex:           index[f.Class],
+			Level:               sarifLevel(f.Severity.Label),
+			Message:             sarifText{Text: sarifMessage(f)},
+			Locations:           []sarifLocation{sarifLocate(f.Location, run.RepoPrefix)},
+			PartialFingerprints: sarifFingerprints(f),
 			Properties: sarifResultProps{
 				Confidence:  f.Confidence.Level,
 				ProofStatus: f.Proof.Status,
@@ -267,6 +266,18 @@ func cweNumber(s string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// sarifFingerprints is a result's partialFingerprints: the finding id,
+// which includes the line, and the line-independent content fingerprint
+// when the run has one. encoding/json writes map keys sorted, so the
+// output does not depend on map order.
+func sarifFingerprints(f finding.Finding) map[string]string {
+	fp := map[string]string{"spackle/v1": f.ID}
+	if f.Fingerprint != "" {
+		fp["spackle/content/v1"] = f.Fingerprint
+	}
+	return fp
 }
 
 func sarifLevel(label string) string {

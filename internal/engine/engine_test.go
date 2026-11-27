@@ -176,6 +176,49 @@ func TestReportIsReproducibleFromTheLedgerAlone(t *testing.T) {
 	}
 }
 
+// A finding's fingerprint comes from the flagged code, so lines inserted
+// above it change its id but not its fingerprint, and the stored runs
+// compare it as still present. The fingerprint is in the ledger.
+func TestFingerprintSurvivesLinesInsertedAbove(t *testing.T) {
+	o := opts(t, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+	first, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := filepath.Join(o.Target, "app.py")
+	src, err := os.ReadFile(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(app, append([]byte("# header\r\n# more\r\n"), src...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	moved := sqlLead()
+	moved.Line += 2
+	o.Seeders = []seed.Seeder{fakeSeeder{name: "fake", leads: []seed.Lead{moved}}}
+	o.RunID = "20261122-120001-abcdef"
+	second, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	older, err := report.Load(first.RunDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := report.Load(second.RunDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := older.Findings[0], newer.Findings[0]
+	if a.Fingerprint == "" || a.Fingerprint != b.Fingerprint || a.ID == b.ID {
+		t.Fatalf("ids %s and %s, fingerprints %q and %q: want new id, same fingerprint", a.ID, b.ID, a.Fingerprint, b.Fingerprint)
+	}
+	c := report.Compare(older, newer)
+	if len(c.StillPresent) != 1 || len(c.New) != 0 || len(c.Gone) != 0 || !strings.Contains(c.StillPresent[0].Change, "moved from app.py:4") {
+		t.Fatalf("comparison = %+v", c)
+	}
+}
+
 func TestSeederFailureDoesNotStopTheRun(t *testing.T) {
 	o := opts(t,
 		fakeSeeder{name: "broken", err: errors.New("scanner crashed")},

@@ -29,6 +29,7 @@ Field names are the JSON names. Fields marked optional are left out when empty.
 | Field | Type | Meaning |
 | :--- | :--- | :--- |
 | `id` | string | `SPK-` and eight hex digits. Derived from the class, file, start line, method, endpoint and parameter, and for a finding made straight from a rule hit also the rule id, so the same flaw gets the same id on every run of the same target |
+| `fingerprint` | string | Sixteen hex digits. Derived from the class, file, method, endpoint and parameter, the text of the flagged lines (redacted, with runs of white space collapsed) and how often that text occurs earlier in the file, but not the line number, so a finding moved by an edit elsewhere in the file keeps it. `spackle runs compare` matches on it after the id, and SARIF carries it as `spackle/content/v1`. Absent in runs stored before it existed |
 | `title` | string | Short and specific |
 | `surface` | string | `code`, `running-target`, `infrastructure` or `debug` |
 | `class` | string | One of the classes listed below |
@@ -242,6 +243,7 @@ It is `findings/SPK-790860CA/finding.json` from that run, verbatim. The block is
 ```json
 {
   "id": "SPK-790860CA",
+  "fingerprint": "6c1303b5c7dffc29",
   "title": "SQL statement built with an f-string",
   "surface": "code",
   "class": "sql-injection",
