@@ -135,7 +135,7 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	}
 
 	say("Mapping %s", tgt.Display)
-	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: filepath.Join(cfg.StateDir, "cache"), Walk: walkOptions(cfg)})
+	m, err := mapper.Build(ctx, root, mapper.Options{CacheDir: CacheDir(cfg.StateDir), Walk: walkOptions(cfg)})
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}

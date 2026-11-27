@@ -472,7 +472,7 @@ func (l *lab) branchFixes(ctx context.Context) (branch, note string) {
 	}
 	branch = "spackle/" + l.r.runID
 	absState, _ := filepath.Abs(l.r.cfg.StateDir)
-	wt := filepath.Join(absState, "worktrees", l.r.runID)
+	wt := WorktreeDir(absState, l.r.runID)
 	l.worktree = wt
 	if err := os.MkdirAll(filepath.Dir(wt), 0o700); err != nil {
 		return "", "The fix branch could not be created: " + err.Error()

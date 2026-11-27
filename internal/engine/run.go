@@ -181,7 +181,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		return Result{}, fmt.Errorf("%w: %s", ErrRefused, d.notLocal(tgt.Display))
 	}
 	if tgt.Kind == target.KindGit {
-		root = filepath.Join(stateDir, "clones", runID)
+		root = CloneDir(stateDir, runID)
 		if opts.Ref != "" {
 			say("Cloning %s at %s", tgt.Display, opts.Ref)
 		} else {
@@ -258,7 +258,7 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	// The mapper hands the text of each file it reads to the seeders, so a
 	// file is read once per scan.
 	texts := walk.NewTexts()
-	mapOpts := mapper.Options{CacheDir: filepath.Join(stateDir, "cache"), Walk: walkOptions(opts.Config), Texts: texts}
+	mapOpts := mapper.Options{CacheDir: CacheDir(stateDir), Walk: walkOptions(opts.Config), Texts: texts}
 	if d := diffBase(opts); d != nil && d.changed {
 		// The files of a --changed scan are exactly where the work tree
 		// differs from HEAD, so the cached map of HEAD covers the rest.

@@ -133,6 +133,23 @@ type Plan struct {
 // RunsDir returns the directory that holds runs for a state directory.
 func RunsDir(stateDir string) string { return filepath.Join(stateDir, "runs") }
 
+// CloneDir returns where the clone of a git URL target of run runID is
+// kept.
+func CloneDir(stateDir, runID string) string { return filepath.Join(stateDir, "clones", runID) }
+
+// WorktreeDir returns where the fix worktree of run runID is kept.
+func WorktreeDir(stateDir, runID string) string { return filepath.Join(stateDir, "worktrees", runID) }
+
+// CacheDir returns the directory of the map cache, which runs share.
+func CacheDir(stateDir string) string { return filepath.Join(stateDir, "cache") }
+
+// RunDirs returns every directory a run owns in the state directory: its
+// run directory, the clone of its target and its fix worktree. Deleting a
+// run deletes them all; the map cache is shared and is not among them.
+func RunDirs(stateDir, runID string) []string {
+	return []string{filepath.Join(RunsDir(stateDir), runID), CloneDir(stateDir, runID), WorktreeDir(stateDir, runID)}
+}
+
 // NewRunID returns an id of the form 20261122-153045-00a1b2: the UTC start
 // time to the second, a sequence number in two hex digits, and two random
 // bytes. The sequence number is one more than the highest among the runs in

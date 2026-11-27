@@ -132,9 +132,12 @@ func storedRuns(stateDir string) ([]runRow, error) {
 				row.Started = sum.Started.UTC().Format(time.RFC3339)
 			}
 		}
-		for _, extra := range []string{"clones", "worktrees"} {
-			if st, serr := os.Stat(filepath.Join(stateDir, extra, name)); serr == nil && st.IsDir() {
-				row.Extra = append(row.Extra, strings.TrimSuffix(extra, "s"))
+		for _, extra := range []struct{ label, dir string }{
+			{"clone", engine.CloneDir(stateDir, name)},
+			{"worktree", engine.WorktreeDir(stateDir, name)},
+		} {
+			if st, serr := os.Stat(extra.dir); serr == nil && st.IsDir() {
+				row.Extra = append(row.Extra, extra.label)
 			}
 		}
 		rows = append(rows, row)
@@ -251,11 +254,7 @@ func runRunsPrune(env Env, args []string) int {
 	for _, r := range doomed {
 		// r.RunID is a directory name read from the runs directory, so each
 		// path below stays inside the state directory.
-		for _, dir := range []string{
-			filepath.Join(engine.RunsDir(cfg.StateDir), r.RunID),
-			filepath.Join(cfg.StateDir, "clones", r.RunID),
-			filepath.Join(cfg.StateDir, "worktrees", r.RunID),
-		} {
+		for _, dir := range engine.RunDirs(cfg.StateDir, r.RunID) {
 			if rerr := os.RemoveAll(dir); rerr != nil {
 				fmt.Fprintf(env.Stderr, "spackle runs prune: %s could not be removed: %v\n", filepath.ToSlash(dir), rerr)
 				failed++

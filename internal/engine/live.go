@@ -57,7 +57,7 @@ func sourceRoutes(ctx context.Context, cfg config.Config, dir string) ([]string,
 	if err != nil || !st.IsDir() {
 		return nil, fmt.Errorf("--routes-from %q is not a directory that can be read. Give the directory that holds the running application's source", textx.Clip(dir, 200))
 	}
-	m, err := mapper.Build(ctx, dir, mapper.Options{CacheDir: filepath.Join(cfg.StateDir, "cache"), Walk: walkOptions(cfg)})
+	m, err := mapper.Build(ctx, dir, mapper.Options{CacheDir: CacheDir(cfg.StateDir), Walk: walkOptions(cfg)})
 	if err != nil {
 		return nil, fmt.Errorf("--routes-from: the source in %q could not be mapped: %w", textx.Clip(dir, 200), err)
 	}
