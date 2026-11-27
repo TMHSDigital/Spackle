@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -336,6 +337,29 @@ func TestScanKeepsAPatchWhenThePassingSuiteStillPasses(t *testing.T) {
 	}
 	if !strings.Contains(string(evidence), "purpose: tests-baseline") || !strings.Contains(string(evidence), "command: python -m pytest -q") {
 		t.Fatalf("baseline evidence:\n%s", evidence)
+	}
+}
+
+// [test] command replaces the mapper's suite command for the baseline and
+// the patched run, and is used even when the mapper found no suite.
+func TestScanUsesTheConfiguredTestCommand(t *testing.T) {
+	rt := &gateRuntime{}
+	o := gateOpts(t, rt)
+	o.Config.Test.Command = []string{"python", "-m", "pytest", "-q", "tests dir"}
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs, _, _ := gateEvents(t, res.RunDir)
+	if got := purposesOf(runs); got != "poc,tests-baseline,fix-compile,fix-verify,fix-tests" {
+		t.Fatalf("sandbox purposes = %s", got)
+	}
+	want := []string{"python", "-m", "pytest", "-q", "tests dir"}
+	if !slices.Equal(rt.runs[1].Cmd, want) || !slices.Equal(rt.runs[4].Cmd, want) {
+		t.Fatalf("baseline %q, patched suite %q, want %q", rt.runs[1].Cmd, rt.runs[4].Cmd, want)
+	}
+	if !slices.ContainsFunc(res.Run.Notes, func(n string) bool { return strings.Contains(n, "[test] command") }) {
+		t.Fatalf("no note says where the test command came from: %v", res.Run.Notes)
 	}
 }
 

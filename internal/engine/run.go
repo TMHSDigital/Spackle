@@ -230,6 +230,9 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if resume != nil {
 		scanNotes = append(scanNotes, fmt.Sprintf("Resumed from run %s: the %d investigations it planned and did not reach are continued with a new budget, and its findings are carried into this report.", resume.runID, len(resume.intents)))
 	}
+	if note := testConfigNote("command", opts.Config.Test.Command); agentic && note != "" {
+		scanNotes = append(scanNotes, note)
+	}
 
 	if opts.DryRun {
 		plan := &Plan{

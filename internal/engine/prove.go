@@ -212,15 +212,42 @@ func nextEvidence(runDir, findingID string) int {
 	return len(entries) + 1
 }
 
+// suiteCommand returns the command that runs the project's whole test
+// suite: [test] command when the operator set it, otherwise the one of a
+// fixed set the mapper chose. Neither is taken from target content, and
+// both run only in the sandbox.
+func suiteCommand(cfg config.Test, tests mapper.Harness) []string {
+	if len(cfg.Command) > 0 {
+		return append([]string(nil), cfg.Command...)
+	}
+	return strings.Fields(tests.TestCommand)
+}
+
+// singleTestCommand returns the command that runs the one test called name:
+// [test] single when the operator set it, otherwise the language table's.
+func singleTestCommand(cfg config.Test, p proglang.Proof, tests mapper.Harness, name string) []string {
+	if cmd := cfg.SingleFor(name); cmd != nil {
+		return cmd
+	}
+	return p.SingleTest(tests.TestCommand, name)
+}
+
+// testConfigNote says that a test command came from the configuration, for
+// the run notes, or "" when it did not.
+func testConfigNote(key string, cmd []string) string {
+	if len(cmd) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("The project's tests are run with [test] %s from the configuration: %q.", key, strings.Join(cmd, " "))
+}
+
 // baselineTests runs the project's own test suite once on the unmodified
 // code, so the fixer knows whether a later failure is a regression.
 func (l *lab) baselineTests(ctx context.Context, parent int64, lang, image string) (cmd []string, pass bool, err error) {
-	if l.tests.TestCommand == "" || l.tests.Language != lang {
+	cmd = suiteCommand(l.r.cfg.Test, l.tests)
+	if len(cmd) == 0 || l.tests.Language != lang {
 		return nil, false, nil
 	}
-	// The test command is one of a fixed set the mapper chooses; it is
-	// never taken from target content.
-	cmd = strings.Fields(l.tests.TestCommand)
 	if l.baseline != nil {
 		return cmd, *l.baseline, nil
 	}

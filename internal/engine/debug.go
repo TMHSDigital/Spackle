@@ -150,7 +150,7 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	}
 	var reproCmd []string
 	if test != "" {
-		reproCmd = proofLang.SingleTest(m.Tests.TestCommand, test)
+		reproCmd = singleTestCommand(cfg.Test, proofLang, m.Tests, test)
 	}
 
 	// Debug needs a model and a container runtime. Both are checked before a
@@ -176,7 +176,7 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 		missing = append(missing, "no container runtime is available")
 	}
 	if len(missing) > 0 {
-		return Result{}, fmt.Errorf("%w: %s", ErrRefused, debugRefusal(missing, lang, m.Tests.TestCommand, reproCmd))
+		return Result{}, fmt.Errorf("%w: %s", ErrRefused, debugRefusal(missing, lang, strings.Join(suiteCommand(cfg.Test, m.Tests), " "), reproCmd))
 	}
 
 	pricer := llm.NewPricer(llm.PricesFromConfig(cfg.Pricing))
@@ -238,6 +238,21 @@ func Debug(ctx context.Context, opts DebugOptions) (_ Result, err error) {
 	}
 
 	d := &debugRun{r: r, l: r.lab, root: root, lang: lang, m: m, test: test, issue: issue, good: opts.Good, seq: mapSeq}
+	var testNotes []string
+	if test != "" {
+		testNotes = append(testNotes, testConfigNote("single", cfg.Test.Single))
+	}
+	if cfg.Fix.On() {
+		testNotes = append(testNotes, testConfigNote("command", cfg.Test.Command))
+	}
+	for _, note := range testNotes {
+		if note == "" {
+			continue
+		}
+		if err := d.note("%s", note); err != nil {
+			return Result{}, err
+		}
+	}
 	// One box for the whole run. Its evidence files are listed in the order
 	// the sandbox runs happened.
 	d.box = r.lab.box("", mapSeq, func(rel string) { d.evidence = append(d.evidence, rel) })
@@ -741,9 +756,9 @@ func (d *debugRun) check(rep reproduction) agent.Check {
 			checked = append(checked, "the test "+d.test+" now passes")
 		}
 
-		// The test command is one of a fixed set the mapper chooses; it is
-		// never taken from target content.
-		if suite := strings.Fields(d.m.Tests.TestCommand); len(suite) > 0 {
+		// The suite command is the operator's [test] command or one of a
+		// fixed set the mapper chooses; it is never taken from target content.
+		if suite := suiteCommand(d.r.cfg.Test, d.m.Tests); len(suite) > 0 {
 			res, ev, rerr := d.run(ctx, "fix-tests", suite, files, d.root)
 			if rerr != nil {
 				return "", "", false, rerr

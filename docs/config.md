@@ -86,6 +86,11 @@ include = []            # default-skipped directories to read anyway, for exampl
 disable_rules = []      # rule ids whose leads are dropped
 # scanners = ["gitleaks", "hadolint"]  # external scanners that may run; absent: every installed one
 
+# [test] is absent by default: the test commands come from the project (see Project test commands).
+# [test]
+# command = ["npx", "vitest", "run"]                  # runs the whole suite
+# single = ["npx", "vitest", "run", "-t", "{name}"]   # runs one test for spackle debug --test
+
 [output]
 formats = ["terminal"]  # terminal, markdown, html, json, sarif
 dir = ""                # same as --out
@@ -482,6 +487,33 @@ Fixing needs a model and a container runtime. The fixer returns whole files, at 
 A finding is marked `patch-available` only when a proof of concept that demonstrated it stops working against the patched code. The patch is not applied to your code, so the finding still counts toward `fail_on` until you merge it; `spackle verify` marks it `fixed` once the proof no longer succeeds against the code itself. When there was no proof to re-run, a patch that passes the other checks is still offered, labelled `unverified`, and the finding stays `open`.
 
 Your working tree, index and current branch are never changed. Each patch is written to `findings/<id>/fix.patch` in the run directory. When the fixed files are tracked by git, the patches are also committed to a new branch `spackle/<run-id>` in a separate worktree under `<state_dir>/worktrees/`. `--pr` pushes that branch and opens a draft pull request through the GitHub CLI (`gh`), which must be installed and signed in.
+
+## Project test commands
+
+Spackle runs the project's own tests in the sandbox in three places: once on the unmodified code before a scan's fixer checks a patch, after a patch to see that the suite still passes, and in `spackle debug`, where `--test <name>` reproduces one failing test. By default it picks the commands itself from the project's main language:
+
+| Language | Whole suite | One test (`--test`) |
+| :--- | :--- | :--- |
+| Go | `go test ./...` | `go test -count=1 -run ^<name>$ ./...` |
+| Python | `python -m pytest -q` when pytest is named in the project's requirements, otherwise `python -m unittest discover` | `python -m pytest -q -k <name>`, or `python -m unittest -k <name>` |
+| JavaScript, TypeScript | `npm test` when `package.json` has a test script | `node --test --test-name-pattern <name>` |
+
+When those do not fit, for example a project on Jest, Vitest or Mocha, tests run through `make` or `tox`, or one package of a large Go module, set them under `[test]`:
+
+| Key | Default | Meaning |
+| :--- | :--- | :--- |
+| `command` | absent | The program and arguments that run the whole suite |
+| `single` | absent | The program and arguments that run one test. Every `{name}` in an argument is replaced by the `--test` value |
+
+```toml
+[test]
+command = ["npx", "vitest", "run"]
+single = ["npx", "vitest", "run", "-t", "{name}"]
+```
+
+Each is an argument vector, not a shell line: the program comes first, every argument is its own string, and the test name stays inside the one argument it is placed in. Both run only in the sandbox, in the image of the project's language (`[sandbox.images]`), so the program must exist in that image. They apply to the project's main language. A run that uses them says so in its notes. `single` must contain `{name}`, and an empty argument or a first element that starts with `-` is an error when the configuration is loaded.
+
+`spackle.toml` is read from the working directory. When you run Spackle from inside the project you scan, a `[test]` table committed in that project chooses commands Spackle runs in the sandbox; read it as you would a test script before running a scan with a model and a container runtime.
 
 ## Output
 

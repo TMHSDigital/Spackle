@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -183,6 +184,38 @@ func TestNoAPIKeyFieldExists(t *testing.T) {
 
 // [scan] scanners: absent lets every scanner run, an empty list none, and
 // a name that is not an external scanner is refused.
+func TestTestCommands(t *testing.T) {
+	cfg, _, err := Load(writeConfig(t, "[test]\ncommand = [\"npx\", \"vitest\", \"run\"]\nsingle = [\"npx\", \"vitest\", \"run\", \"-t\", \"{name}\", \"--reporter={name}-x\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(cfg.Test.Command, " ") != "npx vitest run" {
+		t.Fatalf("command = %#v", cfg.Test.Command)
+	}
+	// Every {name} is replaced, inside one argument each: there is no shell.
+	got := cfg.Test.SingleFor("adds two numbers")
+	want := []string{"npx", "vitest", "run", "-t", "adds two numbers", "--reporter=adds two numbers-x"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SingleFor = %#v, want %#v", got, want)
+	}
+	if cfg.Test.Single[4] != "{name}" {
+		t.Fatal("SingleFor changed the configured template")
+	}
+	if got := Default().Test.SingleFor("x"); got != nil {
+		t.Fatalf("no single command configured: SingleFor = %#v", got)
+	}
+	for body, wantErr := range map[string]string{
+		"[test]\nsingle = [\"npx\", \"jest\"]\n":           "{name}",
+		"[test]\ncommand = [\"\", \"test\"]\n":             "empty argument",
+		"[test]\nsingle = [\"jest\", \" \", \"{name}\"]\n": "empty argument",
+		"[test]\ncommand = [\"-x\"]\n":                     "program",
+	} {
+		if _, _, err := Load(writeConfig(t, body)); err == nil || !strings.Contains(err.Error(), wantErr) {
+			t.Errorf("config %q: want error containing %q, got %v", body, wantErr, err)
+		}
+	}
+}
+
 func TestScanScanners(t *testing.T) {
 	cfg, _, err := Load(writeConfig(t, "[scan]\nexclude = [\"x/**\"]\n"))
 	if err != nil || cfg.Scan.Scanners != nil {

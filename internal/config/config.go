@@ -53,6 +53,7 @@ type Config struct {
 	Sandbox Sandbox          `toml:"sandbox"`
 	Fix     Fix              `toml:"fix"`
 	Scan    Scan             `toml:"scan"`
+	Test    Test             `toml:"test"`
 	Output  Output           `toml:"output"`
 	Pricing map[string]Price `toml:"pricing"`
 	Offline bool             `toml:"offline"`
@@ -136,6 +137,33 @@ type Scan struct {
 	// is absent) lets every installed one run; an empty list runs none.
 	// The built-in rules always run.
 	Scanners []string `toml:"scanners"`
+}
+
+// NamePlaceholder is replaced by the test name in [test] single.
+const NamePlaceholder = "{name}"
+
+// Test overrides the project test commands the mapper detects. Both run
+// only in the sandbox, as an argument vector with no shell.
+type Test struct {
+	// Command runs the whole test suite: the scan's baseline run and the
+	// suite check after a fix in debug mode.
+	Command []string `toml:"command"`
+	// Single runs one named test for spackle debug --test. Every
+	// occurrence of {name} in an argument is replaced by the test name.
+	Single []string `toml:"single"`
+}
+
+// SingleFor returns the single-test command for name, or nil when none is
+// configured.
+func (t Test) SingleFor(name string) []string {
+	if len(t.Single) == 0 {
+		return nil
+	}
+	out := make([]string, len(t.Single))
+	for i, a := range t.Single {
+		out[i] = strings.ReplaceAll(a, NamePlaceholder, name)
+	}
+	return out
 }
 
 // Fix configures the fixer.
@@ -331,6 +359,12 @@ func (c *Config) merge(file Config) {
 	if file.Scan.Scanners != nil {
 		c.Scan.Scanners = file.Scan.Scanners
 	}
+	if len(file.Test.Command) > 0 {
+		c.Test.Command = file.Test.Command
+	}
+	if len(file.Test.Single) > 0 {
+		c.Test.Single = file.Test.Single
+	}
 	if len(file.Output.Formats) > 0 {
 		c.Output.Formats = file.Output.Formats
 	}
@@ -484,6 +518,22 @@ func (c Config) Validate() error {
 		if !slices.Contains(ExternalScanners, s) {
 			add("[scan] scanners names %q, which is not one of the external scanners (%s)", s, strings.Join(ExternalScanners, ", "))
 		}
+	}
+	checkVector := func(key string, v []string) {
+		for _, a := range v {
+			if strings.TrimSpace(a) == "" || strings.ContainsRune(a, 0) {
+				add("[test] %s has an empty argument: give the program and each argument as a separate, non-empty string", key)
+				return
+			}
+		}
+		if len(v) > 0 && strings.HasPrefix(v[0], "-") {
+			add("[test] %s starts with %q, which is an option, not a program: put the program first", key, v[0])
+		}
+	}
+	checkVector("command", c.Test.Command)
+	checkVector("single", c.Test.Single)
+	if len(c.Test.Single) > 0 && !slices.ContainsFunc(c.Test.Single, func(a string) bool { return strings.Contains(a, NamePlaceholder) }) {
+		add("[test] single does not contain %s, so it cannot select the test named by --test: put %s where the test name goes", NamePlaceholder, NamePlaceholder)
 	}
 	for _, p := range c.Scope.PathPrefixes {
 		if !strings.HasPrefix(p, "/") {

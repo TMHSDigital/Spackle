@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -45,6 +46,9 @@ type debugRuntime struct {
 	// testFileNeeded makes the named test select nothing in a source
 	// directory without test_calc.py, as in a commit before the test existed.
 	testFileNeeded bool
+	// repro and suite replace debugRepr and the mapper's suite command, as
+	// [test] single and command do.
+	repro, suite string
 }
 
 func (d *debugRuntime) Name() string                              { return "fake-runtime" }
@@ -65,6 +69,13 @@ func (d *debugRuntime) Run(_ context.Context, spec sandbox.Spec) (sandbox.Result
 	cmd := strings.Join(spec.Cmd, " ")
 	_, statErr := os.Stat(filepath.Join(spec.SourceDir, "test_calc.py"))
 	noTest := d.noMatch || (d.testFileNeeded && statErr != nil)
+	repro, suite := debugRepr, "python -m pytest -q"
+	if d.repro != "" {
+		repro = d.repro
+	}
+	if d.suite != "" {
+		suite = d.suite
+	}
 	switch {
 	case strings.Contains(cmd, "py_compile"):
 	case isScript:
@@ -74,13 +85,13 @@ func (d *debugRuntime) Run(_ context.Context, spec sandbox.Spec) (sandbox.Result
 		} else {
 			res.ExitCode, res.Stderr = 1, "AssertionError: add returned the right sum"
 		}
-	case cmd == debugRepr && noTest:
+	case cmd == repro && noTest:
 		res.ExitCode, res.Stdout = 5, "no tests ran in 0.01s"
-	case cmd == debugRepr:
+	case cmd == repro:
 		if buggy {
 			res.ExitCode, res.Stderr = 1, "FAILED test_calc.py::T::test_add - AssertionError: -1 != 3\n"+d.extra
 		}
-	case cmd == "python -m pytest -q":
+	case cmd == suite:
 		if buggy || d.suiteFails {
 			res.ExitCode, res.Stderr = 1, "1 failed"
 		}
@@ -286,6 +297,40 @@ func TestDebugTestReproducesDiagnosesFixesAndVerifies(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(run.Notes, "|"), "patch files only") {
 		t.Fatalf("notes = %v", run.Notes)
+	}
+}
+
+// [test] single and command replace the language table's single-test
+// command and the mapper's suite command. The test name is substituted
+// inside one argument, with no shell.
+func TestDebugUsesTheConfiguredTestCommands(t *testing.T) {
+	rt := &debugRuntime{repro: "npx vitest run -t test_add --reporter=dot", suite: "npx vitest run"}
+	o := debugOpts(t, debugModel{fix: fixedCalc}.provider(), rt)
+	o.Config.Test = config.Test{
+		Command: []string{"npx", "vitest", "run"},
+		Single:  []string{"npx", "vitest", "run", "-t", "{name}", "--reporter=dot"},
+	}
+	res, err := Debug(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := oneFinding(t, res)
+	if f.Proof.Command != rt.repro || f.Proof.Status != finding.ProofDemonstrated {
+		t.Fatalf("proof = %+v", f.Proof)
+	}
+	want := "verified: the changed files compile; the test test_add now passes; the full test suite passes"
+	if f.Status != finding.StatusPatchAvailable || f.Remediation.Verification != want {
+		t.Fatalf("status=%s verification=%q", f.Status, f.Remediation.Verification)
+	}
+	if !slices.ContainsFunc(rt.runs, func(s sandbox.Spec) bool {
+		return slices.Equal(s.Cmd, []string{"npx", "vitest", "run", "-t", "test_add", "--reporter=dot"})
+	}) {
+		t.Fatalf("the single-test command was not run as one argument vector: %v", rt.runs)
+	}
+	for _, n := range []string{"[test] single", "[test] command"} {
+		if !slices.ContainsFunc(res.Run.Notes, func(s string) bool { return strings.Contains(s, n) }) {
+			t.Errorf("no note names %s: %v", n, res.Run.Notes)
+		}
 	}
 }
 
