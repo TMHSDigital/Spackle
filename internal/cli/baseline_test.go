@@ -51,7 +51,8 @@ func TestBaselineAcceptsFindingsWithoutHidingThem(t *testing.T) {
 	// An entry that matches nothing is listed in the run's notes.
 	b.Entries = append(b.Entries, finding.BaselineEntry{ID: "SPK-00000000", Fingerprint: "ffffffffffffffff", Title: "Gone finding", Location: "old.py:1"})
 	writeBaseline(t, file, b)
-	if code, out, stderr := run("scan", target, "--config", cfg, "--format", "terminal", "--baseline", file); code != ExitOK || !strings.Contains(out, "1 baseline entries matched no finding") || !strings.Contains(out, "Gone finding") {
+	// JSON, because the terminal report wraps long notes.
+	if code, out, stderr := run("scan", target, "--config", cfg, "--format", "json", "--baseline", file); code != ExitOK || !strings.Contains(out, "1 baseline entries matched no finding") || !strings.Contains(out, "Gone finding") {
 		t.Fatalf("stale entry: exit = %d\nstdout: %s\nstderr: %s", code, out, stderr)
 	}
 
