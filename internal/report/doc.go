@@ -138,6 +138,9 @@ func buildDoc(run Run, clean func(string) string) doc {
 			status = "available"
 		}
 		note := strings.TrimSpace(s.Note)
+		if s.Version != "" {
+			note = strings.TrimSpace("Version " + s.Version + ". " + note)
+		}
 		if e := strings.TrimSpace(s.Error); e != "" {
 			if note != "" {
 				note += " "

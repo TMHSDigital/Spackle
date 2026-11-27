@@ -64,6 +64,9 @@ type SeederStatus struct {
 	Note      string `json:"note,omitempty"`
 	Leads     int    `json:"leads"`
 	Error     string `json:"error,omitempty"`
+	// Version is the installed version of an external scanner, when it
+	// could be told.
+	Version string `json:"version,omitempty"`
 }
 
 // ModelCall is the data of a model.call event. It records accounting, not

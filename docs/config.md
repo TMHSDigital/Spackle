@@ -479,6 +479,8 @@ A rule id is the part after the colon in a finding's origin (`builtin-code:py-sq
 
 `scanners` chooses which external scanners run, before any of them starts, so a scanner you leave out costs no time and downloads nothing. Without the key every installed scanner runs; `scanners = []` runs none, and the built-in rules always run. A scanner left out is listed in the report and in `spackle doctor` as not run, with the reason. A name that is not one of the five is refused when the configuration is loaded.
 
+The adapters are tested against one release of each scanner, the one pinned in `.github/workflows/scanners.yml`. A run records the version of each installed scanner in its seeder status, and the report shows it on the seeder line. `spackle doctor` shows it too, and marks a scanner `warn` when its version differs from the tested one, or cannot be read, because a release that renames a flag or a field can make the adapter read nothing from it.
+
 Every excluded path is listed in the report as "Not read", and the report notes the configured exclusions, inclusions and disabled rules with the number of leads each removed, so a reader can see what the scan did not cover. The map cache is not used while `exclude` or `include` is set.
 
 Two fixed limits keep one noisy file from burying a report: a rule reports at most 50 leads per file, and a seeder at most 5000 leads per run. When a limit drops leads, the seeder's line in the report says how many and names the rule and file with the most matches. Exclude the file, or disable the rule, to see the rest of the picture.

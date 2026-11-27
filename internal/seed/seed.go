@@ -74,6 +74,9 @@ type Status struct {
 	Note      string `json:"note,omitempty"`
 	Leads     int    `json:"leads"`
 	Error     string `json:"error,omitempty"`
+	// Version is the installed version of an external scanner, when it
+	// could be told.
+	Version string `json:"version,omitempty"`
 }
 
 // RunAll runs every available seeder and returns the merged, sorted leads.
@@ -129,6 +132,7 @@ func RunAllScoped(ctx context.Context, seeders []Seeder, root string, files []wa
 	runs := make([]fileRun, len(seeders))
 	avail := make([]bool, len(seeders))
 	notes := make([]string, len(seeders))
+	versions := make([]string, len(seeders))
 	inShared := map[int]bool{}
 	for _, i := range sharedAt {
 		inShared[i] = true
@@ -145,6 +149,9 @@ func RunAllScoped(ctx context.Context, seeders []Seeder, root string, files []wa
 			defer wg.Done()
 			slots <- struct{}{}
 			defer func() { <-slots }()
+			if v, ok := s.(Versioner); ok {
+				versions[i] = v.Version(ctx)
+			}
 			runs[i].leads, runs[i].err = s.Run(ctx, root, files)
 		}()
 	}
@@ -156,7 +163,7 @@ func RunAllScoped(ctx context.Context, seeders []Seeder, root string, files []wa
 	wg.Wait()
 
 	for i, s := range seeders {
-		st := Status{Name: s.Name(), Available: avail[i], Note: notes[i]}
+		st := Status{Name: s.Name(), Available: avail[i], Note: notes[i], Version: versions[i]}
 		if st.Available {
 			got, err := runs[i].leads, runs[i].err
 			if err != nil {

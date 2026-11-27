@@ -127,9 +127,9 @@ func doctorChecks(ctx context.Context, cfg config.Config) []check {
 			continue
 		}
 		ok, note := s.Available()
-		st := "ok"
-		if !ok {
-			st = "missing"
+		st := "missing"
+		if ok {
+			st, note = scannerVersionCheck(ctx, s)
 		}
 		out = append(out, check{"Seeders", s.Name(), st, note})
 	}
@@ -191,4 +191,24 @@ func modelChecks(ctx context.Context, cfg config.Config) []check {
 		out = append(out, doctorProbe(ctx, cfg, stage, m)...)
 	}
 	return out
+}
+
+// scannerVersionCheck reports the installed version of an external
+// scanner, with a warning when it is not the version the adapter is tested
+// against: a release that renames a flag or a field makes the adapter read
+// nothing from it.
+func scannerVersionCheck(ctx context.Context, s seed.Seeder) (status, note string) {
+	tested := seed.TestedVersions[s.Name()]
+	v, ok := s.(seed.Versioner)
+	if !ok {
+		return "ok", "installed"
+	}
+	got := v.Version(ctx)
+	switch {
+	case got == "":
+		return "warn", fmt.Sprintf("installed, but its version could not be read; Spackle is tested with %s", tested)
+	case tested != "" && got != tested:
+		return "warn", fmt.Sprintf("version %s; Spackle is tested with %s, and another version may report results it cannot read", got, tested)
+	}
+	return "ok", "version " + got
 }

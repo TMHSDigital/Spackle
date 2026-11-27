@@ -66,6 +66,9 @@ type external struct {
 	// quietExit lists exit codes that mean "nothing to scan" for this tool
 	// when it printed no JSON.
 	quietExit []int
+	// versionArgs prints the tool's version, for the run's seeder status
+	// and spackle doctor.
+	versionArgs []string
 	// network says whether the tool reaches out when it runs. Every adapter
 	// states it; one that does not counts as using the network, so a new
 	// adapter is kept out of offline mode until someone decides otherwise.
@@ -109,6 +112,7 @@ func External() []Seeder {
 	return []Seeder{
 		&external{
 			name: "semgrep", bin: "semgrep", network: netDownloads, site: "semgrep.dev", leads: semgrepLeads,
+			versionArgs: []string{"--version"},
 			// A named rule set, not "auto": semgrep refuses --config auto
 			// with metrics off, and metrics stay off so that nothing about
 			// the scanned project is sent. The rules are still downloaded.
@@ -118,12 +122,14 @@ func External() []Seeder {
 		},
 		&external{
 			name: "gitleaks", bin: "gitleaks", network: netLocal, site: "gitleaks.io", leads: gitleaksLeads,
+			versionArgs: []string{"version"},
 			args: func(root string, _ []walk.File) ([]string, bool) {
 				return []string{"dir", "--report-format", "json", "--report-path", "-", "--redact", "--no-banner", "--exit-code", "0", root}, true
 			},
 		},
 		&external{
 			name: "osv-scanner", bin: "osv-scanner", network: netDownloads, site: "google.github.io/osv-scanner", leads: osvLeads,
+			versionArgs: []string{"--version"},
 			// 128 is osv-scanner's "no package sources found".
 			quietExit: []int{128},
 			args: func(root string, _ []walk.File) ([]string, bool) {
@@ -132,12 +138,14 @@ func External() []Seeder {
 		},
 		&external{
 			name: "trivy", bin: "trivy", network: netDownloads, site: "trivy.dev", leads: trivyLeads,
+			versionArgs: []string{"--version"},
 			args: func(root string, _ []walk.File) ([]string, bool) {
 				return []string{"fs", "--format", "json", "--quiet", "--scanners", "vuln,misconfig", root}, true
 			},
 		},
 		&external{
 			name: "hadolint", bin: "hadolint", network: netLocal, site: "hadolint.github.io/hadolint", leads: hadolintLeads,
+			versionArgs: []string{"--version"},
 			args: func(_ string, files []walk.File) ([]string, bool) {
 				argv := []string{"--format", "json"}
 				for _, f := range files {
@@ -152,6 +160,62 @@ func External() []Seeder {
 }
 
 func (e *external) Name() string { return e.name }
+
+// TestedVersions are the scanner versions the adapters are tested
+// against: the pins of .github/workflows/scanners.yml, which a test keeps
+// equal to this table. Another version may rename a flag or a field, and
+// the adapter would then read nothing from it.
+var TestedVersions = map[string]string{
+	"gitleaks":    "8.30.1",
+	"hadolint":    "2.15.1",
+	"osv-scanner": "2.7.1",
+	"semgrep":     "1.187.0",
+	"trivy":       "0.76.2",
+}
+
+// Versioner is implemented by a seeder that can say which version of its
+// tool is installed.
+type Versioner interface {
+	// Version returns the installed version, such as "8.30.1", or "" when
+	// it cannot be told.
+	Version(ctx context.Context) string
+}
+
+// versionTimeout bounds a version command.
+const versionTimeout = 10 * time.Second
+
+// versionPattern finds a version number in a tool's version output.
+var versionPattern = regexp.MustCompile(`\bv?(\d+\.\d+\.\d+)\b`)
+
+// Version implements Versioner by running the tool's version command.
+func (e *external) Version(ctx context.Context) string {
+	if len(e.versionArgs) == 0 {
+		return ""
+	}
+	binPath, err := exec.LookPath(e.bin)
+	if err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, versionTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binPath, e.versionArgs...) //nolint:gosec // fixed scanner binary from PATH with a fixed argument vector
+	out := &limitedBuffer{limit: 64 << 10}
+	cmd.Stdout, cmd.Stderr = out, out
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return parseVersion(out.String())
+}
+
+// parseVersion returns the first version number in a tool's version
+// output, or "". Only digits and dots come out, so the untrusted output
+// cannot put anything else into a report.
+func parseVersion(out string) string {
+	if m := versionPattern.FindStringSubmatch(out); m != nil {
+		return m[1]
+	}
+	return ""
+}
 
 // Note returns what the last Run dropped, or "".
 func (e *external) Note() string {
