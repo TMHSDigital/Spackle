@@ -671,6 +671,35 @@ func TestScanDryRunSaysAnUnpricedRunWouldBeRefused(t *testing.T) {
 	}
 }
 
+// A dry run without --yes and without a terminal says the real run of a
+// paid model would be refused, because nobody can confirm the estimate. The
+// note is in the text and the JSON plan, and --yes removes it.
+func TestScanDryRunWithoutATerminalSaysTheRunCannotBeConfirmed(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "spackle.toml")
+	body := "state_dir = " + strconv.Quote(filepath.ToSlash(filepath.Join(dir, "state"))) + "\n\n" +
+		"[sandbox]\nruntime = \"none\"\n\n" +
+		"[model]\nprovider = \"openai-compatible\"\nmodel = \"unpriced-test-model\"\n" +
+		"base_url = \"https://models.example.test/v1\"\napi_key_env = \"SPACKLE_TEST_KEY\"\n"
+	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPACKLE_TEST_KEY", "placeholder-"+"not-a-key")
+	target := plantedTarget(t, criticalFlaw)
+	const want = "A real run with these settings would be refused: there is no terminal to confirm the estimate on. Pass --yes"
+
+	for _, format := range []string{"terminal", "json"} {
+		code, out, stderr := run("scan", target, "--config", cfg, "--dry-run", "--format", format)
+		if code != ExitOK || !strings.Contains(out, want) {
+			t.Errorf("%s: exit = %d, want the refusal note\nstdout: %s\nstderr: %s", format, code, out, stderr)
+		}
+	}
+	code, out, stderr := run("scan", target, "--config", cfg, "--dry-run", "--yes")
+	if code != ExitOK || strings.Contains(out, "would be refused") {
+		t.Fatalf("with --yes: exit = %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+}
+
 // fakeEngine makes the scan command get res and err from the engine.
 func fakeEngine(t *testing.T, res engine.Result, err error) {
 	t.Helper()

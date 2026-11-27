@@ -261,11 +261,16 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 			plan.Investigations, plan.Estimate = est.Investigations, est.String()
 			// With nobody to confirm the estimate, the real run is
 			// refused when its dollar cap cannot hold. A dry run is how
-			// a CI setup is checked, so it says so here.
-			if opts.Confirm == nil {
+			// a CI setup is checked, so it says so here. With somebody to
+			// confirm it but no terminal to answer on, the real run of a
+			// paid model is refused too.
+			switch {
+			case opts.Confirm == nil:
 				if why := unpricedRefusal(opts.Config, opts.Config.ForStage(config.StageInvestigator), est); why != "" {
 					plan.Notes = append(plan.Notes, "A real run with these settings would be refused: "+why)
 				}
+			case !est.Local && !opts.Interactive:
+				plan.Notes = append(plan.Notes, "A real run with these settings would be refused: there is no terminal to confirm the estimate on. Pass --yes to accept it in advance.")
 			}
 		}
 		if tgt.Kind == target.KindGit {

@@ -606,7 +606,41 @@ func TestDryRunSaysWhenTheRealRunWouldBeRefused(t *testing.T) {
 	if p := plan(func(o *Options) { o.Config.Budget.AllowUnpriced = true }); containsNote(p.Notes, "would be refused") {
 		t.Fatalf("opted in: notes = %q", p.Notes)
 	}
-	if p := plan(func(o *Options) { o.Confirm = func(Estimate) bool { return true } }); containsNote(p.Notes, "would be refused") {
+	if p := plan(func(o *Options) { o.Confirm = func(Estimate) bool { return true }; o.Interactive = true }); containsNote(p.Notes, "would be refused") {
 		t.Fatalf("with a confirmation: notes = %q", p.Notes)
+	}
+}
+
+// A dry run without --yes and without a terminal says the real run of a
+// paid model would be refused: nobody can answer the confirmation prompt.
+func TestDryRunSaysANonTerminalRunCannotBeConfirmed(t *testing.T) {
+	plan := func(remote bool, change func(*Options)) *Plan {
+		t.Helper()
+		fake := llm.NewFake()
+		fake.Remote = remote
+		o := agenticOpts(t, fake, fakeSeeder{name: "fake", leads: []seed.Lead{sqlLead()}})
+		o.DryRun = true
+		o.Confirm = func(Estimate) bool { t.Error("a dry run asked for confirmation"); return false }
+		if change != nil {
+			change(&o)
+		}
+		res, err := Run(context.Background(), o)
+		if err != nil || res.Plan == nil {
+			t.Fatalf("plan = %+v, err = %v", res.Plan, err)
+		}
+		return res.Plan
+	}
+	const want = "A real run with these settings would be refused: there is no terminal to confirm the estimate on. Pass --yes"
+	if p := plan(true, nil); !containsNote(p.Notes, want) {
+		t.Fatalf("notes = %q, want the refusal of the real run", p.Notes)
+	}
+	if p := plan(true, func(o *Options) { o.Interactive = true }); containsNote(p.Notes, "would be refused") {
+		t.Fatalf("at a terminal: notes = %q", p.Notes)
+	}
+	if p := plan(true, func(o *Options) { o.Confirm = nil }); containsNote(p.Notes, "would be refused") {
+		t.Fatalf("with --yes: notes = %q", p.Notes)
+	}
+	if p := plan(false, nil); containsNote(p.Notes, "would be refused") {
+		t.Fatalf("local model: notes = %q", p.Notes)
 	}
 }
