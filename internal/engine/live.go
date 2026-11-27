@@ -19,6 +19,7 @@ import (
 	"github.com/TMHSDigital/spackle/internal/finding"
 	"github.com/TMHSDigital/spackle/internal/ledger"
 	"github.com/TMHSDigital/spackle/internal/llm"
+	"github.com/TMHSDigital/spackle/internal/mapper"
 	"github.com/TMHSDigital/spackle/internal/seed"
 	"github.com/TMHSDigital/spackle/internal/target"
 	"github.com/TMHSDigital/spackle/internal/textx"
@@ -44,6 +45,31 @@ const liveMaxTurns = 8
 // unauthenticatedNote is recorded in every running-target run.
 const unauthenticatedNote = "Requests were sent without credentials: no login was performed and no session cookie was kept. Pages and endpoints behind a login were not examined."
 
+// sourceRoutes maps dir and returns the paths of its HTTP routes, in file
+// order. An empty dir means none. The source is read from disk only; it is
+// never sent anywhere, and the routes go through the scope gate like every
+// other URL of the crawl.
+func sourceRoutes(ctx context.Context, cfg config.Config, dir string) ([]string, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	st, err := os.Stat(dir)
+	if err != nil || !st.IsDir() {
+		return nil, fmt.Errorf("--routes-from %q is not a directory that can be read. Give the directory that holds the running application's source", textx.Clip(dir, 200))
+	}
+	m, err := mapper.Build(ctx, dir, mapper.Options{CacheDir: filepath.Join(cfg.StateDir, "cache"), Walk: walkOptions(cfg)})
+	if err != nil {
+		return nil, fmt.Errorf("--routes-from: the source in %q could not be mapped: %w", textx.Clip(dir, 200), err)
+	}
+	var routes []string
+	for _, e := range m.Entry {
+		if e.Kind == "http-route" {
+			routes = append(routes, e.Detail)
+		}
+	}
+	return routes, nil
+}
+
 // runLive scans a running application. The authorized-scope gate comes
 // first: nothing is sent, and no run directory is created, until it passes.
 func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() time.Time) (_ Result, err error) {
@@ -62,6 +88,11 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	}
 	if cfg.Offline && !llm.IsLoopbackHost(tgt.URL.Hostname()) {
 		return Result{}, fmt.Errorf("%w: %w: %s is not on this machine. Offline mode only allows a running target on localhost", ErrRefused, llm.ErrOffline, tgt.URL.Host)
+	}
+
+	routes, err := sourceRoutes(ctx, cfg, opts.RoutesFrom)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 
 	agentic := cfg.Model.Configured()
@@ -114,6 +145,12 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	if _, err := led.Append(startSeq, ledger.TypeNote, unauthenticatedNote); err != nil {
 		return Result{}, err
 	}
+	if opts.RoutesFrom != "" {
+		note := fmt.Sprintf("%d HTTP route(s) were read from the source in %s and added to the crawl where they are plain GET paths in scope. A route mounted under a prefix the source does not show is requested without it.", len(routes), textx.Clip(opts.RoutesFrom, 200))
+		if _, err := led.Append(startSeq, ledger.TypeNote, note); err != nil {
+			return Result{}, err
+		}
+	}
 
 	// Every exchange is stored as evidence the moment it happens, so a run
 	// that is interrupted still shows exactly what was sent.
@@ -144,7 +181,7 @@ func runLive(ctx context.Context, opts Options, tgt target.Target, clock func() 
 	}
 
 	r.say("Probing %s within the authorized scope (%s)", tgt.Display, grant.Summary())
-	base, err := dast.Baseline(ctx, client, tgt.URL, dast.Options{})
+	base, err := dast.Baseline(ctx, client, tgt.URL, dast.Options{Seeds: routes})
 	if err != nil {
 		if ctx.Err() != nil {
 			return Result{}, r.fail(fmt.Errorf("the probe of the target was interrupted: %w", err))

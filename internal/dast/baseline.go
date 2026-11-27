@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/TMHSDigital/spackle/internal/authz"
@@ -34,7 +35,16 @@ type Result struct {
 type Options struct {
 	// MaxPages bounds how many pages the crawl fetches. Zero means 40.
 	MaxPages int
+	// Seeds are route paths from the application's source ("/api/items",
+	// "GET /health", "about/"), added to the crawl next to the start URL
+	// so endpoints no page links to are found. Only plain GET paths are
+	// used: a route with a path parameter, a pattern or another method is
+	// left out. Seeds go through the same scope check as every link.
+	Seeds []string
 }
+
+// maxSeeds bounds how many routes one run may add to the crawl.
+const maxSeeds = 500
 
 // scanner holds the state of one baseline run.
 type scanner struct {
@@ -83,6 +93,7 @@ func Baseline(ctx context.Context, c *Client, start *url.URL, opts Options) (Res
 	root := newTarget("GET", start, nil, "start")
 	s.known[root.key()] = true
 	s.targets = append(s.targets, root)
+	s.seed(start, opts.Seeds)
 	s.crawl(first, maxPages)
 
 	if s.usable() {
@@ -185,10 +196,69 @@ func (s *scanner) discover(t *target) bool {
 	return true
 }
 
-// crawl walks the in-scope pages breadth first. first holds the response
-// to the start URL, which has been fetched already.
+// seed adds the plain GET paths among routes as crawl targets on the start
+// URL's host, and notes how many were used and why the others were not.
+func (s *scanner) seed(start *url.URL, routes []string) {
+	if len(routes) == 0 {
+		return
+	}
+	added, notPlain := 0, 0
+	for i, r := range routes {
+		if i == maxSeeds {
+			s.notes = append(s.notes, fmt.Sprintf("Only the first %d of %d source routes were considered.", maxSeeds, len(routes)))
+			break
+		}
+		p, ok := routePath(r)
+		if !ok {
+			notPlain++
+			continue
+		}
+		u := &url.URL{Scheme: start.Scheme, Host: start.Host, Path: p}
+		if s.discover(newTarget("GET", u, nil, "route")) {
+			added++
+		}
+	}
+	note := fmt.Sprintf("%d endpoint(s) were added from %d source route(s).", added, len(routes))
+	if notPlain > 0 {
+		note += fmt.Sprintf(" %d route(s) were not requested because they are not plain GET paths (a path parameter, a pattern or another method).", notPlain)
+	}
+	s.notes = append(s.notes, note)
+}
+
+// routeMethod matches the method that starts a Go 1.22 mux pattern.
+var routeMethod = regexp.MustCompile(`^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|CONNECT|TRACE)\s+`)
+
+// routePath turns a route as written in source into a path to request, or
+// reports false when the route needs a value or a method the crawl does not
+// send: a parameter (":id", "{id}", "<id>"), a regular expression or
+// wildcard, a host, or a method other than GET.
+func routePath(route string) (string, bool) {
+	r := strings.TrimSpace(route)
+	if m := routeMethod.FindStringSubmatch(r); m != nil {
+		if m[1] != http.MethodGet && m[1] != http.MethodHead {
+			return "", false
+		}
+		r = r[len(m[0]):]
+	}
+	if r == "" || strings.ContainsAny(r, ":{}<>()[]^$*+?|\\ \t\r\n#%") || strings.HasPrefix(r, "//") {
+		return "", false
+	}
+	if !strings.HasPrefix(r, "/") {
+		// A route with no leading slash (Django's path()) is relative to
+		// the site root. One whose first segment has a dot names a host.
+		if first, _, _ := strings.Cut(r, "/"); strings.Contains(first, ".") {
+			return "", false
+		}
+		r = "/" + r
+	}
+	return r, true
+}
+
+// crawl walks the in-scope pages breadth first, starting with the start URL
+// and any seeded routes. first holds the response to the start URL, which
+// has been fetched already.
 func (s *scanner) crawl(first []hop, maxPages int) {
-	queue := []*target{s.targets[0]}
+	queue := append([]*target(nil), s.targets...)
 	pages := 0
 	for len(queue) > 0 && s.usable() {
 		if pages >= maxPages {

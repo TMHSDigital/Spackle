@@ -421,6 +421,12 @@ statement = "Staging environment owned by my team. Ticket SEC-123."
 
 The same rules bind the baseline probe and the `http_request` tool a model uses. The tool has no argument that reaches the scope, the request cap or the rate limit.
 
+**Routes from the source.** The baseline finds endpoints by following links and forms from the start URL, so an application that answers JSON and links to nothing shows it only that one URL. `--routes-from <directory>` points the scan at the application's source on this machine: Spackle maps it as a code scan would, takes the HTTP routes it finds (Go `HandleFunc` and router calls, Flask and FastAPI decorators, Django `path()`, Express and Fastify calls), and adds each one that is a plain GET path to the crawl, on the target's host. A route with a path parameter (`/users/:id`, `{id}`, `<int:id>`), a regular expression or wildcard, a host, or a method other than GET or HEAD is left out, as is anything past the first 500. Every added route goes through the same scope check as a link, counts toward the request cap, and is fetched like a crawled page, so the passive checks run on its response; it carries no parameters to probe. A route mounted under a prefix the source does not show (a sub-router, a reverse proxy path) is requested without that prefix. The run notes say how many routes were read and how many were added. The source is only read; nothing from it is sent anywhere. `--routes-from` is refused for a directory or git URL target.
+
+```sh
+spackle scan http://localhost:8081 --authorize scope.toml --routes-from .
+```
+
 **A running-target scan is not authenticated.** There is no setting for a login, a session cookie or an authorization header, and a cookie the target sets is not sent back. The scan covers what an anonymous visitor can reach, and every report of such a scan says so in its run notes.
 
 ## Sandbox

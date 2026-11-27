@@ -181,6 +181,72 @@ func TestLiveScanStaysInScopeAndRecordsEvidence(t *testing.T) {
 	}
 }
 
+// A JSON API links to nothing, so its other endpoints are found only from
+// the routes in its source. /api/debug leaks a stack trace.
+func TestLiveScanSeedsRoutesFromSource(t *testing.T) {
+	var hits atomic.Int32
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/":
+			fmt.Fprint(w, `{"service":"api"}`)
+		case "/api/debug":
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"Traceback (most recent call last):\n  File \"/srv/app.py\", line 9, in debug\nKeyError: 'x'"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(app.Close)
+	src := t.TempDir()
+	code := "from flask import Flask\napp = Flask(__name__)\n\n@app.route(\"/api/debug\")\ndef debug():\n    return {}\n\n@app.get(\"/api/users/<int:uid>\")\ndef user(uid):\n    return {}\n"
+	if err := os.WriteFile(filepath.Join(src, "app.py"), []byte(code), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := liveOpts(t, app.URL)
+	o.ScopeFile, o.Yes, o.RoutesFrom = scopeFile(t, app.URL), true, src
+	res, err := Run(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var leak bool
+	for _, f := range res.Run.Findings {
+		if f.Class == "information-disclosure" && f.Location.Endpoint == "/api/debug" {
+			leak = true
+		}
+	}
+	if !leak {
+		t.Fatalf("the stack trace at the seeded route /api/debug was not found: %+v", res.Run.Findings)
+	}
+	if !containsNote(res.Run.Notes, "2 HTTP route(s) were read from the source") || !containsNote(res.Run.Notes, "1 endpoint(s) were added from 2 source route(s)") {
+		t.Fatalf("notes = %v", res.Run.Notes)
+	}
+}
+
+func TestRoutesFromIsRefusedWhereItCannotApply(t *testing.T) {
+	// A directory scan has no running target to seed.
+	o := liveOpts(t, t.TempDir())
+	o.RoutesFrom = t.TempDir()
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--routes-from") {
+		t.Fatalf("directory target: err = %v", err)
+	}
+	// A directory that does not exist is refused before anything is sent.
+	app, hits := flawedApp(t, "http://outside.test")
+	o = liveOpts(t, app.URL)
+	o.ScopeFile, o.Yes, o.RoutesFrom = scopeFile(t, app.URL), true, filepath.Join(t.TempDir(), "missing")
+	if _, err := Run(context.Background(), o); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "--routes-from") {
+		t.Fatalf("missing directory: err = %v", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatal("a refused run sent requests")
+	}
+	if entries, _ := os.ReadDir(RunsDir(o.Config.StateDir)); len(entries) != 0 {
+		t.Fatal("a refused run left a run directory")
+	}
+}
+
 func keys(m map[string]finding.Finding) []string {
 	var out []string
 	for k := range m {

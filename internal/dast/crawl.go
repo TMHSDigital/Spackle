@@ -15,7 +15,7 @@ type Endpoint struct {
 	Method string   `json:"method"`
 	Path   string   `json:"path"`
 	Params []string `json:"params,omitempty"` // query or form field names, sorted
-	Source string   `json:"source"`           // link|form|start
+	Source string   `json:"source"`           // link|form|start|route
 }
 
 // Limits on what one page may add to the crawl. The page is untrusted: a

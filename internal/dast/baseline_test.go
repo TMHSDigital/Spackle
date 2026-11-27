@@ -628,6 +628,91 @@ func TestBaselineExposedFilesRespectPathPrefix(t *testing.T) {
 	one(t, res.Leads, "xss", "")
 }
 
+// jsonAPI answers JSON with no links, so a crawl from / finds nothing else.
+// /api/report leaks a stack trace that only a seeded route can reach.
+func jsonAPI(t *testing.T) (*httptest.Server, *hitLog) {
+	t.Helper()
+	log := &hitLog{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.add(r)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/":
+			_, _ = io.WriteString(w, `{"service":"api","version":1}`)
+		case "/api/items", "/api/health", "/about/", "/admin/stats":
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		case "/api/report":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, `{"error":"Traceback (most recent call last):\n  File \"/srv/app/report.py\", line 12, in build\nKeyError: 'x'"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, log
+}
+
+func TestBaselineSeedsRoutes(t *testing.T) {
+	plain, _ := jsonAPI(t)
+	without := baseline(t, clientFor(t, plain.URL, "", ClientOptions{}), plain.URL+"/", Options{})
+	if len(without.Endpoints) != 1 || len(find(without.Leads, "information-disclosure", "stack-trace")) != 0 {
+		t.Fatalf("without seeds the crawl should see only the start URL: %+v", without.Endpoints)
+	}
+
+	srv, log := jsonAPI(t)
+	c := clientFor(t, srv.URL, "", ClientOptions{})
+	seeds := []string{
+		"/api/items", "/api/report", "GET /api/health", "about/", "/api/items", "/",
+		"/users/:id", "/users/{id}", "/users/<int:id>", "^articles/$", "POST /api/items", "example.com/x", "//evil.test/x", "/a b", "/static/*",
+	}
+	res := baseline(t, c, srv.URL+"/", Options{Seeds: seeds})
+	var routes []string
+	for _, ep := range res.Endpoints {
+		if ep.Source == "route" {
+			routes = append(routes, ep.Method+" "+ep.Path)
+		}
+	}
+	sort.Strings(routes)
+	if want := "GET /about/,GET /api/health,GET /api/items,GET /api/report"; strings.Join(routes, ",") != want {
+		t.Fatalf("route endpoints = %v, want %s", routes, want)
+	}
+	for _, p := range []string{"GET /api/items", "GET /api/report", "GET /api/health", "GET /about/"} {
+		if log.count(p) == 0 {
+			t.Errorf("%s was not requested", p)
+		}
+	}
+	if log.count("GET /users") != 0 || log.count("POST ") != 0 || log.count("GET /static") != 0 {
+		t.Fatalf("a route with a parameter, or a non-GET route, was requested: %v", log.paths)
+	}
+	one(t, res.Leads, "information-disclosure", "stack-trace")
+	notes := strings.Join(res.Notes, "\n")
+	if !strings.Contains(notes, "4 endpoint(s) were added from 15 source route(s)") || !strings.Contains(notes, "9 route(s)") {
+		t.Fatalf("notes = %v", res.Notes)
+	}
+}
+
+func TestBaselineSeedsStayInScope(t *testing.T) {
+	srv, log := jsonAPI(t)
+	c := clientFor(t, srv.URL+"/api/items", `path_prefixes = ["/api"]`, ClientOptions{})
+	u, err := url.Parse(srv.URL + "/api/items")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Baseline(context.Background(), c, u, Options{Seeds: []string{"/api/health", "/admin/stats"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if log.count("GET /admin") != 0 {
+		t.Fatal("a seeded route outside the path prefixes was requested")
+	}
+	if log.count("GET /api/health") == 0 {
+		t.Fatal("a seeded route inside the scope was not requested")
+	}
+	if !strings.Contains(strings.Join(res.Notes, "\n"), "outside the authorized scope") {
+		t.Fatalf("notes = %v", res.Notes)
+	}
+}
+
 func TestBaselineMaxPages(t *testing.T) {
 	var pages atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -54,6 +54,10 @@ type Options struct {
 	// Ref is the branch or tag to scan for a git URL target. Empty means
 	// the remote's default branch.
 	Ref string
+	// RoutesFrom is a local directory holding the source of a running
+	// target. Its HTTP routes, as the mapper finds them, are added to the
+	// crawl next to the start URL. Only for a running target.
+	RoutesFrom string
 	// Since limits a scan of a directory to the files changed since this
 	// revision (see gitx.ChangedSince). Empty scans everything.
 	Since string

@@ -251,6 +251,7 @@ spackle scan http://localhost:8081 --authorize scope.toml
 - Without a scope file or a `[scope]` table, Spackle asks you to type the host to confirm, once per run. With `--yes` or in CI it refuses instead of asking.
 - Hosts match exactly. Redirects and links that leave scope are not followed. `localhost` and `127.0.0.1` are different hosts.
 - Only GET, HEAD and OPTIONS are sent unless the scope file sets `allow_unsafe_methods = true`.
+- An API that links to nothing can be crawled from its source: `--routes-from <directory>` adds the plain GET routes found in the application's code, within the same scope. See [docs/config.md](docs/config.md#scope).
 - With a model configured, an investigator assesses each observation and may send follow-up requests through the same scope and the same request cap.
 
 ## Debug mode

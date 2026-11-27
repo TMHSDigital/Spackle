@@ -76,6 +76,9 @@ func Run(ctx context.Context, opts Options) (_ Result, err error) {
 		}
 		return runLive(ctx, opts, tgt, clock)
 	}
+	if opts.RoutesFrom != "" {
+		return Result{}, fmt.Errorf("%w: --routes-from adds the routes found in source code to the crawl of a running application, and %s is not one. Give the URL of the running application as the target", ErrRefused, tgt.Display)
+	}
 
 	// Everything that can refuse the run is checked before a run directory
 	// exists, so a refused run has no run directory and no ledger. The

@@ -32,6 +32,7 @@ func runScan(env Env, args []string) int {
 	changedOnly := fs.Bool("changed", false, "report only on files that differ from the last commit, staged or not, and new files git does not ignore: a scan before you commit")
 	diffScope := fs.String("diff-scope", "", "with --since or --changed: `file` reports every lead in a changed file (the default), lines only the leads on changed lines")
 	force := fs.Bool("force", false, "with --resume, continue although the target's commit changed since that run")
+	routesFrom := fs.String("routes-from", "", "for a running target: `directory` with the application's source; the HTTP routes found in it are added to the crawl")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
 		return flagExit(err)
@@ -57,7 +58,7 @@ func runScan(env Env, args []string) int {
 	defer stop()
 
 	res, err := runEngine(ctx, engine.Options{Target: tgt, Config: cfg, Progress: env.Stderr, Confirm: confirmer(env, g.yes),
-		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, Changed: *changedOnly, DiffScope: *diffScope, Resume: *resume, Force: *force, DryRun: *dryRun,
+		ScopeFile: g.authorize, Yes: g.yes, Interactive: isTerminal(env.Stdin), Stdin: env.Stdin, Ref: *ref, Since: *since, Changed: *changedOnly, DiffScope: *diffScope, Resume: *resume, Force: *force, DryRun: *dryRun, RoutesFrom: *routesFrom,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "spackle scan: %v\n", err)
